@@ -263,20 +263,17 @@ export const BARBARIAN_REGISTRY = {
 /*  Barbarian Runtime Hooks                     */
 /* -------------------------------------------- */
 
-// Tracks old HP values between preUpdateActor and updateActor hooks.
-// Avoids nondeterministic setTimeout by using Foundry's document lifecycle.
-const _oldHP = new Map();
-
 export const BarbarianFeatures = {
   /**
    * Register all Barbarian runtime hooks.
    */
   registerHooks() {
-    // Capture old HP in preUpdateActor (actor still has old data).
-    // Both Rage auto-berserk and Fearmonger read from this in updateActor.
-    Hooks.on("preUpdateActor", (actor, changes) => {
+    // Capture old HP in preUpdateActor via the shared options object.
+    // Foundry passes the same options through both preUpdate and update hooks,
+    // so this is safe from memory leaks and concurrency issues.
+    Hooks.on("preUpdateActor", (actor, changes, options) => {
       if (changes.system?.health?.value !== undefined) {
-        _oldHP.set(actor.id, actor.system.health?.value ?? 0);
+        options.vceOldHP = actor.system.health?.value ?? 0;
       }
     });
     this._registerRageHooks();
@@ -368,10 +365,11 @@ export const BarbarianFeatures = {
    * Restore original explodeValues on equipped weapons after berserk ends.
    */
   async _restoreWeaponExplodeValues(actor) {
+    // Restore ALL weapons with the flag, not just equipped ones.
+    // A weapon might have been unequipped while berserk was active.
     const weapons = actor.items.filter(i =>
       i.type === "equipment" &&
       i.system.equipmentType === "weapon" &&
-      i.system.equipped &&
       i.getFlag(MODULE_ID, "originalExplodeValues") !== undefined
     );
     if (weapons.length === 0) return;
@@ -595,8 +593,8 @@ export const BarbarianFeatures = {
 
     // --- Auto-apply Berserk when taking damage ---
     // "you can go Berserk after you take damage"
-    // Old HP captured in preUpdateActor (see registerHooks), read here in updateActor.
-    Hooks.on("updateActor", async (actor, changes) => {
+    // Old HP captured via options object in preUpdateActor (see registerHooks).
+    Hooks.on("updateActor", async (actor, changes, options) => {
       if (!game.user.isGM) return;
       if (actor.type !== "character") return;
       if (!this._hasFeature(actor, "barbarian_rage")) return;
@@ -606,8 +604,7 @@ export const BarbarianFeatures = {
       const newHP = changes.system?.health?.value;
       if (newHP === undefined) return;
 
-      const oldHP = _oldHP.get(actor.id);
-      _oldHP.delete(actor.id);
+      const oldHP = options.vceOldHP;
       if (oldHP === undefined) return;
 
       if (newHP < oldHP) {
@@ -664,6 +661,29 @@ export const BarbarianFeatures = {
 
       const upsizedMax = baseDie + 2;
       this._log(`Rage: Weapon ${item.name} equipped while berserk — setting explodeValues="${upsizedMax}"`);
+      await item.update({
+        "system.explodeValues": String(upsizedMax),
+        [`flags.${MODULE_ID}.originalExplodeValues`]: item.system.explodeValues ?? ""
+      });
+    });
+
+    // Also handle weapons added/created on the actor while berserk
+    Hooks.on("createItem", async (item, options, userId) => {
+      if (!game.user.isGM) return;
+      if (item.type !== "equipment" || item.system.equipmentType !== "weapon") return;
+      if (!item.system.equipped) return;
+
+      const actor = item.parent;
+      if (!actor || actor.type !== "character") return;
+      if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (!this._isBerserk(actor)) return;
+      if (!this._isLightOrNoArmor(actor)) return;
+
+      const baseDie = this._parseDieSize(item.system.currentDamage || item.system.damageAmount);
+      if (baseDie === 0) return;
+
+      const upsizedMax = baseDie + 2;
+      this._log(`Rage: Weapon ${item.name} added while berserk — setting explodeValues="${upsizedMax}"`);
       await item.update({
         "system.explodeValues": String(upsizedMax),
         [`flags.${MODULE_ID}.originalExplodeValues`]: item.system.explodeValues ?? ""
@@ -747,17 +767,16 @@ export const BarbarianFeatures = {
 
   _registerFearmongerHooks() {
     // Detect NPC kills via HP transition from alive (>0) to dead (<=0).
-    // Old HP captured in preUpdateActor (see registerHooks), read here in updateActor.
+    // Old HP captured via options object in preUpdateActor (see registerHooks).
     // The transition check prevents retrigger on subsequent updates to already-dead NPCs.
-    Hooks.on("updateActor", async (actor, changes) => {
+    Hooks.on("updateActor", async (actor, changes, options) => {
       if (!game.user.isGM) return;
       if (actor.type !== "npc") return;
 
       const newHP = changes.system?.health?.value;
       if (newHP === undefined || newHP > 0) return;
 
-      const oldHP = _oldHP.get(actor.id);
-      _oldHP.delete(actor.id);
+      const oldHP = options.vceOldHP;
       if (oldHP === undefined || oldHP <= 0) return; // Already dead or no old data
 
       const attacker = this._findRecentAttacker(actor);
@@ -785,7 +804,7 @@ export const BarbarianFeatures = {
         for (const effect of actor.effects) {
           if (!effect.statuses?.has("frightened")) continue;
           const expireRound = effect.getFlag(MODULE_ID, "fearmongerExpireRound");
-          if (expireRound != null && currentRound > expireRound) {
+          if (expireRound != null && currentRound >= expireRound) {
             toRemove.push(effect.id);
           }
         }
@@ -832,9 +851,10 @@ export const BarbarianFeatures = {
     const attackerLevel = attacker.system.attributes?.level?.value || 1;
     const currentRound = game.combat?.round || 0;
 
-    // Find the killed NPC's token on canvas
-    const killedToken = canvas.tokens.placeables.find(t => t.actor?.id === killedNpc.id);
-    if (!killedToken) return;
+    // Find the killed NPC's active token (handles unlinked actors properly)
+    const killedTokens = killedNpc.getActiveTokens();
+    if (killedTokens.length === 0) return;
+    const killedToken = killedTokens[0];
 
     this._log(`Fearmonger: ${attacker.name} killed ${killedNpc.name}, checking for weaker enemies within 30ft`);
 
