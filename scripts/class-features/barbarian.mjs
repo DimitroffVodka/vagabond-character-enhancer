@@ -40,7 +40,7 @@ export const BARBARIAN_REGISTRY = {
   //   - Exploding dice: damage-helper.mjs _getExplodeValues() reads bonuses.globalExplode
   //     and per-item explodeValues. Module sets both via companion AE + weapon flags.
   //   - Die upsizing: system reads {weaponSkill}DamageDieSizeBonus from actor schema
-  //     and applies to damage formula. Module sets +2 via companion AE.
+  //     and applies to damage formula in item.mjs and chat-card.mjs.
   //   - Berserk status conditions: config.mjs defines "Can't be Frightened" but doesn't
   //     enforce it. Module adds frightened immunity globally for all berserk characters
   //     (see vagabond-character-enhancer.mjs, not barbarian-specific).
@@ -51,11 +51,27 @@ export const BARBARIAN_REGISTRY = {
   //     - globalExplode = 1 (enables exploding for all items)
   //     - {melee,ranged,brawl,finesse}DamageDieSizeBonus = 2 (one die size larger)
   //     - universalDamageBonus = 1 (if Rip and Tear is present)
-  //   - Per-weapon explodeValues set to upsized die max face (restored on berserk drop)
-  //   - Runtime hook: Auto-applies Berserk on attack (preCreateChatMessage)
-  //   - Runtime hook: Auto-applies Berserk on taking damage (updateActor)
+  //   - Per-weapon explodeValues set to upsized die max face (restored on berserk drop
+  //     or weapon unequip). Also handles weapons equipped or created mid-berserk.
+  //   - Monkey-patch: Auto-applies Berserk on attack via rollAttack() wrapper
+  //     (see vagabond-character-enhancer.mjs)
+  //   - Runtime hook: Auto-applies Berserk on taking damage (updateActor + options.vceOldHP)
   //   - Runtime hook: Removes Berserk when combat ends (deleteCombat)
   //   - Runtime hook: RAGE tag + DR breakdown on chat cards (renderChatMessage)
+  //
+  // APPROACHES THAT DIDN'T WORK:
+  //   - Berserk-gated AE formulas like (@statuses.berserk) ? 1 : 0 — Roll.safeEval errors
+  //     when berserk is off because @statuses.berserk doesn't resolve. Solution: dynamic
+  //     companion AE with simple values instead of formulas.
+  //   - renderChatMessage for die upsizing — damage is rolled inline with the attack,
+  //     no data-damage-formula buttons exist. System uses DamageDieSizeBonus fields instead.
+  //   - preCreateChatMessage for auto-berserk on attack — fires AFTER damage is rolled,
+  //     so the triggering attack never benefits from upsizing. Solution: monkey-patch
+  //     item.rollAttack() which runs BEFORE damage is rolled.
+  //   - globalExplodeValues as a single string — can't represent different max faces for
+  //     different die sizes. Solution: set explodeValues per-weapon to the upsized max face.
+  //   - updateActor for HP change detection — actor already has post-update data, so
+  //     newHP == oldHP always. Solution: capture old HP via options.vceOldHP in preUpdateActor.
   //
   // NOT AUTOMATED:
   //   - "You remain Berserk for 1 minute" — relies on combat end cleanup
@@ -145,13 +161,29 @@ export const BARBARIAN_REGISTRY = {
   //   - toggleStatusEffect() API available.
   //
   // MODULE HANDLES:
-  //   - Runtime hook: Watches updateActor for NPC HP → 0 (proxy for kill)
-  //   - Identifies attacker from recent chat messages
-  //   - Resolves tokens via canvas.tokens.placeables (handles unlinked NPCs)
-  //   - Measures distance to nearby NPCs (within 30 ft = Near)
+  //   - Runtime hook: Watches updateActor for NPC HP transition >0 → <=0 (proxy for kill)
+  //     Uses options.vceOldHP from preUpdateActor for accurate HP delta detection.
+  //     Only fires on alive→dead transition, preventing retrigger on already-dead NPCs.
+  //   - Identifies attacker by scanning recent chat message flags.vagabond.targets
+  //     and falling back to data-targets JSON in message content.
+  //   - Resolves killed NPC token via actor.getActiveTokens() (handles unlinked tokens)
+  //   - Measures distance to nearby NPC tokens (within 30 ft = Near)
   //   - Checks NPC HD (system.hd) < barbarian level
   //   - Applies Frightened via createEmbeddedDocuments with fearmongerExpireRound flag
-  //   - Auto-expires Frightened on round change via updateCombat hook
+  //     and origin: attacker.uuid for proper source attribution in effects panel.
+  //   - Deduplicates linked actors via processedActorUuids Set.
+  //   - Auto-expires via updateCombat hook on both round and turn changes:
+  //     * NPC turn in expire round = phase-accurate expiry (Vagabond is heroes-first)
+  //     * Any round past expire round = catch-all for skipped turns or manual round jumps
+  //   - Only applies during active combat (out-of-combat kills are ignored).
+  //
+  // APPROACHES THAT DIDN'T WORK:
+  //   - Round-only expiry (without turn tracking) — didn't match RAW "end of your next
+  //     Turn" because Vagabond has hero-first/NPC-second phases within each round.
+  //   - Requiring currentCombatant to be NPC for expiry — broke when GM skipped NPC turns
+  //     or jumped rounds manually. Solution: two-condition check (NPC turn OR past round).
+  //   - flags.vagabond.targets for attacker detection — system doesn't populate this field.
+  //     Fallback scans message content for actorId in data-targets button JSON.
   //
   "fearmonger": {
     class: "barbarian",
@@ -270,9 +302,12 @@ export const BarbarianFeatures = {
   registerHooks() {
     // Capture old HP in preUpdateActor via the shared options object.
     // Foundry passes the same options through both preUpdate and update hooks,
-    // so this is safe from memory leaks and concurrency issues.
+    // avoiding memory leaks (vs a Map) and concurrency issues.
+    // Handles both nested and flat (dot-notation) update payloads.
+    // Used by: Rage auto-berserk on damage, Fearmonger kill detection.
     Hooks.on("preUpdateActor", (actor, changes, options) => {
-      if (changes.system?.health?.value !== undefined) {
+      const hpChanged = (changes.system?.health?.value ?? changes["system.health.value"]) !== undefined;
+      if (hpChanged) {
         options.vceOldHP = actor.system.health?.value ?? 0;
       }
     });
@@ -403,13 +438,20 @@ export const BarbarianFeatures = {
    * PERMANENT effects (from registry, created by FeatureDetector):
    * - incomingDamageReductionPerDie (Rage=1, Rip and Tear=1, system gates behind berserk)
    *
-   * DYNAMIC effects (Rage (Active) companion AE, exists only while berserk):
+   * DYNAMIC effects (Rage (Active) companion AE, exists only while berserk + light/no armor):
    * - globalExplode=1, die size bonuses=+2, weapon explodeValues set per-weapon
-   * - universalDamageBonus=1 (if Rip and Tear), frightened immunity
+   * - universalDamageBonus=1 (if Rip and Tear)
+   *
+   * MONKEY-PATCHES (in vagabond-character-enhancer.mjs):
+   * - item.rollAttack(): auto-applies Berserk before damage roll on first attack
+   * - calculateFinalDamage(): fixes DR dice counting (system reads empty damageAmount)
    *
    * RUNTIME hooks (below):
-   * 1. Auto-apply Berserk on attack or taking damage
-   * 2. Remove Berserk when combat ends
+   * 1. createActiveEffect/deleteActiveEffect: manage Rage (Active) companion AE
+   * 2. updateActor: auto-apply Berserk when taking damage (via options.vceOldHP)
+   * 3. deleteCombat: remove Berserk when combat ends
+   * 4. updateItem/createItem: manage weapon explodeValues during berserk
+   * 5. renderChatMessage: RAGE tag + DR breakdown on chat cards
    */
   _registerRageHooks() {
     // --- Auto-apply Berserk when barbarian makes an attack ---
@@ -420,10 +462,11 @@ export const BarbarianFeatures = {
     // (damage already rolled by then).
 
     // --- Berserk status toggle → create/remove Rage companion AE ---
-    // When Berserk is applied to a barbarian with Rage, create a companion
-    // "Rage (Active)" AE that adds Frightened immunity (system config says
-    // "Can't be Frightened" but doesn't enforce it).
-    // When Berserk is removed, delete the companion AE.
+    // When Berserk is applied to a barbarian with Rage + light/no armor,
+    // create a companion "Rage (Active)" AE with all berserk-only bonuses.
+    // When Berserk is removed, delete the companion AE and restore weapon data.
+    // Armor check prevents Rage bonuses in heavy armor even if berserk is
+    // applied by another source (e.g., manual toggle, other module).
     Hooks.on("createActiveEffect", async (effect, options, userId) => {
       if (!game.user.isGM) return;
       if (!effect.statuses?.has("berserk")) return;
@@ -690,8 +733,9 @@ export const BarbarianFeatures = {
 
   _registerAggressorHooks() {
     // Single updateCombat hook handles both apply and remove.
-    // Apply: when combat starts (round 0 → 1), but NOT on turn changes in round 1.
-    // Remove: when round advances past 1 (round 1 → 2), meaning first round is over.
+    // Apply: when round transitions to 1 (combat start). Uses !== 1 guard so it also
+    //   works on combat reset (GM resetting from round 5 back to round 1).
+    // Remove: when round advances past 1. Uses <= 1 guard for safety on skipped rounds.
     Hooks.on("updateCombat", async (combat, changes) => {
       if (!game.user.isGM) return;
 
@@ -748,7 +792,7 @@ export const BarbarianFeatures = {
       ],
       duration: { rounds: 1 },
       disabled: false,
-      transfer: true
+      transfer: false // actor-level AE, transfer only matters on Item-owned effects
     }]);
   },
 
