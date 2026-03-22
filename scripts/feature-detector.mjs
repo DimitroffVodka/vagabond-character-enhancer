@@ -25,6 +25,15 @@ import { MAGUS_REGISTRY } from "./class-features/magus.mjs";
 import { REVELATOR_REGISTRY } from "./class-features/revelator.mjs";
 import { MERCHANT_REGISTRY } from "./class-features/merchant.mjs";
 
+// Import ancestry registries — each ancestry file owns all its trait definitions
+import { HUMAN_TRAITS } from "./ancestry-features/human.mjs";
+import { DWARF_TRAITS } from "./ancestry-features/dwarf.mjs";
+import { ELF_TRAITS } from "./ancestry-features/elf.mjs";
+import { HALFLING_TRAITS } from "./ancestry-features/halfling.mjs";
+import { DRAKEN_TRAITS } from "./ancestry-features/draken.mjs";
+import { GOBLIN_TRAITS } from "./ancestry-features/goblin.mjs";
+import { ORC_TRAITS } from "./ancestry-features/orc.mjs";
+
 /* -------------------------------------------- */
 /*  Feature Registry                            */
 /* -------------------------------------------- */
@@ -57,7 +66,22 @@ const CLASS_FEATURE_REGISTRY = {
 };
 
 /**
+ * Combined registry of all ancestry traits.
+ * Each ancestry file exports its own registry, merged here via spread.
+ */
+const ANCESTRY_TRAIT_REGISTRY = {
+  ...HUMAN_TRAITS,
+  ...DWARF_TRAITS,
+  ...ELF_TRAITS,
+  ...HALFLING_TRAITS,
+  ...DRAKEN_TRAITS,
+  ...GOBLIN_TRAITS,
+  ...ORC_TRAITS
+};
+
+/**
  * Registry of known perk features.
+ * TODO: Move to perk-features.mjs when the list grows.
  */
 const PERK_FEATURE_REGISTRY = {
   "bully": {
@@ -67,17 +91,6 @@ const PERK_FEATURE_REGISTRY = {
   "fisticuffs": {
     flag: "perk_fisticuffs",
     description: "Post-hit Grapple/Shove on Favored brawl attacks"
-  }
-};
-
-/**
- * Registry of known ancestry traits.
- */
-const ANCESTRY_TRAIT_REGISTRY = {
-  "beefy": {
-    flag: "ancestry_beefy",
-    ancestry: "orc",
-    description: "Favor on Grapple/Shove checks"
   }
 };
 
@@ -189,18 +202,15 @@ export const FeatureDetector = {
 
     // --- Scan ancestry items ---
     for (const item of actor.items.filter(i => i.type === "ancestry")) {
-      const desc = item.system.description?.toLowerCase() ?? "";
       const ancestryName = item.name.toLowerCase().trim();
+      features._ancestryName = item.name;
 
+      // Match traits by ancestry name — each trait's `ancestry` field
+      // tells us which ancestry it belongs to
       for (const [traitName, traitDef] of Object.entries(ANCESTRY_TRAIT_REGISTRY)) {
-        // Check if the ancestry name or description mentions the trait
-        if (desc.includes(traitName) || ancestryName.includes(traitDef.ancestry)) {
-          // Only set if trait is actually in the ancestry's traits
-          // For now, check description text
-          if (desc.includes(traitName)) {
-            features[traitDef.flag] = true;
-            this._log(`Detected trait: ${traitName} on ${actor.name}`);
-          }
+        if (traitDef.ancestry === ancestryName) {
+          features[traitDef.flag] = true;
+          this._log(`Detected trait: ${traitName} (${traitDef.ancestry}) on ${actor.name}`);
         }
       }
     }
