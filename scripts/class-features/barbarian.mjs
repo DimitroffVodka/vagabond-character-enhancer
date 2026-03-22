@@ -779,7 +779,7 @@ export const BarbarianFeatures = {
       ],
       duration: { rounds: 1 },
       disabled: false,
-      transfer: true
+      transfer: false
     }]);
   },
 
