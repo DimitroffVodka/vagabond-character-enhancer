@@ -1,0 +1,49 @@
+/* ============================================= */
+/*  Vagabond Character Enhancer                  */
+/*  Module styles                                */
+/* ============================================= */
+
+:root {
+  --vce-accent: #d4a843;
+  --vce-rage-red: #9d0000;
+  --vce-tag-bg: rgba(0, 0, 0, 0.6);
+  --vce-tag-text: #e0e0e0;
+}
+
+/* -------------------------------------------- */
+/*  Feature Tags in Chat Cards                  */
+/* -------------------------------------------- */
+
+.vce-rage-tag {
+  display: inline-block;
+  background: var(--vce-rage-red);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.vce-feature-tag {
+  display: inline-block;
+  background: var(--vce-tag-bg);
+  color: var(--vce-tag-text);
+  font-size: 0.65rem;
+  font-style: italic;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* -------------------------------------------- */
+/*  Managed Effect Indicators                   */
+/* -------------------------------------------- */
+
+.vce-managed-effect {
+  border-left: 2px solid var(--vce-accent);
+}

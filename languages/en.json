@@ -1,0 +1,44 @@
+{
+  "VCE": {
+    "Settings": {
+      "EnableClassFeatures": "Enable Class Feature Automation",
+      "EnableClassFeaturesHint": "Automatically detect and apply class feature effects when a class is added to a character.",
+      "EnablePerkFeatures": "Enable Perk Automation",
+      "EnablePerkFeaturesHint": "Automatically detect and apply perk effects.",
+      "DebugMode": "Debug Mode",
+      "DebugModeHint": "Log feature detection and effect management to the console."
+    },
+    "Features": {
+      "Rage": "Rage",
+      "Aggressor": "Aggressor",
+      "Fearmonger": "Fearmonger",
+      "MindlessRancor": "Mindless Rancor",
+      "Bloodthirsty": "Bloodthirsty",
+      "RipAndTear": "Rip and Tear",
+      "SneakAttack": "Sneak Attack",
+      "LethalWeapon": "Lethal Weapon",
+      "UnflinchingLuck": "Unflinching Luck",
+      "Evasive": "Evasive",
+      "Virtuoso": "Virtuoso",
+      "SongOfRest": "Song of Rest",
+      "Climax": "Climax",
+      "Starstruck": "Starstruck",
+      "Bravado": "Bravado",
+      "AweInspiring": "Awe-Inspiring",
+      "StepUp": "Step Up",
+      "DoubleTime": "Double Time",
+      "Choreographer": "Choreographer",
+      "FleetOfFoot": "Fleet of Foot",
+      "DontStopMeNow": "Don't Stop Me Now",
+      "FlashOfBeauty": "Flash of Beauty",
+      "Potency": "Potency",
+      "BigBang": "Big Bang",
+      "Eureka": "Eureka"
+    },
+    "Chat": {
+      "RageActive": "RAGE",
+      "AggressorSpeed": "Aggressor: +10 Speed",
+      "FearmongerFrightened": "Fearmonger: {name} is Frightened!"
+    }
+  }
+}
