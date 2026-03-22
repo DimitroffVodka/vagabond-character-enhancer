@@ -30,37 +30,42 @@ export const BARBARIAN_REGISTRY = {
   // of making an attack. You remain Berserk this way for 1 minute, unless you end
   // it (no Action) or go Unconscious.
   //
-  // STATUS: partial
+  // STATUS: module
   //
   // SYSTEM HANDLES:
-  //   - DR application: damage-helper.mjs line 1178-1183 reads
-  //     actor.system.incomingDamageReductionPerDie, checks actor.statuses.has('berserk')
-  //     AND _isLightOrNoArmor(actor), then reduces finalDamage by reductionPerDie * numDice.
-  //     The module just needs to SET the value — system does the gating and math.
-  //   - Exploding dice: damage-helper.mjs line 366 calls _getExplodeValues() which reads
-  //     actor.system.bonuses.globalExplode (line 490). If truthy, exploding is enabled.
-  //     The module sets this via AE with berserk-gated formula.
-  //   - Berserk status conditions: config.mjs line 259 defines Berserk as:
-  //     "Can't take Cast Action or Focus. Doesn't make Morale Checks. Can't be Frightened."
-  //     These restrictions are handled by system UI/logic.
+  //   - DR gating: damage-helper.mjs checks actor.statuses.has('berserk') AND
+  //     _isLightOrNoArmor(actor) before applying incomingDamageReductionPerDie.
+  //     However, system has a bug reading empty damageAmount for dice count —
+  //     module monkey-patches calculateFinalDamage to fix this (see vagabond-character-enhancer.mjs).
+  //   - Exploding dice: damage-helper.mjs _getExplodeValues() reads bonuses.globalExplode
+  //     and per-item explodeValues. Module sets both via companion AE + weapon flags.
+  //   - Die upsizing: system reads {weaponSkill}DamageDieSizeBonus from actor schema
+  //     and applies to damage formula. Module sets +2 via companion AE.
+  //   - Berserk status conditions: config.mjs defines "Can't be Frightened" but doesn't
+  //     enforce it. Module adds frightened immunity globally for all berserk characters
+  //     (see vagabond-character-enhancer.mjs, not barbarian-specific).
   //
   // MODULE HANDLES:
-  //   - Managed AE: Sets incomingDamageReductionPerDie = 1 (permanent, system gates it)
-  //   - Managed AE: Sets globalExplode = (@statuses.berserk) ? 1 : 0 (auto-activates)
-  //   - Runtime hook: Auto-applies Berserk status when barbarian attacks (renderChatMessage)
-  //   - Runtime hook: Auto-applies Berserk status when barbarian takes damage (updateActor)
-  //   - Runtime hook: Die upsizing — modifies data-damage-formula on chat card buttons (renderChatMessage)
+  //   - Permanent AE: Sets incomingDamageReductionPerDie = 1 (system gates behind berserk)
+  //   - Rage (Active) companion AE (created/deleted with berserk toggle):
+  //     - globalExplode = 1 (enables exploding for all items)
+  //     - {melee,ranged,brawl,finesse}DamageDieSizeBonus = 2 (one die size larger)
+  //     - universalDamageBonus = 1 (if Rip and Tear is present)
+  //   - Per-weapon explodeValues set to upsized die max face (restored on berserk drop)
+  //   - Runtime hook: Auto-applies Berserk on attack (preCreateChatMessage)
+  //   - Runtime hook: Auto-applies Berserk on taking damage (updateActor)
   //   - Runtime hook: Removes Berserk when combat ends (deleteCombat)
+  //   - Runtime hook: RAGE tag + DR breakdown on chat cards (renderChatMessage)
   //
-  // NOT YET HANDLED:
-  //   - "You remain Berserk for 1 minute" — no timer, relies on combat end cleanup
+  // NOT AUTOMATED:
+  //   - "You remain Berserk for 1 minute" — relies on combat end cleanup
   //   - "unless you end it (no Action)" — no UI to manually end Berserk early
   //
   "rage": {
     class: "barbarian",
     level: 1,
     flag: "barbarian_rage",
-    status: "partial",
+    status: "module",
     description: "While Berserk + light/no armor: damage dice upsized, can explode, reduce incoming damage by 1 per die. Can go Berserk after taking damage or as part of an attack.",
     effects: [
       {
@@ -141,13 +146,12 @@ export const BARBARIAN_REGISTRY = {
   //
   // MODULE HANDLES:
   //   - Runtime hook: Watches updateActor for NPC HP → 0 (proxy for kill)
-  //   - Finds barbarians in combat with Fearmonger flag
+  //   - Identifies attacker from recent chat messages
+  //   - Resolves tokens via canvas.tokens.placeables (handles unlinked NPCs)
   //   - Measures distance to nearby NPCs (within 30 ft = Near)
-  //   - Checks NPC threat level < barbarian level
-  //   - Applies Frightened via toggleStatusEffect
-  //   - NOT YET: Doesn't track who dealt the killing blow — assumes any barbarian
-  //     in combat could be the killer. Also "until end of your next Turn" duration
-  //     is not automatically tracked.
+  //   - Checks NPC HD (system.hd) < barbarian level
+  //   - Applies Frightened via createEmbeddedDocuments with fearmongerExpireRound flag
+  //   - Auto-expires Frightened on round change via updateCombat hook
   //
   "fearmonger": {
     class: "barbarian",
@@ -196,23 +200,22 @@ export const BARBARIAN_REGISTRY = {
   // RULES: Your attacks against Beings that are missing any HP are Favored, and
   // you can sense them within Far as if by Blindsight.
   //
-  // STATUS: todo
+  // STATUS: module
   //
   // SYSTEM HANDLES:
-  //   - Favor/Hinder system exists for attack rolls.
-  //   - Blindsight is a sense type in the system.
+  //   - Favor/Hinder system exists for attack rolls via item.rollAttack().
   //
   // MODULE HANDLES:
-  //   - NOT YET: Would need to hook into attack roll builder to check if target
-  //     HP < max HP, then add Favor. The system doesn't expose a pre-roll hook,
-  //     so this would need renderChatMessage interception or a creative approach.
-  //   - NOT YET: Blindsight sense for wounded beings is narrative/GM-managed.
+  //   - Monkey-patches item.rollAttack() via dynamic import (see vagabond-character-enhancer.mjs)
+  //   - Before the attack roll, checks if any targeted token (game.user.targets) is missing HP
+  //   - If so, upgrades favorHinder: none → favor, hinder → none
+  //   - Blindsight sense for wounded beings is narrative/GM-managed (not automated)
   //
   "bloodthirsty": {
     class: "barbarian",
     level: 8,
     flag: "barbarian_bloodthirsty",
-    status: "todo",
+    status: "module",
     description: "Attacks against Beings missing any HP are Favored. Sense them within Far as Blindsight."
   },
 
@@ -222,24 +225,23 @@ export const BARBARIAN_REGISTRY = {
   // RULES: While Berserk, you reduce damage you take by 2 per damage die, rather
   // than 1, and you gain a +1 bonus to each die of damage you deal.
   //
-  // STATUS: partial
+  // STATUS: module
   //
   // SYSTEM HANDLES:
-  //   - Same DR system as Rage (damage-helper.mjs:1178-1183). Reads
-  //     incomingDamageReductionPerDie and applies reduction while berserk.
-  //     Module stacks +1 on top of Rage's +1 for total of 2.
-  //   - universalDamageBonus is read by damage-helper.mjs:328 and added to all
-  //     damage rolls. Module gates it behind berserk formula.
+  //   - Same DR system as Rage. Module monkey-patch of calculateFinalDamage
+  //     reads total incomingDamageReductionPerDie (Rage 1 + Rip and Tear 1 = 2).
+  //   - universalDamageBonus is read by damage-helper.mjs and added to all damage rolls.
   //
   // MODULE HANDLES:
-  //   - Managed AE: Adds +1 to incomingDamageReductionPerDie (stacks with Rage's 1 = 2 total)
-  //   - Managed AE: Adds +1 to universalDamageBonus gated by (@statuses.berserk) ? 1 : 0
+  //   - Permanent AE: Adds +1 to incomingDamageReductionPerDie (stacks with Rage's 1 = 2 total)
+  //   - Rage (Active) companion AE: Adds +1 universalDamageBonus (only while berserk,
+  //     checked via barbarian_ripAndTear flag when companion AE is created)
   //
   "rip and tear": {
     class: "barbarian",
     level: 10,
     flag: "barbarian_ripAndTear",
-    status: "partial",
+    status: "module",
     description: "Upgrades Rage: reduce damage by 2 per die instead of 1, +1 bonus to each damage die.",
     effects: [
       {
@@ -256,11 +258,6 @@ export const BARBARIAN_REGISTRY = {
     ]
   }
 };
-
-/* -------------------------------------------- */
-/*  Constants                                   */
-/* -------------------------------------------- */
-
 
 /* -------------------------------------------- */
 /*  Barbarian Runtime Hooks                     */
@@ -385,7 +382,7 @@ export const BarbarianFeatures = {
   },
 
   /* -------------------------------------------- */
-  /*  Rage: Auto-Berserk + Die Upsizing + Cleanup */
+  /*  Rage: Auto-Berserk + Companion AE + Cleanup */
   /* -------------------------------------------- */
 
   /**
@@ -846,9 +843,9 @@ export const BarbarianFeatures = {
   /* -------------------------------------------- */
 
   _registerBloodthirstyHooks() {
-    // TODO: Wrap roll builder via libWrapper to add Favor when target HP < max
-    Hooks.once("ready", () => {
-      this._log("Bloodthirsty: TODO — wrap roll builder to add Favor vs wounded targets");
-    });
+    // Bloodthirsty is handled via monkey-patch of item.rollAttack() in
+    // vagabond-character-enhancer.mjs (dynamic import of system's Item class).
+    // No runtime hooks needed here — just log registration.
+    this._log("Bloodthirsty: rollAttack patch registered in main module.");
   }
 };
