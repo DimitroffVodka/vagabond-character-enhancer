@@ -67,15 +67,10 @@ export const BARBARIAN_REGISTRY = {
         label: "Rage",
         icon: "icons/skills/melee/hand-grip-sword-red.webp",
         changes: [
-          // DR 1 per die — system gates behind berserk + light armor check
-          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" },
-          // Exploding — only active while Berserk (formula evaluates to 0 or 1)
-          { key: "system.bonuses.globalExplode", mode: 2, value: "(@statuses.berserk) ? 1 : 0" }
-          // NOTE: Berserk should also grant Frightened immunity (system config says so
-          // but doesn't enforce). However, statusImmunities is an array and can't be
-          // conditionally toggled via AE formula. This would need a runtime hook on
-          // createActiveEffect to block Frightened while Berserk is active.
-          // For now, Mindless Rancor (L6) covers this with permanent immunity.
+          // DR 1 per die — always on, system gates behind berserk + light armor check
+          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" }
+          // Die upsizing, exploding, and damage bonus are on the Rage (Active) companion AE
+          // which is created/deleted dynamically when Berserk toggles (see _registerRageHooks).
         ]
       }
     ]
@@ -252,9 +247,10 @@ export const BARBARIAN_REGISTRY = {
         icon: "icons/skills/melee/strike-axe-blood-red.webp",
         changes: [
           // +1 more DR per die (stacks with Rage's 1 for total 2)
-          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" },
-          // +1 bonus per damage die, only while Berserk
-          { key: "system.universalDamageBonus", mode: 2, value: "(@statuses.berserk) ? 1 : 0" }
+          // Always on — system gates behind berserk + light armor check
+          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" }
+          // +1 universal damage bonus is on the Rage (Active) companion AE
+          // which checks for barbarian_ripAndTear flag (see _registerRageHooks).
         ]
       }
     ]
@@ -265,13 +261,6 @@ export const BARBARIAN_REGISTRY = {
 /*  Constants                                   */
 /* -------------------------------------------- */
 
-const DIE_UPSIZE_MAP = {
-  4: 6,
-  6: 8,
-  8: 10,
-  10: 12,
-  12: 12 // d12 stays d12
-};
 
 /* -------------------------------------------- */
 /*  Barbarian Runtime Hooks                     */
@@ -327,6 +316,74 @@ export const BarbarianFeatures = {
     return actor.statuses?.has("berserk") ?? false;
   },
 
+  /**
+   * Parse the die size from a damage formula like "d8", "2d6", "1d10".
+   * Returns the numeric face count, or 0 if not parseable.
+   */
+  _parseDieSize(formula) {
+    const match = formula?.match(/\d*d(\d+)/i);
+    return match ? parseInt(match[1]) : 0;
+  },
+
+  /**
+   * Set explodeValues on equipped weapons based on their upsized die max face.
+   * Stores original values in module flags for restoration.
+   */
+  async _setWeaponExplodeValues(actor, dieSizeBonus) {
+    const weapons = actor.items.filter(i =>
+      i.type === "equipment" &&
+      i.system.equipmentType === "weapon" &&
+      i.system.equipped
+    );
+    if (weapons.length === 0) return;
+
+    const updates = [];
+    for (const weapon of weapons) {
+      const baseDie = this._parseDieSize(weapon.system.currentDamage || weapon.system.damageAmount);
+      if (baseDie === 0) continue;
+
+      const upsizedMax = baseDie + dieSizeBonus;
+      this._log(`Rage: Setting explodeValues="${upsizedMax}" on ${weapon.name} (d${baseDie} → d${upsizedMax})`);
+      updates.push({
+        _id: weapon.id,
+        "system.explodeValues": String(upsizedMax),
+        [`flags.${MODULE_ID}.originalExplodeValues`]: weapon.system.explodeValues ?? ""
+      });
+    }
+
+    if (updates.length > 0) {
+      await actor.updateEmbeddedDocuments("Item", updates);
+    }
+  },
+
+  /**
+   * Restore original explodeValues on equipped weapons after berserk ends.
+   */
+  async _restoreWeaponExplodeValues(actor) {
+    const weapons = actor.items.filter(i =>
+      i.type === "equipment" &&
+      i.system.equipmentType === "weapon" &&
+      i.system.equipped &&
+      i.getFlag(MODULE_ID, "originalExplodeValues") !== undefined
+    );
+    if (weapons.length === 0) return;
+
+    const updates = [];
+    for (const weapon of weapons) {
+      const original = weapon.getFlag(MODULE_ID, "originalExplodeValues") ?? "";
+      this._log(`Rage: Restoring explodeValues="${original}" on ${weapon.name}`);
+      updates.push({
+        _id: weapon.id,
+        "system.explodeValues": original,
+        [`flags.${MODULE_ID}.-=originalExplodeValues`]: null
+      });
+    }
+
+    if (updates.length > 0) {
+      await actor.updateEmbeddedDocuments("Item", updates);
+    }
+  },
+
   /* -------------------------------------------- */
   /*  Rage: Auto-Berserk + Die Upsizing + Cleanup */
   /* -------------------------------------------- */
@@ -335,14 +392,15 @@ export const BarbarianFeatures = {
    * Rage implementation:
    *
    * PERMANENT effects (from registry, created by FeatureDetector):
-   * - incomingDamageReductionPerDie = 1 (system gates behind berserk + light armor)
-   * - globalExplode = (@statuses.berserk) ? 1 : 0 (only active while Berserk)
-   * - Rip and Tear adds +1 more DR and +1 universalDamageBonus (also berserk-gated)
+   * - incomingDamageReductionPerDie (Rage=1, Rip and Tear=1, system gates behind berserk)
+   *
+   * DYNAMIC effects (Rage (Active) companion AE, exists only while berserk):
+   * - globalExplode=1, die size bonuses=+2, weapon explodeValues set per-weapon
+   * - universalDamageBonus=1 (if Rip and Tear), frightened immunity
    *
    * RUNTIME hooks (below):
    * 1. Auto-apply Berserk on attack or taking damage
-   * 2. Die upsizing on damage buttons (renderChatMessage)
-   * 3. Remove Berserk when combat ends
+   * 2. Remove Berserk when combat ends
    */
   _registerRageHooks() {
     // --- Auto-apply Berserk when barbarian makes an attack ---
@@ -396,18 +454,40 @@ export const BarbarianFeatures = {
 
       const classItem = actor.items.find(i => i.type === "class");
       this._log(`Rage: Berserk applied to ${actor.name} — creating Rage (Active) companion AE`);
+
+      // Build changes — these only apply while berserk (AE exists only while berserk)
+      // NOTE: Frightened immunity from Berserk is handled globally in vagabond-character-enhancer.mjs,
+      // not here — it applies to ALL berserk characters, not just barbarians.
+      const changes = [
+        // Exploding dice — enable global explode
+        { key: "system.bonuses.globalExplode", mode: 2, value: "1" },
+        // Die upsizing — +2 die face = one size larger (d4→d6, d6→d8, d8→d10, d10→d12)
+        // Cover all weapon skill types since barbarian could use any weapon
+        { key: "system.meleeDamageDieSizeBonus", mode: 2, value: "2" },
+        { key: "system.rangedDamageDieSizeBonus", mode: 2, value: "2" },
+        { key: "system.brawlDamageDieSizeBonus", mode: 2, value: "2" },
+        { key: "system.finesseDamageDieSizeBonus", mode: 2, value: "2" }
+      ];
+
+      // If actor has Rip and Tear, add +1 universal damage bonus
+      if (this._hasFeature(actor, "barbarian_ripAndTear")) {
+        changes.push({ key: "system.universalDamageBonus", mode: 2, value: "1" });
+      }
+
       await actor.createEmbeddedDocuments("ActiveEffect", [{
         name: "Rage (Active)",
         icon: "icons/skills/melee/hand-grip-sword-red.webp",
         origin: classItem?.uuid || actor.uuid,
         flags: { [MODULE_ID]: { managed: true, rageActive: true } },
-        changes: [
-          // Berserk = Can't be Frightened (system config says so but doesn't enforce)
-          { key: "system.statusImmunities", mode: 2, value: "frightened" }
-        ],
+        changes: changes,
         disabled: false,
         transfer: true
       }]);
+
+      // Set explodeValues on each equipped weapon so explosion uses the correct max face.
+      // globalExplode enables explosion globally, but the system still needs per-item
+      // explodeValues to know WHICH values trigger it (max face of the upsized die).
+      await this._setWeaponExplodeValues(actor, 2);
     });
 
     Hooks.on("deleteActiveEffect", async (effect, options, userId) => {
@@ -416,6 +496,9 @@ export const BarbarianFeatures = {
       const actor = effect.parent;
       if (!actor || actor.type !== "character") return;
 
+      // Restore original explodeValues on weapons
+      await this._restoreWeaponExplodeValues(actor);
+
       const rageActive = actor.effects.find(e => e.getFlag(MODULE_ID, "rageActive"));
       if (rageActive) {
         this._log(`Rage: Berserk removed from ${actor.name} — removing Rage (Active) companion AE`);
@@ -423,42 +506,83 @@ export const BarbarianFeatures = {
       }
     });
 
-    // --- Die upsizing on damage buttons ---
-    // Modifies data-damage-formula on buttons before the user clicks them.
-    // By the time renderChatMessage fires, Berserk should already be active
-    // (applied by preCreateChatMessage above).
+    // --- Visual indicator + Rage DR breakdown on chat cards ---
     Hooks.on("renderChatMessage", (message, html) => {
-      const actorId = message.speaker?.actor;
-      if (!actorId) return;
-      const actor = game.actors.get(actorId);
-      if (!actor) return;
-
-      if (!this._hasFeature(actor, "barbarian_rage") ||
-          !this._isBerserk(actor) ||
-          !this._isLightOrNoArmor(actor)) return;
-
       const el = html instanceof jQuery ? html[0] : html;
-      const damageButtons = el.querySelectorAll("[data-damage-formula]");
-      if (damageButtons.length === 0) return;
 
-      for (const button of damageButtons) {
-        const formula = button.dataset.damageFormula;
-        if (!formula) continue;
-        const upsized = this._upsizeDice(formula);
-        if (upsized !== formula) {
-          button.dataset.damageFormula = upsized;
-          this._log(`Rage: Upsized formula "${formula}" → "${upsized}"`);
+      // Add RAGE tag to attack cards from berserk barbarians
+      const speakerActor = message.speaker?.actor ? game.actors.get(message.speaker.actor) : null;
+      if (speakerActor &&
+          this._hasFeature(speakerActor, "barbarian_rage") &&
+          this._isBerserk(speakerActor) &&
+          this._isLightOrNoArmor(speakerActor)) {
+        const header = el.querySelector(".card-header");
+        if (header && !header.querySelector(".vce-rage-tag")) {
+          const rageTag = document.createElement("span");
+          rageTag.className = "vce-rage-tag";
+          rageTag.textContent = "RAGE";
+          header.appendChild(rageTag);
         }
       }
 
-      // Add visual indicator
-      const header = el.querySelector(".card-header");
-      if (header && !header.querySelector(".vce-rage-tag")) {
-        const rageTag = document.createElement("span");
-        rageTag.className = "vce-rage-tag";
-        rageTag.textContent = "RAGE";
-        header.appendChild(rageTag);
+      // Add Rage DR breakdown to save-roll / damage application cards
+      // targeting a berserk barbarian
+      const formulaLine = el.querySelector(".damage-formula-line");
+      if (!formulaLine) return;
+
+      // Find the target actor from the apply button
+      const applyBtn = el.querySelector(".vagabond-apply-save-damage-button, .vagabond-apply-direct-button");
+      if (!applyBtn) return;
+
+      // The target actor might be in data-targets (Apply Direct) or data-actor-id (save result)
+      let targetActor = null;
+      const targetsJson = applyBtn.dataset.targets;
+      if (targetsJson) {
+        try {
+          const targets = JSON.parse(targetsJson.replace(/&quot;/g, '"'));
+          if (targets[0]?.actorId) targetActor = game.actors.get(targets[0].actorId);
+        } catch (e) { /* ignore parse errors */ }
       }
+      if (!targetActor && applyBtn.dataset.actorName) {
+        // Save result cards use data-actor-id as the TARGET
+        targetActor = game.actors.get(applyBtn.dataset.actorId);
+      }
+
+      if (!targetActor) return;
+      if (!this._hasFeature(targetActor, "barbarian_rage") ||
+          !this._isBerserk(targetActor) ||
+          !this._isLightOrNoArmor(targetActor)) return;
+
+      // Calculate Rage DR from the displayed values
+      const armorSpan = formulaLine.querySelector('.damage-component[title^="Armor"]');
+      const finalSpan = formulaLine.querySelector(".damage-final");
+      const totalSpan = formulaLine.querySelector('.damage-component[title="Total Damage"]');
+      if (!armorSpan || !finalSpan || !totalSpan) return;
+
+      const totalDamage = parseInt(totalSpan.textContent.trim()) || 0;
+      const finalDamage = parseInt(finalSpan.textContent.trim()) || 0;
+      const totalReduction = totalDamage - finalDamage;
+      const actualArmor = targetActor.system.armor || 0;
+      const rageDR = totalReduction - actualArmor;
+
+      if (rageDR <= 0) return;
+      if (formulaLine.querySelector(".vce-rage-dr")) return; // already modified
+
+      // Update armor span to show only actual armor
+      armorSpan.innerHTML = `<i class="fa-sharp fa-regular fa-shield"></i> ${actualArmor}`;
+      armorSpan.title = `Armor: ${actualArmor}`;
+
+      // Insert Rage DR span after the armor span
+      const rageDRSpan = document.createElement("span");
+      rageDRSpan.className = "damage-component vce-rage-dr";
+      rageDRSpan.title = `Rage DR: ${targetActor.system.incomingDamageReductionPerDie}/die`;
+      rageDRSpan.innerHTML = `<i class="fa-solid fa-fire" style="color:#c43c3c"></i> ${rageDR}`;
+
+      const operator = document.createElement("span");
+      operator.className = "damage-operator";
+      operator.textContent = "-";
+
+      armorSpan.after(operator, rageDRSpan);
     });
 
     // --- Auto-apply Berserk when taking damage ---
@@ -507,17 +631,6 @@ export const BarbarianFeatures = {
     });
   },
 
-  /**
-   * Upsize all dice in a formula string.
-   * d4 → d6 → d8 → d10 → d12
-   */
-  _upsizeDice(formula) {
-    return formula.replace(/(\d+)d(\d+)/gi, (match, count, size) => {
-      const numSize = parseInt(size);
-      const newSize = DIE_UPSIZE_MAP[numSize] ?? numSize;
-      return `${count}d${newSize}`;
-    });
-  },
 
   /* -------------------------------------------- */
   /*  Aggressor: +10 Speed First Round            */
@@ -594,60 +707,138 @@ export const BarbarianFeatures = {
   /* -------------------------------------------- */
 
   _registerFearmongerHooks() {
+    // Detect NPC kills via HP → 0
     Hooks.on("updateActor", async (actor, changes) => {
       if (!game.user.isGM) return;
       if (actor.type !== "npc") return;
 
-      // Check if NPC just hit 0 HP
       const newHP = changes.system?.health?.value;
-      if (newHP !== undefined && newHP <= 0) {
-        // Find the last attacker — check if they have Fearmonger
-        await this._checkFearmonger(actor);
+      if (newHP === undefined || newHP > 0) return;
+
+      // Find the attacker from recent chat messages
+      const attacker = this._findRecentAttacker(actor);
+      if (!attacker) return;
+      if (!this._hasFeature(attacker, "barbarian_fearmonger")) return;
+
+      await this._applyFearmonger(actor, attacker);
+    });
+
+    // Auto-expire Frightened effects from Fearmonger on round change
+    Hooks.on("updateCombat", async (combat, changed) => {
+      if (!("round" in changed)) return;
+      if (!game.user.isGM) return;
+
+      const currentRound = combat.round;
+      for (const combatant of combat.combatants) {
+        const actor = combatant.actor;
+        if (!actor) continue;
+
+        const toRemove = [];
+        for (const effect of actor.effects) {
+          if (!effect.statuses?.has("frightened")) continue;
+          const expireRound = effect.getFlag(MODULE_ID, "fearmongerExpireRound");
+          if (expireRound != null && currentRound > expireRound) {
+            toRemove.push(effect.id);
+          }
+        }
+
+        if (toRemove.length > 0) {
+          await actor.deleteEmbeddedDocuments("ActiveEffect", toRemove);
+          this._log(`Fearmonger: Frightened expired on ${actor.name}`);
+        }
       }
     });
   },
 
-  async _checkFearmonger(defeatedNpc) {
-    if (!game.combat) return;
-
-    const defeatedTL = defeatedNpc.system.threatLevel?.value ?? 0;
-
-    // Find characters in combat with Fearmonger
-    for (const combatant of game.combat.combatants) {
-      const actor = combatant.actor;
-      if (!actor || actor.type !== "character") continue;
-      if (!this._hasFeature(actor, "barbarian_fearmonger")) continue;
-
-      this._log(`Fearmonger: ${actor.name} killed an NPC, checking for weaker enemies`);
-
-      // Find the barbarian's token
-      const barbarianToken = combatant.token?.object;
-      if (!barbarianToken) continue;
-
-      // Find nearby weaker NPCs
-      for (const otherCombatant of game.combat.combatants) {
-        const npc = otherCombatant.actor;
-        if (!npc || npc.type !== "npc" || npc.id === defeatedNpc.id) continue;
-        if ((npc.system.health?.value ?? 0) <= 0) continue;
-
-        const npcTL = npc.system.threatLevel?.value ?? 0;
-        if (npcTL >= defeatedTL) continue; // Must be weaker
-
-        // Check distance (within 30 ft)
-        const npcToken = otherCombatant.token?.object;
-        if (!npcToken || !barbarianToken) continue;
-
-        const distance = canvas.grid.measurePath([barbarianToken.center, npcToken.center]).distance;
-        if (distance > 30) continue;
-
-        // Check immunity
-        if (npc.system.statusImmunities?.includes("frightened")) continue;
-
-        // Apply Frightened
-        this._log(`Fearmonger: Applying Frightened to ${npc.name}`);
-        await npc.toggleStatusEffect("frightened", { active: true });
+  /**
+   * Find the most recent attacker of a target from chat messages.
+   * Scans recent attack/damage cards to identify who targeted this actor.
+   */
+  _findRecentAttacker(targetActor) {
+    const targetId = targetActor.id;
+    const recent = game.messages.contents.slice(-10);
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const msg = recent[i];
+      // Check flags for target info
+      const targets = msg.flags?.vagabond?.targets;
+      if (targets?.some(t => t.actorId === targetId)) {
+        const attackerId = msg.speaker?.actor;
+        if (attackerId) return game.actors.get(attackerId);
+      }
+      // Also check button targets in message content
+      const content = msg.content || "";
+      if (content.includes(targetId) && msg.speaker?.actor) {
+        return game.actors.get(msg.speaker.actor);
       }
     }
+    return null;
+  },
+
+  /**
+   * Apply Frightened to nearby weaker NPCs when a kill occurs.
+   * Based on fork's checkFearmonger implementation.
+   */
+  async _applyFearmonger(killedNpc, attacker) {
+    if (!canvas?.tokens?.placeables) return;
+
+    const attackerLevel = attacker.system.attributes?.level?.value || 1;
+    const currentRound = game.combat?.round || 0;
+
+    // Find the killed NPC's token on canvas
+    const killedToken = canvas.tokens.placeables.find(t => t.actor?.id === killedNpc.id);
+    if (!killedToken) return;
+
+    this._log(`Fearmonger: ${attacker.name} killed ${killedNpc.name}, checking for weaker enemies within 30ft`);
+
+    const frightenedTokens = [];
+    for (const token of canvas.tokens.placeables) {
+      if (!token.actor || token.actor.type !== "npc") continue;
+      if (token.id === killedToken.id) continue;
+
+      // Skip dead NPCs
+      const tokenHP = token.actor.system.health?.value ?? 0;
+      if (tokenHP <= 0) continue;
+
+      // Check distance (30ft = Near)
+      const dist = canvas.grid.measurePath([killedToken.center, token.center]).distance;
+      if (dist > 30) continue;
+
+      // Check HD < attacker Level
+      const hd = token.actor.system.hd || token.actor.system.hitDice || 0;
+      if (hd >= attackerLevel) continue;
+
+      // Check immunity
+      const immunities = token.actor.system.statusImmunities || [];
+      if (immunities.includes("frightened")) continue;
+
+      // Skip already frightened
+      if (token.actor.statuses?.has("frightened")) continue;
+
+      frightenedTokens.push(token);
+    }
+
+    if (frightenedTokens.length === 0) return;
+
+    // Apply Frightened with auto-expire flag
+    for (const token of frightenedTokens) {
+      const frightDef = CONFIG.statusEffects.find(e => e.id === "frightened");
+      if (!frightDef) continue;
+
+      await token.actor.createEmbeddedDocuments("ActiveEffect", [{
+        name: frightDef.name || "Frightened",
+        img: frightDef.img || "icons/svg/hazard.svg",
+        statuses: ["frightened"],
+        changes: frightDef.changes || [],
+        flags: {
+          [MODULE_ID]: {
+            fearmongerExpireRound: currentRound + 1
+          }
+        }
+      }]);
+      this._log(`Fearmonger: Applied Frightened to ${token.actor.name} (expires round ${currentRound + 2})`);
+    }
+
+    ui.notifications.info(`Fearmonger: ${frightenedTokens.length} enemy(s) Frightened!`);
   },
 
   /* -------------------------------------------- */
