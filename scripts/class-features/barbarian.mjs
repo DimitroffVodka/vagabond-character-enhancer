@@ -21,11 +21,32 @@ export const BARBARIAN_REGISTRY = {
   // by 1 per damage die, and your attack damage dice are one size larger and can explode.
   // Further, you can go Berserk after you take damage or as part of making an attack.
   // You remain Berserk this way for 1 minute, unless you end it (no Action) or go Unconscious.
+  //
+  // Implementation notes:
+  // - DR per die: PERMANENT managed AE on incomingDamageReductionPerDie.
+  //   The system already gates this behind berserk status check (damage-helper.mjs:1180).
+  // - Exploding: PERMANENT managed AE using formula "(@statuses.berserk) ? 1 : 0"
+  //   so it only activates while Berserk.
+  // - Die upsizing: Runtime hook on renderChatMessage (modifies button formula).
+  // - Auto-Berserk: Runtime hook on attack/damage to apply Berserk status.
+  // - Berserk status itself grants: no Cast, no Focus, no Frightened, no Morale (system config).
   "rage": {
     class: "barbarian",
     level: 1,
     flag: "barbarian_rage",
-    description: "While Berserk + light/no armor: damage dice upsized, can explode, reduce incoming damage by 1 per die. Can go Berserk after taking damage or as part of an attack."
+    description: "While Berserk + light/no armor: damage dice upsized, can explode, reduce incoming damage by 1 per die. Can go Berserk after taking damage or as part of an attack.",
+    effects: [
+      {
+        label: "Rage",
+        icon: "icons/skills/melee/hand-grip-sword-red.webp",
+        changes: [
+          // DR 1 per die — system gates behind berserk + light armor check
+          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" },
+          // Exploding — only active while Berserk (formula evaluates to 0 or 1)
+          { key: "system.bonuses.globalExplode", mode: 2, value: "(@statuses.berserk) ? 1 : 0" }
+        ]
+      }
+    ]
   },
 
   // L1: Wrath
@@ -69,7 +90,7 @@ export const BARBARIAN_REGISTRY = {
     effects: [
       {
         label: "Mindless Rancor",
-        icon: "icons/svg/terror.svg",
+        icon: "icons/skills/social/intimidation-impressing.webp",
         changes: [
           { key: "system.statusImmunities", mode: 2, value: "charmed" },
           { key: "system.statusImmunities", mode: 2, value: "confused" }
@@ -91,11 +112,27 @@ export const BARBARIAN_REGISTRY = {
   // L10: Rip and Tear
   // While Berserk, you reduce damage you take by 2 per damage die, rather than 1,
   // and you gain a +1 bonus to each die of damage you deal.
+  //
+  // Implementation notes:
+  // - Adds +1 more DR per die (stacks with Rage's 1 = total 2)
+  // - Adds +1 bonus to each damage die dealt (universalDamageBonus, gated by berserk formula)
   "rip and tear": {
     class: "barbarian",
     level: 10,
     flag: "barbarian_ripAndTear",
-    description: "Upgrades Rage: reduce damage by 2 per die instead of 1, +1 bonus to each damage die. Handled by Rage runtime hook."
+    description: "Upgrades Rage: reduce damage by 2 per die instead of 1, +1 bonus to each damage die.",
+    effects: [
+      {
+        label: "Rip and Tear",
+        icon: "icons/skills/melee/strike-slash-blade-red.webp",
+        changes: [
+          // +1 more DR per die (stacks with Rage's 1 for total 2)
+          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" },
+          // +1 bonus per damage die, only while Berserk
+          { key: "system.universalDamageBonus", mode: 2, value: "(@statuses.berserk) ? 1 : 0" }
+        ]
+      }
+    ]
   }
 };
 
@@ -166,31 +203,26 @@ export const BarbarianFeatures = {
   },
 
   /* -------------------------------------------- */
-  /*  Rage: Die Upsizing + Exploding + DR         */
+  /*  Rage: Auto-Berserk + Die Upsizing + Cleanup */
   /* -------------------------------------------- */
 
   /**
-   * Rage has three parts:
-   * 1. Die upsizing on attacks (via renderChatMessageHTML — modifies damage button formula)
-   * 2. Exploding dice (temporary AE on globalExplode, toggled with Berserk)
-   * 3. Damage reduction of 1 per die (temporary AE on incomingDamageReductionPerDie)
+   * Rage implementation:
    *
-   * Part 1 uses renderChatMessageHTML because the system dynamically imports
-   * VagabondDamageHelper (no global path for libWrapper to wrap). The damage
-   * formula lives on the button's data-damage-formula attribute, which we
-   * modify before the user clicks it.
+   * PERMANENT effects (from registry, created by FeatureDetector):
+   * - incomingDamageReductionPerDie = 1 (system gates behind berserk + light armor)
+   * - globalExplode = (@statuses.berserk) ? 1 : 0 (only active while Berserk)
+   * - Rip and Tear adds +1 more DR and +1 universalDamageBonus (also berserk-gated)
    *
-   * Parts 2 & 3 are managed via createActiveEffect/deleteActiveEffect hooks
-   * that watch for the Berserk status being toggled.
+   * RUNTIME hooks (below):
+   * 1. Auto-apply Berserk on attack or taking damage
+   * 2. Die upsizing on damage buttons (renderChatMessage)
+   * 3. Remove Berserk when combat ends
    */
   _registerRageHooks() {
-    // --- Part 0: Auto-apply Berserk when a Barbarian with Rage attacks ---
-    // Rage says: "you can go Berserk after you take damage or as part of making
-    // an attack." This watches for attack chat cards and auto-applies Berserk.
-    // We use renderChatMessage so the Berserk status is applied before the user
-    // clicks the damage button. The die upsizing below also runs on renderChatMessage,
-    // but the auto-Berserk sets a flag so the upsizing knows to fire even if
-    // the status was just applied this frame.
+    // --- Auto-apply Berserk when attacking ---
+    // "you can go Berserk as part of making an attack"
+    // Fires when attack chat card appears with a damage button
     Hooks.on("renderChatMessage", async (message, html) => {
       if (!game.user.isGM) return;
       const actorId = message.speaker?.actor;
@@ -198,21 +230,18 @@ export const BarbarianFeatures = {
       const actor = game.actors.get(actorId);
       if (!actor || actor.type !== "character") return;
       if (!this._hasFeature(actor, "barbarian_rage")) return;
-      if (this._isBerserk(actor)) return; // Already Berserk
+      if (this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
-      // Check if this chat message contains a damage button (i.e., it's an attack)
       const el = html instanceof jQuery ? html[0] : html;
       if (!el.querySelector(".vagabond-damage-button")) return;
 
-      this._log(`Rage: ${actor.name} attacking without Berserk — auto-applying Berserk`);
+      this._log(`Rage: ${actor.name} attacking — auto-applying Berserk`);
       await actor.toggleStatusEffect("berserk", { active: true });
-      // The createActiveEffect hook fires → creates Rage AE (exploding + DR)
-      // The damage button formula will be upsized when the user clicks it,
-      // since by then the Berserk status exists
     });
 
-    // --- Also auto-apply Berserk when taking damage ---
+    // --- Auto-apply Berserk when taking damage ---
+    // "you can go Berserk after you take damage"
     Hooks.on("updateActor", async (actor, changes) => {
       if (!game.user.isGM) return;
       if (actor.type !== "character") return;
@@ -220,37 +249,31 @@ export const BarbarianFeatures = {
       if (this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
-      // Check if HP decreased (took damage)
       const newHP = changes.system?.health?.value;
       if (newHP === undefined) return;
-      const maxHP = actor.system.health?.max ?? 0;
-      if (newHP < maxHP && newHP < (actor.system.health?.value ?? maxHP)) {
+
+      // HP decreased = took damage
+      const oldHP = actor.system.health?.value ?? actor.system.health?.max ?? 0;
+      if (newHP < oldHP) {
         this._log(`Rage: ${actor.name} took damage — auto-applying Berserk`);
         await actor.toggleStatusEffect("berserk", { active: true });
       }
     });
 
-    // --- Part 1: Die upsizing via chat card interception ---
-    // When a chat card renders with a damage button from a barbarian with Rage,
-    // upsize the dice in the formula before the user clicks it.
-    // We check Berserk OR that this is an attack card (Part 0 will apply Berserk
-    // on the same render, so by the time the user clicks, Berserk will be active).
+    // --- Die upsizing on damage buttons ---
+    // Modifies data-damage-formula on buttons before the user clicks them.
+    // Only fires while Berserk + light/no armor.
     Hooks.on("renderChatMessage", (message, html) => {
       const actorId = message.speaker?.actor;
       if (!actorId) return;
       const actor = game.actors.get(actorId);
       if (!actor) return;
 
-      // Must have Rage + light/no armor
       if (!this._hasFeature(actor, "barbarian_rage") ||
+          !this._isBerserk(actor) ||
           !this._isLightOrNoArmor(actor)) return;
 
-      // Must be Berserk already, or this card has a damage button (which triggers auto-Berserk)
       const el = html instanceof jQuery ? html[0] : html;
-      const hasDamageButton = el.querySelector(".vagabond-damage-button");
-      if (!this._isBerserk(actor) && !hasDamageButton) return;
-
-      // Find all damage buttons and upsize their formulas
       const damageButtons = el.querySelectorAll("[data-damage-formula]");
       if (damageButtons.length === 0) return;
 
@@ -274,73 +297,21 @@ export const BarbarianFeatures = {
       }
     });
 
-    // --- Parts 2 & 3: Berserk status toggle → create/remove Rage AE ---
-
-    // When Berserk is applied
-    Hooks.on("createActiveEffect", async (effect, options, userId) => {
+    // --- Remove Berserk when combat ends ---
+    // "You remain Berserk this way for 1 minute, unless you end it or go Unconscious."
+    // In practice, Berserk should end when combat ends.
+    Hooks.on("deleteCombat", async (combat) => {
       if (!game.user.isGM) return;
-      if (!effect.statuses?.has("berserk")) return;
+      for (const combatant of combat.combatants) {
+        const actor = combatant.actor;
+        if (!actor || actor.type !== "character") continue;
+        if (!this._hasFeature(actor, "barbarian_rage")) continue;
+        if (!this._isBerserk(actor)) continue;
 
-      const actor = effect.parent;
-      if (!actor || actor.type !== "character") return;
-      if (!this._hasFeature(actor, "barbarian_rage")) return;
-      if (!this._isLightOrNoArmor(actor)) return;
-
-      this._log(`Rage: Berserk applied to ${actor.name} — creating Rage effects`);
-      await this._applyRageEffects(actor);
+        this._log(`Rage: Combat ended — removing Berserk from ${actor.name}`);
+        await actor.toggleStatusEffect("berserk", { active: false });
+      }
     });
-
-    // When Berserk is removed
-    Hooks.on("deleteActiveEffect", async (effect, options, userId) => {
-      if (!game.user.isGM) return;
-      if (!effect.statuses?.has("berserk")) return;
-
-      const actor = effect.parent;
-      if (!actor || actor.type !== "character") return;
-
-      this._log(`Rage: Berserk removed from ${actor.name} — removing Rage effects`);
-      await this._removeRageEffects(actor);
-    });
-  },
-
-  /**
-   * Create the Rage AE with exploding dice + damage reduction.
-   * This is a temporary effect that only exists while Berserk.
-   */
-  async _applyRageEffects(actor) {
-    // Don't create duplicates
-    const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "rage"));
-    if (existing) return;
-
-    // Determine damage reduction amount (1 base, 2 with Rip and Tear)
-    const hasRipAndTear = this._hasFeature(actor, "barbarian_ripAndTear");
-    const reductionPerDie = hasRipAndTear ? 2 : 1;
-
-    await actor.createEmbeddedDocuments("ActiveEffect", [{
-      name: hasRipAndTear ? "Rage (Rip and Tear)" : "Rage",
-      icon: "icons/svg/terror.svg",
-      origin: `${MODULE_ID}.barbarian.rage`,
-      flags: { [MODULE_ID]: { managed: true, rage: true } },
-      changes: [
-        { key: "system.bonuses.globalExplode", mode: 2, value: "1" },
-        { key: "system.incomingDamageReductionPerDie", mode: 2, value: String(reductionPerDie) }
-      ],
-      disabled: false,
-      transfer: true
-    }]);
-
-    this._log(`Rage AE created: exploding + DR ${reductionPerDie}/die`);
-  },
-
-  /**
-   * Remove the Rage AE when Berserk ends.
-   */
-  async _removeRageEffects(actor) {
-    const rageEffect = actor.effects.find(e => e.getFlag(MODULE_ID, "rage"));
-    if (rageEffect) {
-      await rageEffect.delete();
-      this._log(`Rage AE removed from ${actor.name}`);
-    }
   },
 
   /**
