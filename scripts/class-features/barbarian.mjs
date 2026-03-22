@@ -272,7 +272,8 @@ export const BarbarianFeatures = {
     // Foundry passes the same options through both preUpdate and update hooks,
     // so this is safe from memory leaks and concurrency issues.
     Hooks.on("preUpdateActor", (actor, changes, options) => {
-      if (changes.system?.health?.value !== undefined) {
+      const newHP = changes.system?.health?.value ?? changes["system.health.value"];
+      if (newHP !== undefined) {
         options.vceOldHP = actor.system.health?.value ?? 0;
       }
     });
@@ -327,7 +328,7 @@ export const BarbarianFeatures = {
    */
   _parseDieSize(formula) {
     const match = formula?.match(/\d*d(\d+)/i);
-    return match ? parseInt(match[1]) : 0;
+    return match ? parseInt(match[1], 10) : 0;
   },
 
   /**
@@ -534,7 +535,8 @@ export const BarbarianFeatures = {
         if (header && !header.querySelector(".vce-rage-tag")) {
           const rageTag = document.createElement("span");
           rageTag.className = "vce-rage-tag";
-          rageTag.textContent = game.i18n?.localize("VCE.Chat.RageActive") || "RAGE";
+          const rageKey = "VCE.Chat.RageActive";
+          rageTag.textContent = game.i18n?.has(rageKey) ? game.i18n.localize(rageKey) : "RAGE";
           header.appendChild(rageTag);
         }
       }
@@ -609,7 +611,7 @@ export const BarbarianFeatures = {
       if (this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
-      const newHP = changes.system?.health?.value;
+      const newHP = changes.system?.health?.value ?? changes["system.health.value"];
       if (newHP === undefined) return;
 
       const oldHP = options.vceOldHP;
@@ -802,7 +804,7 @@ export const BarbarianFeatures = {
       if (!game.user.isGM) return;
       if (actor.type !== "npc") return;
 
-      const newHP = changes.system?.health?.value;
+      const newHP = changes.system?.health?.value ?? changes["system.health.value"];
       if (newHP === undefined || newHP > 0) return;
 
       const oldHP = options.vceOldHP;
@@ -935,8 +937,9 @@ export const BarbarianFeatures = {
 
     const effectPromises = frightenedTokens.map(token => {
       const effectData = {
-        name: game.i18n?.localize(frightDef.name) || frightDef.name || "Frightened",
+        name: game.i18n?.has(frightDef.name) ? game.i18n.localize(frightDef.name) : (frightDef.name || "Frightened"),
         icon: frightDef.icon || frightDef.img || "icons/svg/hazard.svg",
+        origin: attacker.uuid,
         statuses: ["frightened"],
         changes: frightDef.changes || [],
         flags: {
