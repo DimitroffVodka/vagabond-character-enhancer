@@ -54,16 +54,7 @@ export const BARBARIAN_REGISTRY = {
   "rip and tear": {
     class: "barbarian",
     flag: "barbarian_ripAndTear",
-    description: "+2 per die damage reduction + damage bonus",
-    effects: [
-      {
-        label: "Rip and Tear",
-        icon: "icons/svg/sword.svg",
-        changes: [
-          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "2" }
-        ]
-      }
-    ]
+    description: "Upgrades Rage: reduce damage by 2 per die instead of 1, +1 bonus to each damage die. Handled by Rage runtime hook."
   }
 };
 
@@ -134,11 +125,20 @@ export const BarbarianFeatures = {
   },
 
   /* -------------------------------------------- */
-  /*  Rage: Die Upsizing + Exploding              */
+  /*  Rage: Die Upsizing + Exploding + DR         */
   /* -------------------------------------------- */
 
+  /**
+   * Rage has three parts:
+   * 1. Die upsizing on attacks (libWrapper, runs per-roll)
+   * 2. Exploding dice (temporary AE on globalExplode, toggled with Berserk)
+   * 3. Damage reduction of 1 per die (temporary AE on incomingDamageReductionPerDie)
+   *
+   * Parts 2 & 3 are managed via createActiveEffect/deleteActiveEffect hooks
+   * that watch for the Berserk status being toggled.
+   */
   _registerRageHooks() {
-    // Wrap the damage helper's rollDamage to intercept damage formulas
+    // --- Part 1: Die upsizing via libWrapper (per-roll) ---
     Hooks.once("ready", () => {
       libWrapper.register(MODULE_ID, "game.vagabond.VagabondDamageHelper.rollDamage", function (wrapped, ...args) {
         const [item, actor, options = {}] = args;
@@ -161,6 +161,74 @@ export const BarbarianFeatures = {
 
       this._log("Rage libWrapper registered on VagabondDamageHelper.rollDamage");
     });
+
+    // --- Parts 2 & 3: Berserk status toggle → create/remove Rage AE ---
+
+    // When Berserk is applied
+    Hooks.on("createActiveEffect", async (effect, options, userId) => {
+      if (!game.user.isGM) return;
+      if (!effect.statuses?.has("berserk")) return;
+
+      const actor = effect.parent;
+      if (!actor || actor.type !== "character") return;
+      if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (!this._isLightOrNoArmor(actor)) return;
+
+      this._log(`Rage: Berserk applied to ${actor.name} — creating Rage effects`);
+      await this._applyRageEffects(actor);
+    });
+
+    // When Berserk is removed
+    Hooks.on("deleteActiveEffect", async (effect, options, userId) => {
+      if (!game.user.isGM) return;
+      if (!effect.statuses?.has("berserk")) return;
+
+      const actor = effect.parent;
+      if (!actor || actor.type !== "character") return;
+
+      this._log(`Rage: Berserk removed from ${actor.name} — removing Rage effects`);
+      await this._removeRageEffects(actor);
+    });
+  },
+
+  /**
+   * Create the Rage AE with exploding dice + damage reduction.
+   * This is a temporary effect that only exists while Berserk.
+   */
+  async _applyRageEffects(actor) {
+    // Don't create duplicates
+    const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "rage"));
+    if (existing) return;
+
+    // Determine damage reduction amount (1 base, 2 with Rip and Tear)
+    const hasRipAndTear = this._hasFeature(actor, "barbarian_ripAndTear");
+    const reductionPerDie = hasRipAndTear ? 2 : 1;
+
+    await actor.createEmbeddedDocuments("ActiveEffect", [{
+      name: hasRipAndTear ? "Rage (Rip and Tear)" : "Rage",
+      icon: "icons/svg/terror.svg",
+      origin: `${MODULE_ID}.barbarian.rage`,
+      flags: { [MODULE_ID]: { managed: true, rage: true } },
+      changes: [
+        { key: "system.bonuses.globalExplode", mode: 2, value: "1" },
+        { key: "system.incomingDamageReductionPerDie", mode: 2, value: String(reductionPerDie) }
+      ],
+      disabled: false,
+      transfer: true
+    }]);
+
+    this._log(`Rage AE created: exploding + DR ${reductionPerDie}/die`);
+  },
+
+  /**
+   * Remove the Rage AE when Berserk ends.
+   */
+  async _removeRageEffects(actor) {
+    const rageEffect = actor.effects.find(e => e.getFlag(MODULE_ID, "rage"));
+    if (rageEffect) {
+      await rageEffect.delete();
+      this._log(`Rage AE removed from ${actor.name}`);
+    }
   },
 
   /**
