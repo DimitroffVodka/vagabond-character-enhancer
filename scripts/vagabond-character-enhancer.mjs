@@ -108,8 +108,28 @@ Hooks.once("ready", async () => {
     if (VagabondItem?.prototype?.rollAttack) {
       const origRollAttack = VagabondItem.prototype.rollAttack;
       VagabondItem.prototype.rollAttack = async function (actor, favorHinder = "none") {
-        // Check if actor has Bloodthirsty feature
         const features = actor.getFlag?.(MODULE_ID, "features");
+
+        // Rage: auto-apply Berserk before the attack roll so die upsizing
+        // and exploding are active when damage is rolled on this same card.
+        // This replaces the preCreateChatMessage approach which was too late.
+        if (features?.barbarian_rage && !actor.statuses?.has("berserk")) {
+          const equippedArmor = actor.items.filter(
+            i => i.type === "equipment" && i.system.equipmentType === "armor" && i.system.equipped
+          );
+          const isLightOrNone = equippedArmor.length === 0 ||
+            equippedArmor.every(a => (a.system.armorType?.toLowerCase() ?? "") === "light" || (a.system.armorType?.toLowerCase() ?? "") === "");
+          if (isLightOrNone) {
+            await actor.toggleStatusEffect("berserk", { active: true });
+            // Wait briefly for companion AE creation to complete
+            await new Promise(r => setTimeout(r, 50));
+            if (game.settings.get(MODULE_ID, "debugMode")) {
+              console.log(`${MODULE_ID} | Rage: auto-applied Berserk before attack roll`);
+            }
+          }
+        }
+
+        // Bloodthirsty: Favor on attacks against wounded targets
         if (features?.barbarian_bloodthirsty && favorHinder !== "favor") {
           // Check if any current target is missing HP
           const targets = game.user.targets;

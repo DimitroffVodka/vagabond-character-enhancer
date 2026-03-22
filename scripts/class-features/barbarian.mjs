@@ -414,41 +414,10 @@ export const BarbarianFeatures = {
   _registerRageHooks() {
     // --- Auto-apply Berserk when barbarian makes an attack ---
     // "you can go Berserk as part of making an attack"
-    //
-    // HOW WE DETECT AN ATTACK:
-    // The system stores flags.vagabond.rerollData.type = 'attack' on weapon
-    // attack chat messages. We use preCreateChatMessage to apply Berserk
-    // BEFORE the card renders, so die upsizing can work on the same card.
-    //
-    // WHY preCreateChatMessage:
-    // - Fires before the message is created and rendered
-    // - The fork used a dialog prompt inside damage-helper.mjs (system-level code)
-    //   but we can't modify that. preCreateChatMessage is the earliest reliable hook.
-    // - We tried renderChatMessage but data-card-type="attack" doesn't exist on
-    //   attack cards (the system uses type='generic' for the card, 'attack' is only
-    //   in the nested rerollData flags).
-    Hooks.on("preCreateChatMessage", async (message) => {
-      if (!game.user.isGM) return;
-
-      // Check if this is an attack message via flags
-      const rerollType = message.flags?.vagabond?.rerollData?.type;
-      if (rerollType !== "attack") return;
-
-      const actorId = message.speaker?.actor;
-      if (!actorId) return;
-      const actor = game.actors.get(actorId);
-      if (!actor || actor.type !== "character") return;
-      if (!this._hasFeature(actor, "barbarian_rage")) return;
-      if (this._isBerserk(actor)) return;
-      if (!this._isLightOrNoArmor(actor)) return;
-
-      // NOTE: This triggers createActiveEffect → companion AE creation → weapon updates,
-      // which are chained async operations inside a pre-hook. The attack that triggers
-      // berserk may not benefit from die upsizing on this same card. RAW is ambiguous
-      // on whether the triggering attack should be upsized ("as part of making an attack").
-      this._log(`Rage: ${actor.name} attacking — auto-applying Berserk`);
-      await actor.toggleStatusEffect("berserk", { active: true });
-    });
+    // Handled via monkey-patch of item.rollAttack() in vagabond-character-enhancer.mjs.
+    // This runs BEFORE damage is rolled, so die upsizing and exploding are active
+    // on the same attack card. The old preCreateChatMessage approach was too late
+    // (damage already rolled by then).
 
     // --- Berserk status toggle → create/remove Rage companion AE ---
     // When Berserk is applied to a barbarian with Rage, create a companion
