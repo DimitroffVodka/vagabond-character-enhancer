@@ -442,6 +442,10 @@ export const BarbarianFeatures = {
       if (this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
+      // NOTE: This triggers createActiveEffect → companion AE creation → weapon updates,
+      // which are chained async operations inside a pre-hook. The attack that triggers
+      // berserk may not benefit from die upsizing on this same card. RAW is ambiguous
+      // on whether the triggering attack should be upsized ("as part of making an attack").
       this._log(`Rage: ${actor.name} attacking — auto-applying Berserk`);
       await actor.toggleStatusEffect("berserk", { active: true });
     });
@@ -491,7 +495,7 @@ export const BarbarianFeatures = {
         flags: { [MODULE_ID]: { managed: true, rageActive: true } },
         changes: changes,
         disabled: false,
-        transfer: true
+        transfer: false
       }]);
 
       // Set explodeValues on each equipped weapon so explosion uses the correct max face.
@@ -657,6 +661,19 @@ export const BarbarianFeatures = {
       if (!this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
+      // If weapon was unequipped, restore original explodeValues immediately
+      if (changes.system?.equipped === false) {
+        const original = item.getFlag(MODULE_ID, "originalExplodeValues");
+        if (original !== undefined) {
+          this._log(`Rage: Weapon ${item.name} unequipped while berserk — restoring explodeValues`);
+          await item.update({
+            "system.explodeValues": original,
+            [`flags.${MODULE_ID}.-=originalExplodeValues`]: null
+          });
+        }
+        return;
+      }
+
       // Check if weapon was just equipped
       if (changes.system?.equipped !== true) return;
 
@@ -710,7 +727,7 @@ export const BarbarianFeatures = {
       if (!game.user.isGM) return;
 
       // Round changed to 1 (combat just started)
-      if (changes.round === 1 && (combat.previous?.round ?? 0) < 1) {
+      if (changes.round === 1 && (combat.previous?.round ?? 0) !== 1) {
         const applyPromises = [];
         for (const combatant of combat.combatants) {
           const actor = combatant.actor;

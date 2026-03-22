@@ -158,7 +158,7 @@ Hooks.once("ready", async () => {
         { key: "system.statusImmunities", mode: 2, value: "frightened" }
       ],
       disabled: false,
-      transfer: true
+      transfer: false
     }]);
   });
 
