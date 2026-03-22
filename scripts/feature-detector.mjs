@@ -4,7 +4,26 @@
  */
 
 import { MODULE_ID } from "./vagabond-character-enhancer.mjs";
+
+// Import class registries — each class file owns all its feature definitions
 import { BARBARIAN_REGISTRY } from "./class-features/barbarian.mjs";
+import { ROGUE_REGISTRY } from "./class-features/rogue.mjs";
+import { BARD_REGISTRY } from "./class-features/bard.mjs";
+import { DANCER_REGISTRY } from "./class-features/dancer.mjs";
+import { ALCHEMIST_REGISTRY } from "./class-features/alchemist.mjs";
+import { FIGHTER_REGISTRY } from "./class-features/fighter.mjs";
+import { VANGUARD_REGISTRY } from "./class-features/vanguard.mjs";
+import { PUGILIST_REGISTRY } from "./class-features/pugilist.mjs";
+import { HUNTER_REGISTRY } from "./class-features/hunter.mjs";
+import { GUNSLINGER_REGISTRY } from "./class-features/gunslinger.mjs";
+import { SORCERER_REGISTRY } from "./class-features/sorcerer.mjs";
+import { WIZARD_REGISTRY } from "./class-features/wizard.mjs";
+import { WITCH_REGISTRY } from "./class-features/witch.mjs";
+import { DRUID_REGISTRY } from "./class-features/druid.mjs";
+import { LUMINARY_REGISTRY } from "./class-features/luminary.mjs";
+import { MAGUS_REGISTRY } from "./class-features/magus.mjs";
+import { REVELATOR_REGISTRY } from "./class-features/revelator.mjs";
+import { MERCHANT_REGISTRY } from "./class-features/merchant.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -12,115 +31,29 @@ import { BARBARIAN_REGISTRY } from "./class-features/barbarian.mjs";
 
 /**
  * Combined registry of all class features.
- * Each class file exports its own registry, merged here.
+ * Each class file exports its own registry, merged here via spread.
  * Keys are lowercase feature names matching the class compendium's levelFeatures.
  * The `effects` field (optional) defines managed Active Effects to create.
  */
 const CLASS_FEATURE_REGISTRY = {
   ...BARBARIAN_REGISTRY,
-
-  // --- Rogue (TODO: move to class-features/rogue.mjs) ---
-  "sneak attack": {
-    class: "rogue",
-    flag: "rogue_sneakAttack",
-    description: "Extra d4s on Favored attacks, scales with level"
-  },
-  "lethal weapon": {
-    class: "rogue",
-    flag: "rogue_lethalWeapon",
-    description: "Sneak Attack on all Favored attacks"
-  },
-  "unflinching luck": {
-    class: "rogue",
-    flag: "rogue_unflinchingLuck",
-    description: "Die face refund on failed block saves"
-  },
-  "evasive": {
-    class: "rogue",
-    flag: "rogue_evasive",
-    description: "Ignore Hinder on Reflex Saves"
-  },
-
-  // --- Bard (TODO: move to class-features/bard.mjs) ---
-  "virtuoso": {
-    class: "bard",
-    flag: "bard_virtuoso",
-    description: "Performance check grants group buffs"
-  },
-  "song of rest": {
-    class: "bard",
-    flag: "bard_songOfRest",
-    description: "HP recovery: Presence + Bard Level during breather"
-  },
-  "climax": {
-    class: "bard",
-    flag: "bard_climax",
-    description: "Granted dice can explode on maximum roll"
-  },
-  "starstruck": {
-    class: "bard",
-    flag: "bard_starstruck",
-    description: "Debuff enemies after successful Virtuoso"
-  },
-  "bravado": {
-    class: "bard",
-    flag: "bard_bravado",
-    description: "Will Saves cannot be Hindered while not Incapacitated"
-  },
-  "awe-inspiring": {
-    class: "bard",
-    flag: "bard_aweInspiring",
-    description: "Starstruck affects all nearby enemies"
-  },
-
-  // --- Dancer (TODO: move to class-features/dancer.mjs) ---
-  "step up": {
-    class: "dancer",
-    flag: "dancer_stepUp",
-    description: "Grant ally bonus Action + 2d20 Reflex"
-  },
-  "double time": {
-    class: "dancer",
-    flag: "dancer_doubleTime",
-    description: "Step Up targets 2 allies"
-  },
-  "choreographer": {
-    class: "dancer",
-    flag: "dancer_choreographer",
-    description: "Step Up targets gain Favor + speed bonus"
-  },
-  "fleet of foot": {
-    class: "dancer",
-    flag: "dancer_fleetOfFoot",
-    description: "Reflex crit bonus scaling with dancer level"
-  },
-  "don't stop me now": {
-    class: "dancer",
-    flag: "dancer_dontStopMeNow",
-    description: "Convert Hinder to Favor on movement saves"
-  },
-  "flash of beauty": {
-    class: "dancer",
-    flag: "dancer_flashOfBeauty",
-    description: "Critical Save grants two Actions"
-  },
-
-  // --- Alchemist (TODO: move to class-features/alchemist.mjs) ---
-  "potency": {
-    class: "alchemist",
-    flag: "alchemist_potency",
-    description: "Exploding dice on crafted alchemical weapons"
-  },
-  "big bang": {
-    class: "alchemist",
-    flag: "alchemist_bigBang",
-    description: "Weapons explode on two highest values + 1d6 bonus"
-  },
-  "eureka": {
-    class: "alchemist",
-    flag: "alchemist_eureka",
-    description: "Studied die on crit craft/alchemical attacks"
-  }
+  ...ROGUE_REGISTRY,
+  ...BARD_REGISTRY,
+  ...DANCER_REGISTRY,
+  ...ALCHEMIST_REGISTRY,
+  ...FIGHTER_REGISTRY,
+  ...VANGUARD_REGISTRY,
+  ...PUGILIST_REGISTRY,
+  ...HUNTER_REGISTRY,
+  ...GUNSLINGER_REGISTRY,
+  ...SORCERER_REGISTRY,
+  ...WIZARD_REGISTRY,
+  ...WITCH_REGISTRY,
+  ...DRUID_REGISTRY,
+  ...LUMINARY_REGISTRY,
+  ...MAGUS_REGISTRY,
+  ...REVELATOR_REGISTRY,
+  ...MERCHANT_REGISTRY
 };
 
 /**
