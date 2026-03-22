@@ -263,11 +263,22 @@ export const BARBARIAN_REGISTRY = {
 /*  Barbarian Runtime Hooks                     */
 /* -------------------------------------------- */
 
+// Tracks old HP values between preUpdateActor and updateActor hooks.
+// Avoids nondeterministic setTimeout by using Foundry's document lifecycle.
+const _oldHP = new Map();
+
 export const BarbarianFeatures = {
   /**
    * Register all Barbarian runtime hooks.
    */
   registerHooks() {
+    // Capture old HP in preUpdateActor (actor still has old data).
+    // Both Rage auto-berserk and Fearmonger read from this in updateActor.
+    Hooks.on("preUpdateActor", (actor, changes) => {
+      if (changes.system?.health?.value !== undefined) {
+        _oldHP.set(actor.id, actor.system.health?.value ?? 0);
+      }
+    });
     this._registerRageHooks();
     this._registerAggressorHooks();
     this._registerFearmongerHooks();
@@ -584,8 +595,8 @@ export const BarbarianFeatures = {
 
     // --- Auto-apply Berserk when taking damage ---
     // "you can go Berserk after you take damage"
-    // Uses preUpdateActor so actor still has OLD data for comparison.
-    Hooks.on("preUpdateActor", async (actor, changes) => {
+    // Old HP captured in preUpdateActor (see registerHooks), read here in updateActor.
+    Hooks.on("updateActor", async (actor, changes) => {
       if (!game.user.isGM) return;
       if (actor.type !== "character") return;
       if (!this._hasFeature(actor, "barbarian_rage")) return;
@@ -595,12 +606,13 @@ export const BarbarianFeatures = {
       const newHP = changes.system?.health?.value;
       if (newHP === undefined) return;
 
-      // In preUpdateActor, actor.system.health.value is still the OLD value
-      const oldHP = actor.system.health?.value ?? actor.system.health?.max ?? 0;
+      const oldHP = _oldHP.get(actor.id);
+      _oldHP.delete(actor.id);
+      if (oldHP === undefined) return;
+
       if (newHP < oldHP) {
         this._log(`Rage: ${actor.name} took damage (${oldHP} → ${newHP}) — auto-applying Berserk`);
-        // Defer the status toggle to after the update completes
-        setTimeout(() => actor.toggleStatusEffect("berserk", { active: true }), 100);
+        await actor.toggleStatusEffect("berserk", { active: true });
       }
     });
 
@@ -628,8 +640,36 @@ export const BarbarianFeatures = {
         }
       }
     });
-  },
 
+    // --- Handle weapon equip/swap while berserk ---
+    // If the barbarian equips a new weapon while already berserk, set its explodeValues.
+    Hooks.on("updateItem", async (item, changes) => {
+      if (!game.user.isGM) return;
+      if (item.type !== "equipment" || item.system.equipmentType !== "weapon") return;
+
+      const actor = item.parent;
+      if (!actor || actor.type !== "character") return;
+      if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (!this._isBerserk(actor)) return;
+      if (!this._isLightOrNoArmor(actor)) return;
+
+      // Check if weapon was just equipped
+      if (changes.system?.equipped !== true) return;
+
+      // Skip if already has our explode flag
+      if (item.getFlag(MODULE_ID, "originalExplodeValues") !== undefined) return;
+
+      const baseDie = this._parseDieSize(item.system.currentDamage || item.system.damageAmount);
+      if (baseDie === 0) return;
+
+      const upsizedMax = baseDie + 2;
+      this._log(`Rage: Weapon ${item.name} equipped while berserk — setting explodeValues="${upsizedMax}"`);
+      await item.update({
+        "system.explodeValues": String(upsizedMax),
+        [`flags.${MODULE_ID}.originalExplodeValues`]: item.system.explodeValues ?? ""
+      });
+    });
+  },
 
   /* -------------------------------------------- */
   /*  Aggressor: +10 Speed First Round            */
@@ -707,34 +747,31 @@ export const BarbarianFeatures = {
 
   _registerFearmongerHooks() {
     // Detect NPC kills via HP transition from alive (>0) to dead (<=0).
-    // Uses preUpdateActor so actor still has OLD HP for transition check,
-    // preventing retrigger on subsequent updates to an already-dead NPC.
-    Hooks.on("preUpdateActor", (actor, changes) => {
+    // Old HP captured in preUpdateActor (see registerHooks), read here in updateActor.
+    // The transition check prevents retrigger on subsequent updates to already-dead NPCs.
+    Hooks.on("updateActor", async (actor, changes) => {
       if (!game.user.isGM) return;
       if (actor.type !== "npc") return;
 
       const newHP = changes.system?.health?.value;
       if (newHP === undefined || newHP > 0) return;
 
-      // In preUpdateActor, actor.system.health.value is still the OLD value
-      const oldHP = actor.system.health?.value ?? 0;
-      if (oldHP <= 0) return; // Already dead — don't retrigger
+      const oldHP = _oldHP.get(actor.id);
+      _oldHP.delete(actor.id);
+      if (oldHP === undefined || oldHP <= 0) return; // Already dead or no old data
 
-      // Defer to after the update completes so the actor state is consistent
-      const actorId = actor.id;
-      setTimeout(async () => {
-        const updatedActor = game.actors.get(actorId);
-        if (!updatedActor) return;
+      const attacker = this._findRecentAttacker(actor);
+      if (!attacker) return;
+      if (!this._hasFeature(attacker, "barbarian_fearmonger")) return;
 
-        const attacker = this._findRecentAttacker(updatedActor);
-        if (!attacker) return;
-        if (!this._hasFeature(attacker, "barbarian_fearmonger")) return;
-
-        await this._applyFearmonger(updatedActor, attacker);
-      }, 100);
+      await this._applyFearmonger(actor, attacker);
     });
 
-    // Auto-expire Frightened effects from Fearmonger on round change
+    // Auto-expire Frightened effects from Fearmonger on round change.
+    // NOTE: "until the end of your next Turn" is approximated as "until the end of
+    // the next round" since Foundry hooks only fire on round changes, not per-turn.
+    // This matches the upstream fork's behavior. The effect may last slightly longer
+    // than RAW for enemies who act after the barbarian in initiative order.
     Hooks.on("updateCombat", async (combat, changed) => {
       if (!("round" in changed)) return;
       if (!game.user.isGM) return;
