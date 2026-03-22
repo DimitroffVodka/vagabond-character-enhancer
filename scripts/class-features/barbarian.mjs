@@ -344,6 +344,9 @@ export const BarbarianFeatures = {
 
     const updates = [];
     for (const weapon of weapons) {
+      // Skip if already has our flag to avoid overwriting original with upsized values
+      if (weapon.getFlag(MODULE_ID, "originalExplodeValues") !== undefined) continue;
+
       const baseDie = this._parseDieSize(weapon.system.currentDamage || weapon.system.damageAmount);
       if (baseDie === 0) continue;
 
@@ -454,6 +457,7 @@ export const BarbarianFeatures = {
       const actor = effect.parent;
       if (!actor || actor.type !== "character") return;
       if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (!this._isLightOrNoArmor(actor)) return;
 
       // Don't create duplicates
       if (actor.effects.find(e => e.getFlag(MODULE_ID, "rageActive"))) return;
@@ -847,14 +851,9 @@ export const BarbarianFeatures = {
       const msg = recent[i];
       // Check flags for target info
       const targets = msg.flags?.vagabond?.targets;
-      if (targets?.some(t => t.actorId === targetId)) {
+      if (Array.isArray(targets) && targets.some(t => t.actorId === targetId)) {
         const attackerId = msg.speaker?.actor;
         if (attackerId) return game.actors.get(attackerId);
-      }
-      // Also check button targets in message content
-      const content = msg.content || "";
-      if (content.includes(targetId) && msg.speaker?.actor) {
-        return game.actors.get(msg.speaker.actor);
       }
     }
     return null;
@@ -866,9 +865,11 @@ export const BarbarianFeatures = {
    */
   async _applyFearmonger(killedNpc, attacker) {
     if (!canvas?.tokens?.placeables) return;
+    // Fearmonger only applies during combat — expiry depends on round tracking
+    if (!game.combat) return;
 
     const attackerLevel = attacker.system.attributes?.level?.value || 1;
-    const currentRound = game.combat?.round || 0;
+    const currentRound = game.combat.round;
 
     // Find the killed NPC's active token (handles unlinked actors properly)
     const killedTokens = killedNpc.getActiveTokens();
