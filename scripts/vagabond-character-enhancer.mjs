@@ -57,6 +57,10 @@ Hooks.once("ready", () => {
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
     debug: (actor) => {
+      if (!actor) {
+        console.warn(`${MODULE_ID} | debug: No actor provided. Usage: game.vagabondCharacterEnhancer.debug(game.actors.get("id"))`);
+        return;
+      }
       const flags = actor.getFlag(MODULE_ID, "features");
       const managed = actor.effects.filter(e => e.getFlag(MODULE_ID, "managed"));
       console.log(`${MODULE_ID} | Actor: ${actor.name}`);
