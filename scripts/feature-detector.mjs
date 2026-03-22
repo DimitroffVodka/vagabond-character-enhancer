@@ -65,6 +65,9 @@ const CLASS_FEATURE_REGISTRY = {
   ...MERCHANT_REGISTRY
 };
 
+// Import perk registry
+import { PERK_REGISTRY } from "./perk-features.mjs";
+
 /**
  * Combined registry of all ancestry traits.
  * Each ancestry file exports its own registry, merged here via spread.
@@ -80,19 +83,9 @@ const ANCESTRY_TRAIT_REGISTRY = {
 };
 
 /**
- * Registry of known perk features.
- * TODO: Move to perk-features.mjs when the list grows.
+ * Combined registry of all perk features.
  */
-const PERK_FEATURE_REGISTRY = {
-  "bully": {
-    flag: "perk_bully",
-    description: "Auto-create Grappled Creature weapon on grapple"
-  },
-  "fisticuffs": {
-    flag: "perk_fisticuffs",
-    description: "Post-hit Grapple/Shove on Favored brawl attacks"
-  }
-};
+const PERK_FEATURE_REGISTRY = PERK_REGISTRY;
 
 /* -------------------------------------------- */
 /*  Feature Detector Singleton                  */
