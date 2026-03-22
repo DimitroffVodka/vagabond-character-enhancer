@@ -540,7 +540,7 @@ export const BarbarianFeatures = {
           if (targets[0]?.actorId) targetActor = game.actors.get(targets[0].actorId);
         } catch (e) { /* ignore parse errors */ }
       }
-      if (!targetActor && applyBtn.dataset.actorName) {
+      if (!targetActor && applyBtn.dataset.actorId) {
         // Save result cards use data-actor-id as the TARGET
         targetActor = game.actors.get(applyBtn.dataset.actorId);
       }
@@ -584,7 +584,8 @@ export const BarbarianFeatures = {
 
     // --- Auto-apply Berserk when taking damage ---
     // "you can go Berserk after you take damage"
-    Hooks.on("updateActor", async (actor, changes) => {
+    // Uses preUpdateActor so actor still has OLD data for comparison.
+    Hooks.on("preUpdateActor", async (actor, changes) => {
       if (!game.user.isGM) return;
       if (actor.type !== "character") return;
       if (!this._hasFeature(actor, "barbarian_rage")) return;
@@ -594,11 +595,12 @@ export const BarbarianFeatures = {
       const newHP = changes.system?.health?.value;
       if (newHP === undefined) return;
 
-      // HP decreased = took damage
+      // In preUpdateActor, actor.system.health.value is still the OLD value
       const oldHP = actor.system.health?.value ?? actor.system.health?.max ?? 0;
       if (newHP < oldHP) {
-        this._log(`Rage: ${actor.name} took damage — auto-applying Berserk`);
-        await actor.toggleStatusEffect("berserk", { active: true });
+        this._log(`Rage: ${actor.name} took damage (${oldHP} → ${newHP}) — auto-applying Berserk`);
+        // Defer the status toggle to after the update completes
+        setTimeout(() => actor.toggleStatusEffect("berserk", { active: true }), 100);
       }
     });
 
@@ -704,20 +706,32 @@ export const BarbarianFeatures = {
   /* -------------------------------------------- */
 
   _registerFearmongerHooks() {
-    // Detect NPC kills via HP → 0
-    Hooks.on("updateActor", async (actor, changes) => {
+    // Detect NPC kills via HP transition from alive (>0) to dead (<=0).
+    // Uses preUpdateActor so actor still has OLD HP for transition check,
+    // preventing retrigger on subsequent updates to an already-dead NPC.
+    Hooks.on("preUpdateActor", (actor, changes) => {
       if (!game.user.isGM) return;
       if (actor.type !== "npc") return;
 
       const newHP = changes.system?.health?.value;
       if (newHP === undefined || newHP > 0) return;
 
-      // Find the attacker from recent chat messages
-      const attacker = this._findRecentAttacker(actor);
-      if (!attacker) return;
-      if (!this._hasFeature(attacker, "barbarian_fearmonger")) return;
+      // In preUpdateActor, actor.system.health.value is still the OLD value
+      const oldHP = actor.system.health?.value ?? 0;
+      if (oldHP <= 0) return; // Already dead — don't retrigger
 
-      await this._applyFearmonger(actor, attacker);
+      // Defer to after the update completes so the actor state is consistent
+      const actorId = actor.id;
+      setTimeout(async () => {
+        const updatedActor = game.actors.get(actorId);
+        if (!updatedActor) return;
+
+        const attacker = this._findRecentAttacker(updatedActor);
+        if (!attacker) return;
+        if (!this._hasFeature(attacker, "barbarian_fearmonger")) return;
+
+        await this._applyFearmonger(updatedActor, attacker);
+      }, 100);
     });
 
     // Auto-expire Frightened effects from Fearmonger on round change
