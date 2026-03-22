@@ -138,61 +138,28 @@ export const BarbarianFeatures = {
   /* -------------------------------------------- */
 
   _registerRageHooks() {
-    // Use libWrapper if available to wrap damage formula preparation
+    // Wrap the damage helper's rollDamage to intercept damage formulas
     Hooks.once("ready", () => {
-      if (typeof libWrapper !== "undefined") {
-        // Wrap the damage helper's rollDamage to intercept damage formulas
-        libWrapper.register(MODULE_ID, "game.vagabond.VagabondDamageHelper.rollDamage", function (wrapped, ...args) {
-          const [item, actor, options = {}] = args;
+      libWrapper.register(MODULE_ID, "game.vagabond.VagabondDamageHelper.rollDamage", function (wrapped, ...args) {
+        const [item, actor, options = {}] = args;
 
-          // Check for Rage conditions
-          if (actor && BarbarianFeatures._hasFeature(actor, "barbarian_rage") &&
-              BarbarianFeatures._isBerserk(actor) &&
-              BarbarianFeatures._isLightOrNoArmor(actor)) {
+        // Check for Rage conditions
+        if (actor && BarbarianFeatures._hasFeature(actor, "barbarian_rage") &&
+            BarbarianFeatures._isBerserk(actor) &&
+            BarbarianFeatures._isLightOrNoArmor(actor)) {
 
-            BarbarianFeatures._log(`Rage active for ${actor.name} — upsizing dice`);
+          BarbarianFeatures._log(`Rage active for ${actor.name} — upsizing dice`);
 
-            // Modify the damage formula by upsizing dice
-            if (options.formula) {
-              options.formula = BarbarianFeatures._upsizeDice(options.formula);
-            }
+          // Modify the damage formula by upsizing dice
+          if (options.formula) {
+            options.formula = BarbarianFeatures._upsizeDice(options.formula);
           }
+        }
 
-          return wrapped(...args);
-        }, "WRAPPER");
+        return wrapped(...args);
+      }, "WRAPPER");
 
-        this._log("Rage libWrapper registered on VagabondDamageHelper.rollDamage");
-      } else {
-        this._log("libWrapper not available — Rage die upsizing will use chat card hook fallback");
-        // Fallback: intercept chat card damage buttons
-        this._registerRageChatFallback();
-      }
-    });
-  },
-
-  /**
-   * Fallback for Rage without libWrapper — modify damage display in chat.
-   */
-  _registerRageChatFallback() {
-    Hooks.on("renderChatMessage", (message, html) => {
-      // Check if this is a damage roll from a Berserk barbarian
-      const actorId = message.speaker?.actor;
-      if (!actorId) return;
-      const actor = game.actors.get(actorId);
-      if (!actor) return;
-
-      if (!this._hasFeature(actor, "barbarian_rage") ||
-          !this._isBerserk(actor) ||
-          !this._isLightOrNoArmor(actor)) return;
-
-      // Add visual indicator to the chat card
-      const header = html[0]?.querySelector?.(".vagabond-card-header") ?? html.find?.(".vagabond-card-header")?.[0];
-      if (header) {
-        const rageTag = document.createElement("span");
-        rageTag.className = "vce-rage-tag";
-        rageTag.textContent = "RAGE";
-        header.appendChild(rageTag);
-      }
+      this._log("Rage libWrapper registered on VagabondDamageHelper.rollDamage");
     });
   },
 
@@ -337,13 +304,9 @@ export const BarbarianFeatures = {
   /* -------------------------------------------- */
 
   _registerBloodthirstyHooks() {
-    // This will be implemented via libWrapper on the roll builder
-    // or via a pre-roll hook when available
+    // TODO: Wrap roll builder via libWrapper to add Favor when target HP < max
     Hooks.once("ready", () => {
-      if (typeof libWrapper !== "undefined") {
-        // TODO: Wrap roll builder to add Favor when target HP < max
-        this._log("Bloodthirsty: libWrapper available, will wrap roll builder (TODO)");
-      }
+      this._log("Bloodthirsty: TODO — wrap roll builder to add Favor vs wounded targets");
     });
   }
 };
