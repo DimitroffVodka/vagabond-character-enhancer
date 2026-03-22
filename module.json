@@ -23,13 +23,11 @@
         }
       }
     ],
-    "requires": [
+    "optional": [
       {
         "id": "lib-wrapper",
         "type": "module"
-      }
-    ],
-    "optional": [
+      },
       {
         "id": "vagabond-crawler",
         "type": "module"

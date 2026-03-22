@@ -171,36 +171,56 @@ export const BarbarianFeatures = {
 
   /**
    * Rage has three parts:
-   * 1. Die upsizing on attacks (libWrapper, runs per-roll)
+   * 1. Die upsizing on attacks (via renderChatMessageHTML — modifies damage button formula)
    * 2. Exploding dice (temporary AE on globalExplode, toggled with Berserk)
    * 3. Damage reduction of 1 per die (temporary AE on incomingDamageReductionPerDie)
+   *
+   * Part 1 uses renderChatMessageHTML because the system dynamically imports
+   * VagabondDamageHelper (no global path for libWrapper to wrap). The damage
+   * formula lives on the button's data-damage-formula attribute, which we
+   * modify before the user clicks it.
    *
    * Parts 2 & 3 are managed via createActiveEffect/deleteActiveEffect hooks
    * that watch for the Berserk status being toggled.
    */
   _registerRageHooks() {
-    // --- Part 1: Die upsizing via libWrapper (per-roll) ---
-    Hooks.once("ready", () => {
-      libWrapper.register(MODULE_ID, "game.vagabond.VagabondDamageHelper.rollDamage", function (wrapped, ...args) {
-        const [item, actor, options = {}] = args;
+    // --- Part 1: Die upsizing via chat card interception ---
+    // When a chat card renders with a damage button from a Berserk barbarian,
+    // upsize the dice in the formula before the user clicks it.
+    Hooks.on("renderChatMessage", (message, html) => {
+      const actorId = message.speaker?.actor;
+      if (!actorId) return;
+      const actor = game.actors.get(actorId);
+      if (!actor) return;
 
-        // Check for Rage conditions
-        if (actor && BarbarianFeatures._hasFeature(actor, "barbarian_rage") &&
-            BarbarianFeatures._isBerserk(actor) &&
-            BarbarianFeatures._isLightOrNoArmor(actor)) {
+      // Check all Rage conditions
+      if (!this._hasFeature(actor, "barbarian_rage") ||
+          !this._isBerserk(actor) ||
+          !this._isLightOrNoArmor(actor)) return;
 
-          BarbarianFeatures._log(`Rage active for ${actor.name} — upsizing dice`);
+      // Find all damage buttons and upsize their formulas
+      const el = html instanceof jQuery ? html[0] : html;
+      const damageButtons = el.querySelectorAll("[data-damage-formula]");
+      if (damageButtons.length === 0) return;
 
-          // Modify the damage formula by upsizing dice
-          if (options.formula) {
-            options.formula = BarbarianFeatures._upsizeDice(options.formula);
-          }
+      for (const button of damageButtons) {
+        const formula = button.dataset.damageFormula;
+        if (!formula) continue;
+        const upsized = this._upsizeDice(formula);
+        if (upsized !== formula) {
+          button.dataset.damageFormula = upsized;
+          this._log(`Rage: Upsized formula "${formula}" → "${upsized}"`);
         }
+      }
 
-        return wrapped(...args);
-      }, "WRAPPER");
-
-      this._log("Rage libWrapper registered on VagabondDamageHelper.rollDamage");
+      // Add visual indicator
+      const header = el.querySelector(".vagabond-card-header, .card-header");
+      if (header && !header.querySelector(".vce-rage-tag")) {
+        const rageTag = document.createElement("span");
+        rageTag.className = "vce-rage-tag";
+        rageTag.textContent = "RAGE";
+        header.appendChild(rageTag);
+      }
     });
 
     // --- Parts 2 & 3: Berserk status toggle → create/remove Rage AE ---
