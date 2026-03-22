@@ -530,7 +530,7 @@ export const BarbarianFeatures = {
         if (header && !header.querySelector(".vce-rage-tag")) {
           const rageTag = document.createElement("span");
           rageTag.className = "vce-rage-tag";
-          rageTag.textContent = "RAGE";
+          rageTag.textContent = game.i18n?.localize("VCE.Chat.RageActive") || "RAGE";
           header.appendChild(rageTag);
         }
       }
@@ -549,7 +549,7 @@ export const BarbarianFeatures = {
       const targetsJson = applyBtn.dataset.targets;
       if (targetsJson) {
         try {
-          const targets = JSON.parse(targetsJson.replace(/&quot;/g, '"'));
+          const targets = JSON.parse(targetsJson);
           if (targets[0]?.actorId) targetActor = game.actors.get(targets[0].actorId);
         } catch (e) { /* ignore parse errors */ }
       }
@@ -710,7 +710,7 @@ export const BarbarianFeatures = {
       if (!game.user.isGM) return;
 
       // Round changed to 1 (combat just started)
-      if (changes.round === 1 && combat.previous?.round === 0) {
+      if (changes.round === 1 && (combat.previous?.round ?? 0) < 1) {
         const applyPromises = [];
         for (const combatant of combat.combatants) {
           const actor = combatant.actor;
@@ -725,7 +725,7 @@ export const BarbarianFeatures = {
       }
 
       // Round changed past 1 — first round is over, remove speed bonus
-      if (changes.round >= 2 && (combat.previous?.round ?? 0) < 2) {
+      if (changes.round > 1 && (combat.previous?.round ?? 0) <= 1) {
         const removePromises = [];
         for (const combatant of combat.combatants) {
           const actor = combatant.actor;
