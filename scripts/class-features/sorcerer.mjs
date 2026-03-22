@@ -27,6 +27,7 @@ export const SORCERER_REGISTRY = {
   // to regain Mana equal to (2 x the reduction). This reduction ends when you Rest.
   // If you die from this reduction, the Cast resolves before your death, and your
   // body is vaporized.
+  // Grants Perk: Metamagic — The Maximum Mana you can spend on a Spell increases by 1. Can take multiple times.
   "tap": {
     class: "sorcerer",
     level: 1,

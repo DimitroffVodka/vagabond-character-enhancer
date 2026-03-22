@@ -13,6 +13,7 @@ export const VANGUARD_REGISTRY = {
   // L1: Stalwart
   // You gain the Protector Perk and, when you take the Hold Action, you can use the
   // held Action or Move as late as the end of your next Turn.
+  // Grants Perk: Protector — Block on behalf of an Ally that fails their Save against a Close Enemy's attack.
   "stalwart": {
     class: "vanguard",
     level: 1,

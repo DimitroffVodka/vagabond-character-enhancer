@@ -31,6 +31,7 @@ export const BARBARIAN_REGISTRY = {
   // L1: Wrath
   // You gain the Interceptor Perk, and can make its attack against an Enemy that
   // makes a Ranged Attack, Casts, or that damages you or an Ally.
+  // Grants Perk: Interceptor — Once per Round, attack a Close Enemy that begins to Move out of your reach (Off-Turn).
   "wrath": {
     class: "barbarian",
     level: 1,

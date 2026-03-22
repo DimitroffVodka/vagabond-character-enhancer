@@ -15,6 +15,7 @@ export const MERCHANT_REGISTRY = {
   // valuables into a container and close it. You can then open that container to
   // replace the valuables with an Item of equal or lesser value. This Item can't
   // be a Relic or similar magic item.
+  // Grants Perk: Deft Hands — You can skip your Move to take the Use Action.
   "gold sink": {
     class: "merchant",
     level: 1,

@@ -13,6 +13,7 @@ export const GUNSLINGER_REGISTRY = {
   // L1: Quick Draw
   // You gain the Marksmanship Perk. Further, when combat occurs, you can make one
   // Ranged attack before the first Turn, which is Hindered if it is made with a 2H Weapon.
+  // Grants Perk: Marksmanship — Ranged Weapon damage dice are one size larger.
   "quick draw": {
     class: "gunslinger",
     level: 1,

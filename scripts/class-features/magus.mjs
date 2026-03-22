@@ -16,6 +16,7 @@ export const MAGUS_REGISTRY = {
   // Spell every 3 Magus Levels hereafter.
   // Mana: Your Maximum Mana is equal to (2 x your Magus Level), and the highest
   // amount of Mana you can spend is equal to (Reason + half your Magus Level, round up).
+  // Grants Perk: Gish — Use Weapons as Trinkets to Cast. Imbue + attack with same Action.
   "spellstriker": {
     class: "magus",
     level: 1,

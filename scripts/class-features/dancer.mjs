@@ -13,6 +13,7 @@ export const DANCER_REGISTRY = {
   // L1: Fleet of Foot
   // You gain the Treads Lightly Perk, and the roll for you to Crit on Reflex Saves
   // is reduced by an amount equal to (your Dancer Level divided by 4, round up).
+  // Grants Perk: Treads Lightly — Your Speed isn't impeded by nonmagical Difficult Terrain, and you don't trigger traps by walking on them.
   "fleet of foot": {
     class: "dancer",
     level: 1,

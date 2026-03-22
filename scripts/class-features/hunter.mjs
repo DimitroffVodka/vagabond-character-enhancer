@@ -25,6 +25,7 @@ export const HUNTER_REGISTRY = {
   // L1: Survivalist
   // You gain the Padfoot Perk, you have Favor on Checks to track and navigate, and
   // you can Forage while Traveling at a Normal Pace.
+  // Grants Perk: Padfoot — Once per Day, gain a Studied die when you Travel 6+ miles.
   "survivalist": {
     class: "hunter",
     level: 1,

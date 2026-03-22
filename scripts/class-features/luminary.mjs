@@ -27,6 +27,7 @@ export const LUMINARY_REGISTRY = {
   // L1: Radiant Healer
   // You get the Assured Healer Perk, and the healing rolls of your Spells can also
   // explode on their highest value.
+  // Grants Perk: Assured Healer — Healing rolls of your Spells Explode on a 1.
   "radiant healer": {
     class: "luminary",
     level: 1,

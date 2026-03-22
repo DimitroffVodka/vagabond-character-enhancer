@@ -78,6 +78,7 @@ export const PERK_REGISTRY = {
 
   // Assured Healer
   // Prerequisite: Spell: Life
+  // Granted by: Luminary (Radiant Healer, L1)
   // Healing rolls of your Spells Explode on a 1.
   "assured healer": {
     flag: "perk_assuredHealer",
@@ -96,6 +97,7 @@ export const PERK_REGISTRY = {
 
   // Bookworm
   // Prerequisite: Stat: RSN 4+
+  // Granted by: Wizard (Page Master, L1)
   // You gain an extra Studied die when you Study. You can take this Perk
   // multiple times.
   "bookworm": {
@@ -157,6 +159,7 @@ export const PERK_REGISTRY = {
 
   // Check Hook
   // Prerequisite: Stat: DEX 4+ | Trained: Brawl
+  // Granted by: Pugilist (Rope-a-Dope, L1)
   // Once per Round, you can make one attack with a Brawl Weapon you have
   // Equipped if a Close Enemy Moves or Attacks (no Action).
   "check hook": {
@@ -185,6 +188,7 @@ export const PERK_REGISTRY = {
 
   // Deft Hands
   // Prerequisite: Stat: DEX 4+ | Trained: Finesse
+  // Granted by: Alchemist (Catalyze, L1), Merchant (Gold Sink, L1)
   // You can skip your Move to take the Use Action.
   "deft hands": {
     flag: "perk_deftHands",
@@ -269,6 +273,7 @@ export const PERK_REGISTRY = {
 
   // Gish
   // Prerequisite: Spell: Any | Trained: Melee or Ranged
+  // Granted by: Magus (Spellstriker, L1), Revelator (Righteous, L1)
   // You can use Weapons as Trinkets to Cast and, when you Cast with a Delivery
   // of Imbue on a Weapon you have Equipped, you can make an attack with the
   // Weapon with the same Action.
@@ -391,6 +396,7 @@ export const PERK_REGISTRY = {
 
   // Interceptor
   // Prerequisite: Stat: AWR 4+ | Trained: Melee
+  // Granted by: Barbarian (Wrath, L1)
   // Once per Round, you can make one attack on an Off-Turn against a Close
   // Enemy that begins to Move out of your reach.
   "interceptor": {
@@ -437,6 +443,7 @@ export const PERK_REGISTRY = {
 
   // Marksmanship
   // Prerequisite: Stat: AWR 7 | Trained: Ranged
+  // Granted by: Gunslinger (Quick Draw, L1)
   // The damage dice for your Ranged Weapon attacks are one size larger.
   "marksmanship": {
     flag: "perk_marksmanship",
@@ -499,6 +506,7 @@ export const PERK_REGISTRY = {
 
   // Metamagic
   // Prerequisite: Resource: Maximum Mana 7+
+  // Granted by: Sorcerer (Tap, L1)
   // The Maximum Mana you can spend on a Spell increases by 1. You can take
   // this Perk multiple times.
   "metamagic": {
@@ -569,6 +577,7 @@ export const PERK_REGISTRY = {
 
   // Padfoot
   // Prerequisite: Stat: AWR 4+ | Trained: Survival
+  // Granted by: Hunter (Survivalist, L1)
   // Once per Day, you gain a Studied die when you Travel 6 miles or more.
   "padfoot": {
     flag: "perk_padfoot",
@@ -633,6 +642,7 @@ export const PERK_REGISTRY = {
 
   // Protector
   // Prerequisite: Stat: MIT 4+ | Trained: Melee
+  // Granted by: Vanguard (Stalwart, L1)
   // You can Block on behalf of an Ally that fails their Save against the
   // attack of an Enemy that is Close to you.
   "protector": {
@@ -674,6 +684,7 @@ export const PERK_REGISTRY = {
 
   // Resourceful
   // Prerequisite: Stat: LUK 4+ | Trained: Craft
+  // Granted by: Rogue (Infiltrator, L1)
   // You can spend 1 Luck to recall having packed an Item in your inventory
   // with a value as high as 50s. It doesn't "appear," it was always there.
   "resourceful": {
@@ -754,6 +765,7 @@ export const PERK_REGISTRY = {
 
   // Shapechanger
   // Prerequisite: Spell: Polymorph
+  // Granted by: Druid (Feral Shift, L1)
   // When you are a Target of your Polymorph Spell, you use your Cast Skill for
   // its Actions, and it doesn't cost you Mana to Focus on it as per the
   // Spell's description.
@@ -782,6 +794,7 @@ export const PERK_REGISTRY = {
 
   // Situational Awareness
   // Prerequisite: Stat: AWR 4+ | Trained: Detect
+  // Granted by: Fighter (Fighting Style, L1)
   // You have Favor on Checks against surprise, and being flanked doesn't
   // Hinder your Saves.
   "situational awareness": {
@@ -917,6 +930,7 @@ export const PERK_REGISTRY = {
 
   // Treads Lightly
   // Prerequisite: Stat: DEX 4+
+  // Granted by: Dancer (Fleet of Foot, L1)
   // Your Speed isn't impeded by nonmagical Difficult Terrain, and you don't
   // trigger traps by walking on them.
   "treads lightly": {

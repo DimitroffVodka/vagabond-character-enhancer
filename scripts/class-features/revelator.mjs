@@ -16,6 +16,7 @@ export const REVELATOR_REGISTRY = {
   // Spell every 3 Revelator Levels hereafter.
   // Mana: Your Maximum Mana is equal to (2 x your Revelator Level), and the highest
   // amount of Mana you can spend is equal to (Presence + half your Revelator Level, round up).
+  // Grants Perk: Gish — Use Weapons as Trinkets to Cast. Imbue + attack with same Action.
   "righteous": {
     class: "revelator",
     level: 1,

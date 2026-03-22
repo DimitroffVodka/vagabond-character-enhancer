@@ -25,6 +25,7 @@ export const ALCHEMIST_REGISTRY = {
 
   // L1: Catalyze
   // You gain the Deft Hands Perk, and you can Craft alchemical items with the Use Action.
+  // Grants Perk: Deft Hands — You can skip your Move to take the Use Action.
   "catalyze": {
     class: "alchemist",
     level: 1,

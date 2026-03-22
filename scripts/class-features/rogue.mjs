@@ -24,6 +24,7 @@ export const ROGUE_REGISTRY = {
   // L1: Infiltrator
   // You gain the Resourceful Perk, and you have Favor on Checks and Saves made to
   // ambush and against traps that you are aware of.
+  // Grants Perk: Resourceful — Spend 1 Luck to recall having packed an Item worth up to 50s.
   "infiltrator": {
     class: "rogue",
     level: 1,

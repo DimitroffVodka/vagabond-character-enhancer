@@ -25,6 +25,7 @@ export const PUGILIST_REGISTRY = {
 
   // L1: Rope-a-Dope
   // You gain the Check Hook Perk and can make two attacks with it, rather than one.
+  // Grants Perk: Check Hook — Once per Round, make one Brawl attack if a Close Enemy Moves or Attacks (no Action).
   "rope-a-dope": {
     class: "pugilist",
     level: 1,

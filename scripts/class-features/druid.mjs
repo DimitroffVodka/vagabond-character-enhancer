@@ -26,6 +26,7 @@ export const DRUID_REGISTRY = {
   // L1: Feral Shift
   // You get the Shapechanger Perk and you can take an Action granted by the Beast
   // you turn into as a part of the Cast Action.
+  // Grants Perk: Shapechanger — When you Target yourself with Polymorph, use Cast Skill for Actions. No Mana to Focus.
   "feral shift": {
     class: "druid",
     level: 1,

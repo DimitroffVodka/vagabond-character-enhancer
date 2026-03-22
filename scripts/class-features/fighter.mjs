@@ -13,6 +13,8 @@ export const FIGHTER_REGISTRY = {
   // L1: Fighting Style
   // You gain the Situational Awareness Perk and another Perk with the Melee or
   // Ranged Training Prerequisite, ignoring prerequisites for this Perk.
+  // Grants Perk: Situational Awareness — Favor on Checks against surprise. Being flanked doesn't Hinder your Saves.
+  // Grants Perk: One additional Perk with Melee or Ranged Training Prerequisite (ignoring prereqs).
   "fighting style": {
     class: "fighter",
     level: 1,
