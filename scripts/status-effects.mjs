@@ -44,11 +44,20 @@ export const STATUS_EFFECTS_REGISTRY = {
   //   mechanical enforcement is limited. The system uses @statuses.berserk
   //   in AE formulas for conditional bonuses (actor-character.mjs:1006).
   //   damage-helper.mjs:1178 checks berserk for DR application.
-  // NOT ENFORCED: Cast/Focus prevention, Frightened immunity, Morale skip.
-  //   These are described in config but not mechanically blocked.
-  // MODULE: Auto-applies via Rage (barbarian.mjs). Frightened immunity
-  //   could be added as a conditional AE but Berserk is not barbarian-only
-  //   (Apoplex spell can cause it on anyone).
+  // NOT ENFORCED BY SYSTEM: Cast/Focus prevention, Frightened immunity, Morale skip.
+  //   These are described in config but not mechanically blocked by the system.
+  //
+  // MODULE HANDLES (barbarian.mjs):
+  //   - When Berserk is applied to a barbarian with Rage, creates a companion
+  //     "Rage (Active)" AE that adds Frightened to statusImmunities.
+  //   - When Berserk is removed, deletes the companion AE.
+  //   - Cast/Focus prevention: NOT YET (would need to block the Cast action UI)
+  //   - Morale skip: NOT YET (morale system in vagabond-crawler handles this)
+  //
+  // NOTE: Berserk can be caused by non-Barbarian sources (Apoplex spell, etc).
+  //   The Frightened immunity currently only applies to barbarians with Rage.
+  //   A more complete implementation would add Frightened immunity to ALL
+  //   Berserk actors, but that would require a separate hook not gated by Rage.
   "berserk": {
     id: "berserk",
     icon: "icons/svg/terror.svg",

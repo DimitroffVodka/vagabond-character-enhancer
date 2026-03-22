@@ -379,6 +379,50 @@ export const BarbarianFeatures = {
       await actor.toggleStatusEffect("berserk", { active: true });
     });
 
+    // --- Berserk status toggle → create/remove Rage companion AE ---
+    // When Berserk is applied to a barbarian with Rage, create a companion
+    // "Rage (Active)" AE that adds Frightened immunity (system config says
+    // "Can't be Frightened" but doesn't enforce it).
+    // When Berserk is removed, delete the companion AE.
+    Hooks.on("createActiveEffect", async (effect, options, userId) => {
+      if (!game.user.isGM) return;
+      if (!effect.statuses?.has("berserk")) return;
+      const actor = effect.parent;
+      if (!actor || actor.type !== "character") return;
+      if (!this._hasFeature(actor, "barbarian_rage")) return;
+
+      // Don't create duplicates
+      if (actor.effects.find(e => e.getFlag(MODULE_ID, "rageActive"))) return;
+
+      const classItem = actor.items.find(i => i.type === "class");
+      this._log(`Rage: Berserk applied to ${actor.name} — creating Rage (Active) companion AE`);
+      await actor.createEmbeddedDocuments("ActiveEffect", [{
+        name: "Rage (Active)",
+        icon: "icons/skills/melee/hand-grip-sword-red.webp",
+        origin: classItem?.uuid || actor.uuid,
+        flags: { [MODULE_ID]: { managed: true, rageActive: true } },
+        changes: [
+          // Berserk = Can't be Frightened (system config says so but doesn't enforce)
+          { key: "system.statusImmunities", mode: 2, value: "frightened" }
+        ],
+        disabled: false,
+        transfer: true
+      }]);
+    });
+
+    Hooks.on("deleteActiveEffect", async (effect, options, userId) => {
+      if (!game.user.isGM) return;
+      if (!effect.statuses?.has("berserk")) return;
+      const actor = effect.parent;
+      if (!actor || actor.type !== "character") return;
+
+      const rageActive = actor.effects.find(e => e.getFlag(MODULE_ID, "rageActive"));
+      if (rageActive) {
+        this._log(`Rage: Berserk removed from ${actor.name} — removing Rage (Active) companion AE`);
+        await rageActive.delete();
+      }
+    });
+
     // --- Die upsizing on damage buttons ---
     // Modifies data-damage-formula on buttons before the user clicks them.
     // By the time renderChatMessage fires, Berserk should already be active
@@ -443,11 +487,22 @@ export const BarbarianFeatures = {
       for (const combatant of combat.combatants) {
         const actor = combatant.actor;
         if (!actor || actor.type !== "character") continue;
-        if (!this._hasFeature(actor, "barbarian_rage")) continue;
-        if (!this._isBerserk(actor)) continue;
 
-        this._log(`Rage: Combat ended — removing Berserk from ${actor.name}`);
-        await actor.toggleStatusEffect("berserk", { active: false });
+        // Remove Berserk if barbarian has Rage
+        if (this._hasFeature(actor, "barbarian_rage") && this._isBerserk(actor)) {
+          this._log(`Rage: Combat ended — removing Berserk from ${actor.name}`);
+          await actor.toggleStatusEffect("berserk", { active: false });
+          // Note: deleteActiveEffect hook will clean up Rage (Active) companion AE
+        }
+
+        // Remove Aggressor speed bonus if still active
+        if (this._hasFeature(actor, "barbarian_aggressor")) {
+          const aggressorEffect = actor.effects.find(e => e.getFlag(MODULE_ID, "aggressor"));
+          if (aggressorEffect) {
+            this._log(`Aggressor: Combat ended — removing speed bonus from ${actor.name}`);
+            await aggressorEffect.delete();
+          }
+        }
       }
     });
   },
