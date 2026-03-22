@@ -345,53 +345,75 @@ export const BarbarianFeatures = {
    * 3. Remove Berserk when combat ends
    */
   _registerRageHooks() {
-    // SINGLE renderChatMessage hook handles both auto-Berserk AND die upsizing.
-    // Using one hook prevents the double-trigger issue from having two separate hooks.
+    // --- Auto-apply Berserk when barbarian makes an attack ---
+    // "you can go Berserk as part of making an attack"
     //
-    // Attack cards have: data-card-type="attack" on .vagabond-chat-card-v2
-    // This triggers on the attack attempt, not on damage.
-    Hooks.on("renderChatMessage", async (message, html) => {
+    // HOW WE DETECT AN ATTACK:
+    // The system stores flags.vagabond.rerollData.type = 'attack' on weapon
+    // attack chat messages. We use preCreateChatMessage to apply Berserk
+    // BEFORE the card renders, so die upsizing can work on the same card.
+    //
+    // WHY preCreateChatMessage:
+    // - Fires before the message is created and rendered
+    // - The fork used a dialog prompt inside damage-helper.mjs (system-level code)
+    //   but we can't modify that. preCreateChatMessage is the earliest reliable hook.
+    // - We tried renderChatMessage but data-card-type="attack" doesn't exist on
+    //   attack cards (the system uses type='generic' for the card, 'attack' is only
+    //   in the nested rerollData flags).
+    Hooks.on("preCreateChatMessage", async (message) => {
+      if (!game.user.isGM) return;
+
+      // Check if this is an attack message via flags
+      const rerollType = message.flags?.vagabond?.rerollData?.type;
+      if (rerollType !== "attack") return;
+
       const actorId = message.speaker?.actor;
       if (!actorId) return;
       const actor = game.actors.get(actorId);
       if (!actor || actor.type !== "character") return;
       if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
+      this._log(`Rage: ${actor.name} attacking — auto-applying Berserk`);
+      await actor.toggleStatusEffect("berserk", { active: true });
+    });
+
+    // --- Die upsizing on damage buttons ---
+    // Modifies data-damage-formula on buttons before the user clicks them.
+    // By the time renderChatMessage fires, Berserk should already be active
+    // (applied by preCreateChatMessage above).
+    Hooks.on("renderChatMessage", (message, html) => {
+      const actorId = message.speaker?.actor;
+      if (!actorId) return;
+      const actor = game.actors.get(actorId);
+      if (!actor) return;
+
+      if (!this._hasFeature(actor, "barbarian_rage") ||
+          !this._isBerserk(actor) ||
+          !this._isLightOrNoArmor(actor)) return;
+
       const el = html instanceof jQuery ? html[0] : html;
+      const damageButtons = el.querySelectorAll("[data-damage-formula]");
+      if (damageButtons.length === 0) return;
 
-      // Check if this is an attack card (triggers on attack attempt, not damage)
-      const card = el.querySelector('[data-card-type="attack"]');
-      if (!card) return;
-
-      // --- Auto-apply Berserk if not already active ---
-      if (!this._isBerserk(actor) && game.user.isGM) {
-        this._log(`Rage: ${actor.name} attacking — auto-applying Berserk`);
-        await actor.toggleStatusEffect("berserk", { active: true });
+      for (const button of damageButtons) {
+        const formula = button.dataset.damageFormula;
+        if (!formula) continue;
+        const upsized = this._upsizeDice(formula);
+        if (upsized !== formula) {
+          button.dataset.damageFormula = upsized;
+          this._log(`Rage: Upsized formula "${formula}" → "${upsized}"`);
+        }
       }
 
-      // --- Die upsizing on damage buttons ---
-      // By this point Berserk should be active (either was already, or just applied above)
-      if (this._isBerserk(actor)) {
-        const damageButtons = el.querySelectorAll("[data-damage-formula]");
-        for (const button of damageButtons) {
-          const formula = button.dataset.damageFormula;
-          if (!formula) continue;
-          const upsized = this._upsizeDice(formula);
-          if (upsized !== formula) {
-            button.dataset.damageFormula = upsized;
-            this._log(`Rage: Upsized formula "${formula}" → "${upsized}"`);
-          }
-        }
-
-        // Add visual indicator
-        const header = el.querySelector(".card-header");
-        if (header && !header.querySelector(".vce-rage-tag")) {
-          const rageTag = document.createElement("span");
-          rageTag.className = "vce-rage-tag";
-          rageTag.textContent = "RAGE";
-          header.appendChild(rageTag);
-        }
+      // Add visual indicator
+      const header = el.querySelector(".card-header");
+      if (header && !header.querySelector(".vce-rage-tag")) {
+        const rageTag = document.createElement("span");
+        rageTag.className = "vce-rage-tag";
+        rageTag.textContent = "RAGE";
+        header.appendChild(rageTag);
       }
     });
 
@@ -487,10 +509,14 @@ export const BarbarianFeatures = {
     const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "aggressor"));
     if (existing) return;
 
+    // Use class item UUID as origin so Source shows "Barbarian" instead of "Unknown"
+    const classItem = actor.items.find(i => i.type === "class");
+    const origin = classItem?.uuid || actor.uuid;
+
     await actor.createEmbeddedDocuments("ActiveEffect", [{
       name: "Aggressor",
       icon: "icons/skills/movement/feet-winged-boots-brown.webp",
-      origin: `${MODULE_ID}.barbarian.aggressor`,
+      origin: origin,
       flags: { [MODULE_ID]: { managed: true, aggressor: true } },
       changes: [
         { key: "system.speed.bonus", mode: 2, value: "10" }
