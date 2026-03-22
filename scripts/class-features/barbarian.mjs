@@ -721,7 +721,7 @@ export const BarbarianFeatures = {
       }
 
       // Round changed past 1 — first round is over, remove speed bonus
-      if (changes.round === 2 && combat.previous?.round === 1) {
+      if (changes.round >= 2 && (combat.previous?.round ?? 0) < 2) {
         const removePromises = [];
         for (const combatant of combat.combatants) {
           const actor = combatant.actor;
@@ -869,6 +869,7 @@ export const BarbarianFeatures = {
 
     this._log(`Fearmonger: ${attacker.name} killed ${killedNpc.name}, checking for weaker enemies within 30ft`);
 
+    const processedActorUuids = new Set();
     const frightenedTokens = [];
     for (const token of canvas.tokens.placeables) {
       if (!token.actor || token.actor.type !== "npc") continue;
@@ -877,6 +878,9 @@ export const BarbarianFeatures = {
       // Skip dead NPCs
       const tokenHP = token.actor.system.health?.value ?? 0;
       if (tokenHP <= 0) continue;
+
+      // Prevent duplicate effects on linked actors with multiple tokens
+      if (processedActorUuids.has(token.actor.uuid)) continue;
 
       // Check distance (30ft = Near)
       const dist = canvas.grid.measurePath([killedToken.center, token.center]).distance;
@@ -893,6 +897,7 @@ export const BarbarianFeatures = {
       // Skip already frightened
       if (token.actor.statuses?.has("frightened")) continue;
 
+      processedActorUuids.add(token.actor.uuid);
       frightenedTokens.push(token);
     }
 
