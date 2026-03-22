@@ -71,6 +71,11 @@ export const BARBARIAN_REGISTRY = {
           { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" },
           // Exploding — only active while Berserk (formula evaluates to 0 or 1)
           { key: "system.bonuses.globalExplode", mode: 2, value: "(@statuses.berserk) ? 1 : 0" }
+          // NOTE: Berserk should also grant Frightened immunity (system config says so
+          // but doesn't enforce). However, statusImmunities is an array and can't be
+          // conditionally toggled via AE formula. This would need a runtime hook on
+          // createActiveEffect to block Frightened while Berserk is active.
+          // For now, Mindless Rancor (L6) covers this with permanent immunity.
         ]
       }
     ]
@@ -340,24 +345,54 @@ export const BarbarianFeatures = {
    * 3. Remove Berserk when combat ends
    */
   _registerRageHooks() {
-    // --- Auto-apply Berserk when attacking ---
-    // "you can go Berserk as part of making an attack"
-    // Fires when attack chat card appears with a damage button
+    // SINGLE renderChatMessage hook handles both auto-Berserk AND die upsizing.
+    // Using one hook prevents the double-trigger issue from having two separate hooks.
+    //
+    // Attack cards have: data-card-type="attack" on .vagabond-chat-card-v2
+    // This triggers on the attack attempt, not on damage.
     Hooks.on("renderChatMessage", async (message, html) => {
-      if (!game.user.isGM) return;
       const actorId = message.speaker?.actor;
       if (!actorId) return;
       const actor = game.actors.get(actorId);
       if (!actor || actor.type !== "character") return;
       if (!this._hasFeature(actor, "barbarian_rage")) return;
-      if (this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
       const el = html instanceof jQuery ? html[0] : html;
-      if (!el.querySelector(".vagabond-damage-button")) return;
 
-      this._log(`Rage: ${actor.name} attacking — auto-applying Berserk`);
-      await actor.toggleStatusEffect("berserk", { active: true });
+      // Check if this is an attack card (triggers on attack attempt, not damage)
+      const card = el.querySelector('[data-card-type="attack"]');
+      if (!card) return;
+
+      // --- Auto-apply Berserk if not already active ---
+      if (!this._isBerserk(actor) && game.user.isGM) {
+        this._log(`Rage: ${actor.name} attacking — auto-applying Berserk`);
+        await actor.toggleStatusEffect("berserk", { active: true });
+      }
+
+      // --- Die upsizing on damage buttons ---
+      // By this point Berserk should be active (either was already, or just applied above)
+      if (this._isBerserk(actor)) {
+        const damageButtons = el.querySelectorAll("[data-damage-formula]");
+        for (const button of damageButtons) {
+          const formula = button.dataset.damageFormula;
+          if (!formula) continue;
+          const upsized = this._upsizeDice(formula);
+          if (upsized !== formula) {
+            button.dataset.damageFormula = upsized;
+            this._log(`Rage: Upsized formula "${formula}" → "${upsized}"`);
+          }
+        }
+
+        // Add visual indicator
+        const header = el.querySelector(".card-header");
+        if (header && !header.querySelector(".vce-rage-tag")) {
+          const rageTag = document.createElement("span");
+          rageTag.className = "vce-rage-tag";
+          rageTag.textContent = "RAGE";
+          header.appendChild(rageTag);
+        }
+      }
     });
 
     // --- Auto-apply Berserk when taking damage ---
@@ -380,46 +415,7 @@ export const BarbarianFeatures = {
       }
     });
 
-    // --- Die upsizing on damage buttons ---
-    // Modifies data-damage-formula on buttons before the user clicks them.
-    // Only fires while Berserk + light/no armor.
-    Hooks.on("renderChatMessage", (message, html) => {
-      const actorId = message.speaker?.actor;
-      if (!actorId) return;
-      const actor = game.actors.get(actorId);
-      if (!actor) return;
-
-      if (!this._hasFeature(actor, "barbarian_rage") ||
-          !this._isBerserk(actor) ||
-          !this._isLightOrNoArmor(actor)) return;
-
-      const el = html instanceof jQuery ? html[0] : html;
-      const damageButtons = el.querySelectorAll("[data-damage-formula]");
-      if (damageButtons.length === 0) return;
-
-      for (const button of damageButtons) {
-        const formula = button.dataset.damageFormula;
-        if (!formula) continue;
-        const upsized = this._upsizeDice(formula);
-        if (upsized !== formula) {
-          button.dataset.damageFormula = upsized;
-          this._log(`Rage: Upsized formula "${formula}" → "${upsized}"`);
-        }
-      }
-
-      // Add visual indicator
-      const header = el.querySelector(".vagabond-card-header, .card-header");
-      if (header && !header.querySelector(".vce-rage-tag")) {
-        const rageTag = document.createElement("span");
-        rageTag.className = "vce-rage-tag";
-        rageTag.textContent = "RAGE";
-        header.appendChild(rageTag);
-      }
-    });
-
     // --- Remove Berserk when combat ends ---
-    // "You remain Berserk this way for 1 minute, unless you end it or go Unconscious."
-    // In practice, Berserk should end when combat ends.
     Hooks.on("deleteCombat", async (combat) => {
       if (!game.user.isGM) return;
       for (const combatant of combat.combatants) {
@@ -451,35 +447,38 @@ export const BarbarianFeatures = {
   /* -------------------------------------------- */
 
   _registerAggressorHooks() {
-    // Apply speed bonus at combat start
+    // Single updateCombat hook handles both apply and remove.
+    // Apply: when combat starts (round 0 → 1), but NOT on turn changes in round 1.
+    // Remove: when round advances past 1 (round 1 → 2), meaning first round is over.
     Hooks.on("updateCombat", async (combat, changes) => {
       if (!game.user.isGM) return;
-      if (changes.round !== 1 || combat.previous?.round !== 0) return;
 
-      // Combat just started (round 0 → 1)
-      for (const combatant of combat.combatants) {
-        const actor = combatant.actor;
-        if (!actor || actor.type !== "character") continue;
-        if (!this._hasFeature(actor, "barbarian_aggressor")) continue;
+      // Round changed to 1 (combat just started)
+      if (changes.round === 1 && combat.previous?.round === 0) {
+        for (const combatant of combat.combatants) {
+          const actor = combatant.actor;
+          if (!actor || actor.type !== "character") continue;
+          if (!this._hasFeature(actor, "barbarian_aggressor")) continue;
 
-        this._log(`Aggressor: Applying +10 speed to ${actor.name}`);
-        await this._applyAggressorEffect(actor);
+          this._log(`Aggressor: Applying +10 speed to ${actor.name}`);
+          await this._applyAggressorEffect(actor);
+        }
+        return; // Don't process turn changes on the same update
       }
-    });
 
-    // Remove speed bonus after the barbarian's first turn
-    Hooks.on("updateCombat", async (combat, changes) => {
-      if (!game.user.isGM) return;
-      if (!("turn" in changes)) return;
+      // Round changed past 1 — first round is over, remove speed bonus
+      if (changes.round === 2 && combat.previous?.round === 1) {
+        for (const combatant of combat.combatants) {
+          const actor = combatant.actor;
+          if (!actor || actor.type !== "character") continue;
+          if (!this._hasFeature(actor, "barbarian_aggressor")) continue;
 
-      // Check if the combatant who just finished their turn has Aggressor
-      const prevCombatant = combat.combatants.contents[combat.previous?.turn];
-      if (!prevCombatant?.actor) return;
-
-      const actor = prevCombatant.actor;
-      if (combat.round === 1 && this._hasFeature(actor, "barbarian_aggressor")) {
-        await this._removeAggressorEffect(actor);
-        this._log(`Aggressor: Removed +10 speed from ${actor.name}`);
+          const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "aggressor"));
+          if (existing) {
+            await this._removeAggressorEffect(actor);
+            this._log(`Aggressor: Round 1 over — removed +10 speed from ${actor.name}`);
+          }
+        }
       }
     });
   },
@@ -490,7 +489,7 @@ export const BarbarianFeatures = {
 
     await actor.createEmbeddedDocuments("ActiveEffect", [{
       name: "Aggressor",
-      icon: "icons/svg/wing.svg",
+      icon: "icons/skills/movement/feet-winged-boots-brown.webp",
       origin: `${MODULE_ID}.barbarian.aggressor`,
       flags: { [MODULE_ID]: { managed: true, aggressor: true } },
       changes: [
