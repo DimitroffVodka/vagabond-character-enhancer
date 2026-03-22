@@ -181,7 +181,7 @@ export const BARBARIAN_REGISTRY = {
     effects: [
       {
         label: "Mindless Rancor",
-        icon: "icons/magic/defensive/shield-barrier-deflection-yellow.webp",
+        icon: "icons/magic/defensive/shield-barrier-deflect-gold.webp",
         changes: [
           { key: "system.statusImmunities", mode: 2, value: "charmed" },
           { key: "system.statusImmunities", mode: 2, value: "confused" }

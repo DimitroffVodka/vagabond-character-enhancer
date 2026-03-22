@@ -65,7 +65,7 @@ export const REVELATOR_REGISTRY = {
     effects: [
       {
         label: "Divine Resolve",
-        icon: "icons/magic/holy/prayer-hands-glowing-yellow.webp",
+        icon: "icons/magic/holy/prayer-hands-glowing-yellow-white.webp",
         changes: [
           { key: "system.statusImmunities", mode: 2, value: "blinded" },
           { key: "system.statusImmunities", mode: 2, value: "paralyzed" },
