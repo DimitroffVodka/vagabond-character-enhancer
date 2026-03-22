@@ -866,11 +866,20 @@ export const BarbarianFeatures = {
     const recent = game.messages.contents.slice(-10);
     for (let i = recent.length - 1; i >= 0; i--) {
       const msg = recent[i];
-      // Check flags for target info
+      const attackerId = msg.speaker?.actor;
+      if (!attackerId) continue;
+
+      // Check structured flags first
       const targets = msg.flags?.vagabond?.targets;
       if (Array.isArray(targets) && targets.some(t => t.actorId === targetId)) {
-        const attackerId = msg.speaker?.actor;
-        if (attackerId) return game.actors.get(attackerId);
+        return game.actors.get(attackerId);
+      }
+
+      // Fallback: check if target actor ID appears in message content
+      // (button data-targets attributes contain JSON with actorId fields)
+      const content = msg.content || "";
+      if (content.includes(`"actorId":"${targetId}"`) || content.includes(`&quot;actorId&quot;:&quot;${targetId}&quot;`)) {
+        return game.actors.get(attackerId);
       }
     }
     return null;
