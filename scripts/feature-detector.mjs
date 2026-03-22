@@ -4,70 +4,22 @@
  */
 
 import { MODULE_ID } from "./vagabond-character-enhancer.mjs";
+import { BARBARIAN_REGISTRY } from "./class-features/barbarian.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
 /* -------------------------------------------- */
 
 /**
- * Registry of known class features.
- * Keys are lowercase feature names, values describe the feature.
- * The `class` field groups features by class.
+ * Combined registry of all class features.
+ * Each class file exports its own registry, merged here.
+ * Keys are lowercase feature names matching the class compendium's levelFeatures.
  * The `effects` field (optional) defines managed Active Effects to create.
  */
 const CLASS_FEATURE_REGISTRY = {
-  // --- Barbarian ---
-  "rage": {
-    class: "barbarian",
-    flag: "barbarian_rage",
-    description: "Die upsizing + exploding dice when Berserk with light/no armor"
-  },
-  "aggressor": {
-    class: "barbarian",
-    flag: "barbarian_aggressor",
-    description: "+10 speed in first round of combat"
-  },
-  "fearmonger": {
-    class: "barbarian",
-    flag: "barbarian_fearmonger",
-    description: "Frighten weaker nearby enemies on kill"
-  },
-  "mindless rancor": {
-    class: "barbarian",
-    flag: "barbarian_mindlessRancor",
-    description: "Immunity to Charmed and Confused",
-    effects: [
-      {
-        label: "Mindless Rancor",
-        icon: "icons/svg/terror.svg",
-        changes: [
-          { key: "system.statusImmunities", mode: 2, value: "charmed" },
-          { key: "system.statusImmunities", mode: 2, value: "confused" }
-        ]
-      }
-    ]
-  },
-  "bloodthirsty": {
-    class: "barbarian",
-    flag: "barbarian_bloodthirsty",
-    description: "Favor on attacks vs wounded targets"
-  },
-  "rip and tear": {
-    class: "barbarian",
-    flag: "barbarian_ripAndTear",
-    description: "+2 per die damage reduction + damage bonus",
-    effects: [
-      {
-        label: "Rip and Tear",
-        icon: "icons/svg/sword.svg",
-        changes: [
-          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "2" }
-        ]
-      }
-    ]
-  },
+  ...BARBARIAN_REGISTRY,
 
-  // --- Rogue ---
+  // --- Rogue (TODO: move to class-features/rogue.mjs) ---
   "sneak attack": {
     class: "rogue",
     flag: "rogue_sneakAttack",
@@ -89,7 +41,7 @@ const CLASS_FEATURE_REGISTRY = {
     description: "Ignore Hinder on Reflex Saves"
   },
 
-  // --- Bard ---
+  // --- Bard (TODO: move to class-features/bard.mjs) ---
   "virtuoso": {
     class: "bard",
     flag: "bard_virtuoso",
@@ -121,7 +73,7 @@ const CLASS_FEATURE_REGISTRY = {
     description: "Starstruck affects all nearby enemies"
   },
 
-  // --- Dancer ---
+  // --- Dancer (TODO: move to class-features/dancer.mjs) ---
   "step up": {
     class: "dancer",
     flag: "dancer_stepUp",
@@ -153,7 +105,7 @@ const CLASS_FEATURE_REGISTRY = {
     description: "Critical Save grants two Actions"
   },
 
-  // --- Alchemist ---
+  // --- Alchemist (TODO: move to class-features/alchemist.mjs) ---
   "potency": {
     class: "alchemist",
     flag: "alchemist_potency",

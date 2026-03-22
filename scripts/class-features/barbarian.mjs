@@ -1,9 +1,71 @@
 /**
  * Barbarian Class Features
- * Runtime hooks for features that can't be pure Active Effects.
+ * Registry entries + runtime hooks for all Barbarian features.
  */
 
 import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+
+/* -------------------------------------------- */
+/*  Feature Registry                            */
+/* -------------------------------------------- */
+
+/**
+ * All Barbarian class features.
+ * Keys are lowercase feature names matching the class compendium's levelFeatures.
+ * Features with `effects` get automatic managed Active Effects.
+ * Features without `effects` need runtime hooks (below).
+ */
+export const BARBARIAN_REGISTRY = {
+  "rage": {
+    class: "barbarian",
+    flag: "barbarian_rage",
+    description: "Die upsizing + exploding dice when Berserk with light/no armor"
+  },
+  "aggressor": {
+    class: "barbarian",
+    flag: "barbarian_aggressor",
+    description: "+10 speed in first round of combat"
+  },
+  "fearmonger": {
+    class: "barbarian",
+    flag: "barbarian_fearmonger",
+    description: "Frighten weaker nearby enemies on kill"
+  },
+  "mindless rancor": {
+    class: "barbarian",
+    flag: "barbarian_mindlessRancor",
+    description: "Immunity to Charmed and Confused",
+    effects: [
+      {
+        label: "Mindless Rancor",
+        icon: "icons/svg/terror.svg",
+        changes: [
+          { key: "system.statusImmunities", mode: 2, value: "charmed" },
+          { key: "system.statusImmunities", mode: 2, value: "confused" }
+        ]
+      }
+    ]
+  },
+  "bloodthirsty": {
+    class: "barbarian",
+    flag: "barbarian_bloodthirsty",
+    description: "Favor on attacks vs wounded targets"
+  },
+  "rip and tear": {
+    class: "barbarian",
+    flag: "barbarian_ripAndTear",
+    description: "+2 per die damage reduction + damage bonus",
+    effects: [
+      {
+        label: "Rip and Tear",
+        icon: "icons/svg/sword.svg",
+        changes: [
+          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "2" }
+        ]
+      }
+    ]
+  }
+};
 
 /* -------------------------------------------- */
 /*  Constants                                   */
@@ -18,7 +80,7 @@ const DIE_UPSIZE_MAP = {
 };
 
 /* -------------------------------------------- */
-/*  Barbarian Features                          */
+/*  Barbarian Runtime Hooks                     */
 /* -------------------------------------------- */
 
 export const BarbarianFeatures = {
