@@ -184,22 +184,73 @@ export const BarbarianFeatures = {
    * that watch for the Berserk status being toggled.
    */
   _registerRageHooks() {
+    // --- Part 0: Auto-apply Berserk when a Barbarian with Rage attacks ---
+    // Rage says: "you can go Berserk after you take damage or as part of making
+    // an attack." This watches for attack chat cards and auto-applies Berserk.
+    // We use renderChatMessage so the Berserk status is applied before the user
+    // clicks the damage button. The die upsizing below also runs on renderChatMessage,
+    // but the auto-Berserk sets a flag so the upsizing knows to fire even if
+    // the status was just applied this frame.
+    Hooks.on("renderChatMessage", async (message, html) => {
+      if (!game.user.isGM) return;
+      const actorId = message.speaker?.actor;
+      if (!actorId) return;
+      const actor = game.actors.get(actorId);
+      if (!actor || actor.type !== "character") return;
+      if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (this._isBerserk(actor)) return; // Already Berserk
+      if (!this._isLightOrNoArmor(actor)) return;
+
+      // Check if this chat message contains a damage button (i.e., it's an attack)
+      const el = html instanceof jQuery ? html[0] : html;
+      if (!el.querySelector(".vagabond-damage-button")) return;
+
+      this._log(`Rage: ${actor.name} attacking without Berserk — auto-applying Berserk`);
+      await actor.toggleStatusEffect("berserk", { active: true });
+      // The createActiveEffect hook fires → creates Rage AE (exploding + DR)
+      // The damage button formula will be upsized when the user clicks it,
+      // since by then the Berserk status exists
+    });
+
+    // --- Also auto-apply Berserk when taking damage ---
+    Hooks.on("updateActor", async (actor, changes) => {
+      if (!game.user.isGM) return;
+      if (actor.type !== "character") return;
+      if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (this._isBerserk(actor)) return;
+      if (!this._isLightOrNoArmor(actor)) return;
+
+      // Check if HP decreased (took damage)
+      const newHP = changes.system?.health?.value;
+      if (newHP === undefined) return;
+      const maxHP = actor.system.health?.max ?? 0;
+      if (newHP < maxHP && newHP < (actor.system.health?.value ?? maxHP)) {
+        this._log(`Rage: ${actor.name} took damage — auto-applying Berserk`);
+        await actor.toggleStatusEffect("berserk", { active: true });
+      }
+    });
+
     // --- Part 1: Die upsizing via chat card interception ---
-    // When a chat card renders with a damage button from a Berserk barbarian,
+    // When a chat card renders with a damage button from a barbarian with Rage,
     // upsize the dice in the formula before the user clicks it.
+    // We check Berserk OR that this is an attack card (Part 0 will apply Berserk
+    // on the same render, so by the time the user clicks, Berserk will be active).
     Hooks.on("renderChatMessage", (message, html) => {
       const actorId = message.speaker?.actor;
       if (!actorId) return;
       const actor = game.actors.get(actorId);
       if (!actor) return;
 
-      // Check all Rage conditions
+      // Must have Rage + light/no armor
       if (!this._hasFeature(actor, "barbarian_rage") ||
-          !this._isBerserk(actor) ||
           !this._isLightOrNoArmor(actor)) return;
 
-      // Find all damage buttons and upsize their formulas
+      // Must be Berserk already, or this card has a damage button (which triggers auto-Berserk)
       const el = html instanceof jQuery ? html[0] : html;
+      const hasDamageButton = el.querySelector(".vagabond-damage-button");
+      if (!this._isBerserk(actor) && !hasDamageButton) return;
+
+      // Find all damage buttons and upsize their formulas
       const damageButtons = el.querySelectorAll("[data-damage-formula]");
       if (damageButtons.length === 0) return;
 
