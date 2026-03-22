@@ -798,9 +798,7 @@ export const BarbarianFeatures = {
 
       const currentRound = combat.round;
       const currentCombatant = combat.combatant;
-
-      // Only expire when NPC phase starts (current combatant is an NPC)
-      if (!currentCombatant?.actor || currentCombatant.actor.type !== "npc") return;
+      const isNPCTurn = currentCombatant?.actor?.type === "npc";
 
       const deletionPromises = [];
       for (const combatant of combat.combatants) {
@@ -811,7 +809,11 @@ export const BarbarianFeatures = {
         for (const effect of actor.effects) {
           if (!effect.statuses?.has("frightened")) continue;
           const expireRound = effect.getFlag(MODULE_ID, "fearmongerExpireRound");
-          if (expireRound != null && currentRound >= expireRound) {
+          if (expireRound == null) continue;
+
+          // Expire if: NPC phase starts in the expire round (phase-accurate),
+          // OR any round past the expire round (catch-all for skipped turns)
+          if ((isNPCTurn && currentRound >= expireRound) || currentRound > expireRound) {
             toRemove.push(effect.id);
           }
         }
