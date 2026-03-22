@@ -16,25 +16,55 @@ import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
  * Features without `effects` need runtime hooks (below).
  */
 export const BARBARIAN_REGISTRY = {
+  // L1: Rage
+  // While Berserk and wearing Light Armor or no Armor, you reduce damage you take
+  // by 1 per damage die, and your attack damage dice are one size larger and can explode.
+  // Further, you can go Berserk after you take damage or as part of making an attack.
+  // You remain Berserk this way for 1 minute, unless you end it (no Action) or go Unconscious.
   "rage": {
     class: "barbarian",
+    level: 1,
     flag: "barbarian_rage",
-    description: "Die upsizing + exploding dice when Berserk with light/no armor"
+    description: "While Berserk + light/no armor: damage dice upsized, can explode, reduce incoming damage by 1 per die. Can go Berserk after taking damage or as part of an attack."
   },
+
+  // L1: Wrath
+  // You gain the Interceptor Perk, and can make its attack against an Enemy that
+  // makes a Ranged Attack, Casts, or that damages you or an Ally.
+  "wrath": {
+    class: "barbarian",
+    level: 1,
+    flag: "barbarian_wrath",
+    description: "Gain the Interceptor Perk. Can make its attack against Enemies that make Ranged Attacks, Cast, or damage you or an Ally."
+  },
+
+  // L2: Aggressor
+  // You have a 10 foot bonus to Speed during the first Round of Combat, and having
+  // 3 or more Fatigue doesn't prevent you from taking the Rush Action.
   "aggressor": {
     class: "barbarian",
+    level: 2,
     flag: "barbarian_aggressor",
-    description: "+10 speed in first round of combat"
+    description: "+10 Speed during first Round of Combat. 3+ Fatigue doesn't prevent Rush Action."
   },
+
+  // L4: Fearmonger
+  // When you kill an Enemy, every Near Enemy with HD lower than your Level becomes
+  // Frightened until the end of your next Turn.
   "fearmonger": {
     class: "barbarian",
+    level: 4,
     flag: "barbarian_fearmonger",
-    description: "Frighten weaker nearby enemies on kill"
+    description: "When you kill an Enemy, every Near Enemy with HD lower than your Level becomes Frightened until end of your next Turn."
   },
+
+  // L6: Mindless Rancor
+  // You can't be Charmed, Confused, or compelled to act against your will.
   "mindless rancor": {
     class: "barbarian",
+    level: 6,
     flag: "barbarian_mindlessRancor",
-    description: "Immunity to Charmed and Confused",
+    description: "You can't be Charmed, Confused, or compelled to act against your will.",
     effects: [
       {
         label: "Mindless Rancor",
@@ -46,13 +76,23 @@ export const BARBARIAN_REGISTRY = {
       }
     ]
   },
+
+  // L8: Bloodthirsty
+  // Your attacks against Beings that are missing any HP are Favored, and you can
+  // sense them within Far as if by Blindsight.
   "bloodthirsty": {
     class: "barbarian",
+    level: 8,
     flag: "barbarian_bloodthirsty",
-    description: "Favor on attacks vs wounded targets"
+    description: "Attacks against Beings missing any HP are Favored. Sense them within Far as Blindsight."
   },
+
+  // L10: Rip and Tear
+  // While Berserk, you reduce damage you take by 2 per damage die, rather than 1,
+  // and you gain a +1 bonus to each die of damage you deal.
   "rip and tear": {
     class: "barbarian",
+    level: 10,
     flag: "barbarian_ripAndTear",
     description: "Upgrades Rage: reduce damage by 2 per die instead of 1, +1 bonus to each damage die. Handled by Rage runtime hook."
   }
