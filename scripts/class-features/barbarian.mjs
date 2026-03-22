@@ -12,28 +12,55 @@ import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
 /**
  * All Barbarian class features.
  * Keys are lowercase feature names matching the class compendium's levelFeatures.
- * Features with `effects` get automatic managed Active Effects.
- * Features without `effects` need runtime hooks (below).
+ *
+ * Status key:
+ *   "system"  — Fully handled by mordachai's base system. Module does nothing.
+ *   "module"  — Fully handled by this module (managed AE and/or runtime hook).
+ *   "partial" — System handles part, module handles the rest. See notes.
+ *   "flavor"  — Roleplay/narrative only. Nothing to automate.
+ *   "todo"    — Needs implementation. Not yet working.
  */
 export const BARBARIAN_REGISTRY = {
+  // ──────────────────────────────────────────────
   // L1: Rage
-  // While Berserk and wearing Light Armor or no Armor, you reduce damage you take
-  // by 1 per damage die, and your attack damage dice are one size larger and can explode.
-  // Further, you can go Berserk after you take damage or as part of making an attack.
-  // You remain Berserk this way for 1 minute, unless you end it (no Action) or go Unconscious.
+  // ──────────────────────────────────────────────
+  // RULES: While Berserk and wearing Light Armor or no Armor, you reduce damage
+  // you take by 1 per damage die, and your attack damage dice are one size larger
+  // and can explode. Further, you can go Berserk after you take damage or as part
+  // of making an attack. You remain Berserk this way for 1 minute, unless you end
+  // it (no Action) or go Unconscious.
   //
-  // Implementation notes:
-  // - DR per die: PERMANENT managed AE on incomingDamageReductionPerDie.
-  //   The system already gates this behind berserk status check (damage-helper.mjs:1180).
-  // - Exploding: PERMANENT managed AE using formula "(@statuses.berserk) ? 1 : 0"
-  //   so it only activates while Berserk.
-  // - Die upsizing: Runtime hook on renderChatMessage (modifies button formula).
-  // - Auto-Berserk: Runtime hook on attack/damage to apply Berserk status.
-  // - Berserk status itself grants: no Cast, no Focus, no Frightened, no Morale (system config).
+  // STATUS: partial
+  //
+  // SYSTEM HANDLES:
+  //   - DR application: damage-helper.mjs line 1178-1183 reads
+  //     actor.system.incomingDamageReductionPerDie, checks actor.statuses.has('berserk')
+  //     AND _isLightOrNoArmor(actor), then reduces finalDamage by reductionPerDie * numDice.
+  //     The module just needs to SET the value — system does the gating and math.
+  //   - Exploding dice: damage-helper.mjs line 366 calls _getExplodeValues() which reads
+  //     actor.system.bonuses.globalExplode (line 490). If truthy, exploding is enabled.
+  //     The module sets this via AE with berserk-gated formula.
+  //   - Berserk status conditions: config.mjs line 259 defines Berserk as:
+  //     "Can't take Cast Action or Focus. Doesn't make Morale Checks. Can't be Frightened."
+  //     These restrictions are handled by system UI/logic.
+  //
+  // MODULE HANDLES:
+  //   - Managed AE: Sets incomingDamageReductionPerDie = 1 (permanent, system gates it)
+  //   - Managed AE: Sets globalExplode = (@statuses.berserk) ? 1 : 0 (auto-activates)
+  //   - Runtime hook: Auto-applies Berserk status when barbarian attacks (renderChatMessage)
+  //   - Runtime hook: Auto-applies Berserk status when barbarian takes damage (updateActor)
+  //   - Runtime hook: Die upsizing — modifies data-damage-formula on chat card buttons (renderChatMessage)
+  //   - Runtime hook: Removes Berserk when combat ends (deleteCombat)
+  //
+  // NOT YET HANDLED:
+  //   - "You remain Berserk for 1 minute" — no timer, relies on combat end cleanup
+  //   - "unless you end it (no Action)" — no UI to manually end Berserk early
+  //
   "rage": {
     class: "barbarian",
     level: 1,
     flag: "barbarian_rage",
+    status: "partial",
     description: "While Berserk + light/no armor: damage dice upsized, can explode, reduce incoming damage by 1 per die. Can go Berserk after taking damage or as part of an attack.",
     effects: [
       {
@@ -49,43 +76,107 @@ export const BARBARIAN_REGISTRY = {
     ]
   },
 
+  // ──────────────────────────────────────────────
   // L1: Wrath
-  // You gain the Interceptor Perk, and can make its attack against an Enemy that
-  // makes a Ranged Attack, Casts, or that damages you or an Ally.
-  // Grants Perk: Interceptor — Once per Round, attack a Close Enemy that begins to Move out of your reach (Off-Turn).
+  // ──────────────────────────────────────────────
+  // RULES: You gain the Interceptor Perk, and can make its attack against an Enemy
+  // that makes a Ranged Attack, Casts, or that damages you or an Ally.
+  // Grants Perk: Interceptor — Once per Round, attack a Close Enemy that begins
+  // to Move out of your reach (Off-Turn).
+  //
+  // STATUS: flavor
+  //
+  // SYSTEM HANDLES:
+  //   - Interceptor perk is added to the character during character creation.
+  //   - The expanded trigger conditions (Ranged Attack, Cast, damages Ally) are
+  //     not mechanically enforced — the GM/player decides when to use it.
+  //
+  // MODULE HANDLES:
+  //   - Nothing. Detection flag only for tracking purposes.
+  //
   "wrath": {
     class: "barbarian",
     level: 1,
     flag: "barbarian_wrath",
+    status: "flavor",
     description: "Gain the Interceptor Perk. Can make its attack against Enemies that make Ranged Attacks, Cast, or damage you or an Ally."
   },
 
+  // ──────────────────────────────────────────────
   // L2: Aggressor
-  // You have a 10 foot bonus to Speed during the first Round of Combat, and having
-  // 3 or more Fatigue doesn't prevent you from taking the Rush Action.
+  // ──────────────────────────────────────────────
+  // RULES: You have a 10 foot bonus to Speed during the first Round of Combat,
+  // and having 3 or more Fatigue doesn't prevent you from taking the Rush Action.
+  //
+  // STATUS: module
+  //
+  // SYSTEM HANDLES:
+  //   - Nothing specific to Aggressor.
+  //
+  // MODULE HANDLES:
+  //   - Runtime hook: Creates temporary +10 speed AE on combat start round 1 (updateCombat)
+  //   - Runtime hook: Removes speed AE after barbarian's first turn (updateCombat)
+  //   - NOT YET: Fatigue Rush exemption is not implemented (would need to intercept
+  //     the Rush action validation, which may be flavor/GM-managed)
+  //
   "aggressor": {
     class: "barbarian",
     level: 2,
     flag: "barbarian_aggressor",
+    status: "module",
     description: "+10 Speed during first Round of Combat. 3+ Fatigue doesn't prevent Rush Action."
   },
 
+  // ──────────────────────────────────────────────
   // L4: Fearmonger
-  // When you kill an Enemy, every Near Enemy with HD lower than your Level becomes
-  // Frightened until the end of your next Turn.
+  // ──────────────────────────────────────────────
+  // RULES: When you kill an Enemy, every Near Enemy with HD lower than your Level
+  // becomes Frightened until the end of your next Turn.
+  //
+  // STATUS: module
+  //
+  // SYSTEM HANDLES:
+  //   - Frightened status condition exists in the system.
+  //   - toggleStatusEffect() API available.
+  //
+  // MODULE HANDLES:
+  //   - Runtime hook: Watches updateActor for NPC HP → 0 (proxy for kill)
+  //   - Finds barbarians in combat with Fearmonger flag
+  //   - Measures distance to nearby NPCs (within 30 ft = Near)
+  //   - Checks NPC threat level < barbarian level
+  //   - Applies Frightened via toggleStatusEffect
+  //   - NOT YET: Doesn't track who dealt the killing blow — assumes any barbarian
+  //     in combat could be the killer. Also "until end of your next Turn" duration
+  //     is not automatically tracked.
+  //
   "fearmonger": {
     class: "barbarian",
     level: 4,
     flag: "barbarian_fearmonger",
+    status: "module",
     description: "When you kill an Enemy, every Near Enemy with HD lower than your Level becomes Frightened until end of your next Turn."
   },
 
+  // ──────────────────────────────────────────────
   // L6: Mindless Rancor
-  // You can't be Charmed, Confused, or compelled to act against your will.
+  // ──────────────────────────────────────────────
+  // RULES: You can't be Charmed, Confused, or compelled to act against your will.
+  //
+  // STATUS: module
+  //
+  // SYSTEM HANDLES:
+  //   - statusImmunities ArrayField exists on actor schema. The system checks this
+  //     before applying status conditions.
+  //
+  // MODULE HANDLES:
+  //   - Managed AE: Adds "charmed" and "confused" to system.statusImmunities
+  //   - "compelled to act against your will" is narrative — no mechanical enforcement
+  //
   "mindless rancor": {
     class: "barbarian",
     level: 6,
     flag: "barbarian_mindlessRancor",
+    status: "module",
     description: "You can't be Charmed, Confused, or compelled to act against your will.",
     effects: [
       {
@@ -99,27 +190,56 @@ export const BARBARIAN_REGISTRY = {
     ]
   },
 
+  // ──────────────────────────────────────────────
   // L8: Bloodthirsty
-  // Your attacks against Beings that are missing any HP are Favored, and you can
-  // sense them within Far as if by Blindsight.
+  // ──────────────────────────────────────────────
+  // RULES: Your attacks against Beings that are missing any HP are Favored, and
+  // you can sense them within Far as if by Blindsight.
+  //
+  // STATUS: todo
+  //
+  // SYSTEM HANDLES:
+  //   - Favor/Hinder system exists for attack rolls.
+  //   - Blindsight is a sense type in the system.
+  //
+  // MODULE HANDLES:
+  //   - NOT YET: Would need to hook into attack roll builder to check if target
+  //     HP < max HP, then add Favor. The system doesn't expose a pre-roll hook,
+  //     so this would need renderChatMessage interception or a creative approach.
+  //   - NOT YET: Blindsight sense for wounded beings is narrative/GM-managed.
+  //
   "bloodthirsty": {
     class: "barbarian",
     level: 8,
     flag: "barbarian_bloodthirsty",
+    status: "todo",
     description: "Attacks against Beings missing any HP are Favored. Sense them within Far as Blindsight."
   },
 
+  // ──────────────────────────────────────────────
   // L10: Rip and Tear
-  // While Berserk, you reduce damage you take by 2 per damage die, rather than 1,
-  // and you gain a +1 bonus to each die of damage you deal.
+  // ──────────────────────────────────────────────
+  // RULES: While Berserk, you reduce damage you take by 2 per damage die, rather
+  // than 1, and you gain a +1 bonus to each die of damage you deal.
   //
-  // Implementation notes:
-  // - Adds +1 more DR per die (stacks with Rage's 1 = total 2)
-  // - Adds +1 bonus to each damage die dealt (universalDamageBonus, gated by berserk formula)
+  // STATUS: partial
+  //
+  // SYSTEM HANDLES:
+  //   - Same DR system as Rage (damage-helper.mjs:1178-1183). Reads
+  //     incomingDamageReductionPerDie and applies reduction while berserk.
+  //     Module stacks +1 on top of Rage's +1 for total of 2.
+  //   - universalDamageBonus is read by damage-helper.mjs:328 and added to all
+  //     damage rolls. Module gates it behind berserk formula.
+  //
+  // MODULE HANDLES:
+  //   - Managed AE: Adds +1 to incomingDamageReductionPerDie (stacks with Rage's 1 = 2 total)
+  //   - Managed AE: Adds +1 to universalDamageBonus gated by (@statuses.berserk) ? 1 : 0
+  //
   "rip and tear": {
     class: "barbarian",
     level: 10,
     flag: "barbarian_ripAndTear",
+    status: "partial",
     description: "Upgrades Rage: reduce damage by 2 per die instead of 1, +1 bonus to each damage die.",
     effects: [
       {
