@@ -175,10 +175,12 @@ export const FeatureDetector = {
     const level = actor.system.attributes?.level?.value ?? 1;
 
     // --- Scan class items ---
+    // Also store UUID so managed AEs can reference the class item as their origin/source
     for (const item of actor.items.filter(i => i.type === "class")) {
       const className = item.name.toLowerCase().trim();
       features._className = item.name;
       features._classLevel = level;
+      features._classUuid = item.uuid;
 
       // Scan levelFeatures
       const levelFeatures = item.system.levelFeatures ?? [];
@@ -239,6 +241,9 @@ export const FeatureDetector = {
     // Build set of effects that SHOULD exist
     const desiredEffects = new Map();
 
+    // Use the class item's UUID as origin so the effects panel shows the class name as "Source"
+    const classUuid = features._classUuid || null;
+
     for (const [featureName, featureDef] of Object.entries(CLASS_FEATURE_REGISTRY)) {
       if (!features[featureDef.flag]) continue;
       if (!featureDef.effects) continue;
@@ -247,7 +252,7 @@ export const FeatureDetector = {
         const key = `${featureDef.flag}_${effectDef.label}`;
         desiredEffects.set(key, {
           ...effectDef,
-          origin: `${MODULE_ID}.${featureDef.flag}`,
+          origin: classUuid || `${MODULE_ID}.${featureDef.flag}`,
           flags: {
             [MODULE_ID]: {
               managed: true,

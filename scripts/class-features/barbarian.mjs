@@ -124,7 +124,7 @@ export const BARBARIAN_REGISTRY = {
     effects: [
       {
         label: "Rip and Tear",
-        icon: "icons/skills/melee/strike-slash-blade-red.webp",
+        icon: "icons/skills/melee/strike-axe-blood-red.webp",
         changes: [
           // +1 more DR per die (stacks with Rage's 1 for total 2)
           { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" },
