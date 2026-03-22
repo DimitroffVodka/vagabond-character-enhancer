@@ -1,6 +1,7 @@
 /**
  * Halfling Ancestry Traits
  * Registry entries for all Halfling traits.
+ * Type: Humanlike | Size: Medium
  */
 
 /* -------------------------------------------- */
@@ -8,16 +9,24 @@
 /* -------------------------------------------- */
 
 export const HALFLING_TRAITS = {
+  // Nimble
+  // You have a 5' bonus to Speed and ignore Hinder on Reflex Saves.
   "nimble": {
     ancestry: "halfling",
     flag: "halfling_nimble",
     description: "You have a 5' bonus to Speed and ignore Hinder on Reflex Saves."
   },
+
+  // Squat
+  // You can move through areas occupied by other Beings.
   "squat": {
     ancestry: "halfling",
     flag: "halfling_squat",
     description: "You can move through areas occupied by other Beings."
   },
+
+  // Tricksy
+  // When you regain Luck from a Rest, you gain 1 additional Luck.
   "tricksy": {
     ancestry: "halfling",
     flag: "halfling_tricksy",
