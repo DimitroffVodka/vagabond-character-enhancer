@@ -794,16 +794,24 @@ export const BarbarianFeatures = {
       await this._applyFearmonger(actor, attacker);
     });
 
-    // Auto-expire Frightened effects from Fearmonger on round change.
-    // NOTE: "until the end of your next Turn" is approximated as "until the end of
-    // the next round" since Foundry hooks only fire on round changes, not per-turn.
-    // This matches the upstream fork's behavior. The effect may last slightly longer
-    // than RAW for enemies who act after the barbarian in initiative order.
+    // Auto-expire Frightened effects from Fearmonger.
+    // RAW: "until the end of your next Turn"
+    // In Vagabond, heroes always act before NPCs within a round. So:
+    //   Kill in Round 1 (hero phase) → Frightened through Round 1 NPC phase
+    //   → Frightened through Round 2 hero phase (barbarian's "next turn")
+    //   → Expires when NPC phase begins in Round 2
+    // We detect this by checking: round >= expireRound AND current combatant is an NPC.
     Hooks.on("updateCombat", async (combat, changed) => {
-      if (!("round" in changed)) return;
       if (!game.user.isGM) return;
+      // Trigger on both round and turn changes
+      if (!("round" in changed) && !("turn" in changed)) return;
 
       const currentRound = combat.round;
+      const currentCombatant = combat.combatant;
+
+      // Only expire when NPC phase starts (current combatant is an NPC)
+      if (!currentCombatant?.actor || currentCombatant.actor.type !== "npc") return;
+
       const deletionPromises = [];
       for (const combatant of combat.combatants) {
         const actor = combatant.actor;
@@ -813,7 +821,7 @@ export const BarbarianFeatures = {
         for (const effect of actor.effects) {
           if (!effect.statuses?.has("frightened")) continue;
           const expireRound = effect.getFlag(MODULE_ID, "fearmongerExpireRound");
-          if (expireRound != null && currentRound > expireRound) {
+          if (expireRound != null && currentRound >= expireRound) {
             toRemove.push(effect.id);
           }
         }
