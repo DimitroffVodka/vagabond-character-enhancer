@@ -616,26 +616,29 @@ export const BarbarianFeatures = {
     // --- Remove Berserk when combat ends ---
     Hooks.on("deleteCombat", async (combat) => {
       if (!game.user.isGM) return;
+      const cleanupPromises = [];
       for (const combatant of combat.combatants) {
         const actor = combatant.actor;
         if (!actor || actor.type !== "character") continue;
 
         // Remove Berserk if barbarian has Rage
         if (this._hasFeature(actor, "barbarian_rage") && this._isBerserk(actor)) {
-          this._log(`Rage: Combat ended — removing Berserk from ${actor.name}`);
-          await actor.toggleStatusEffect("berserk", { active: false });
-          // Note: deleteActiveEffect hook will clean up Rage (Active) companion AE
+          cleanupPromises.push(actor.toggleStatusEffect("berserk", { active: false }).then(() => {
+            this._log(`Rage: Combat ended — removing Berserk from ${actor.name}`);
+          }));
         }
 
         // Remove Aggressor speed bonus if still active
         if (this._hasFeature(actor, "barbarian_aggressor")) {
           const aggressorEffect = actor.effects.find(e => e.getFlag(MODULE_ID, "aggressor"));
           if (aggressorEffect) {
-            this._log(`Aggressor: Combat ended — removing speed bonus from ${actor.name}`);
-            await aggressorEffect.delete();
+            cleanupPromises.push(aggressorEffect.delete().then(() => {
+              this._log(`Aggressor: Combat ended — removing speed bonus from ${actor.name}`);
+            }));
           }
         }
       }
+      if (cleanupPromises.length > 0) await Promise.all(cleanupPromises);
     });
 
     // --- Handle weapon equip/swap while berserk ---
@@ -704,19 +707,22 @@ export const BarbarianFeatures = {
 
       // Round changed to 1 (combat just started)
       if (changes.round === 1 && combat.previous?.round === 0) {
+        const applyPromises = [];
         for (const combatant of combat.combatants) {
           const actor = combatant.actor;
           if (!actor || actor.type !== "character") continue;
           if (!this._hasFeature(actor, "barbarian_aggressor")) continue;
 
           this._log(`Aggressor: Applying +10 speed to ${actor.name}`);
-          await this._applyAggressorEffect(actor);
+          applyPromises.push(this._applyAggressorEffect(actor));
         }
+        await Promise.all(applyPromises);
         return; // Don't process turn changes on the same update
       }
 
       // Round changed past 1 — first round is over, remove speed bonus
       if (changes.round === 2 && combat.previous?.round === 1) {
+        const removePromises = [];
         for (const combatant of combat.combatants) {
           const actor = combatant.actor;
           if (!actor || actor.type !== "character") continue;
@@ -724,10 +730,12 @@ export const BarbarianFeatures = {
 
           const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "aggressor"));
           if (existing) {
-            await this._removeAggressorEffect(actor);
-            this._log(`Aggressor: Round 1 over — removed +10 speed from ${actor.name}`);
+            removePromises.push(this._removeAggressorEffect(actor).then(() => {
+              this._log(`Aggressor: Round 1 over — removed +10 speed from ${actor.name}`);
+            }));
           }
         }
+        await Promise.all(removePromises);
       }
     });
   },
@@ -796,6 +804,7 @@ export const BarbarianFeatures = {
       if (!game.user.isGM) return;
 
       const currentRound = combat.round;
+      const deletionPromises = [];
       for (const combatant of combat.combatants) {
         const actor = combatant.actor;
         if (!actor) continue;
@@ -804,16 +813,18 @@ export const BarbarianFeatures = {
         for (const effect of actor.effects) {
           if (!effect.statuses?.has("frightened")) continue;
           const expireRound = effect.getFlag(MODULE_ID, "fearmongerExpireRound");
-          if (expireRound != null && currentRound >= expireRound) {
+          if (expireRound != null && currentRound > expireRound) {
             toRemove.push(effect.id);
           }
         }
 
         if (toRemove.length > 0) {
-          await actor.deleteEmbeddedDocuments("ActiveEffect", toRemove);
-          this._log(`Fearmonger: Frightened expired on ${actor.name}`);
+          deletionPromises.push(actor.deleteEmbeddedDocuments("ActiveEffect", toRemove).then(() => {
+            this._log(`Fearmonger: Frightened expired on ${actor.name}`);
+          }));
         }
       }
+      if (deletionPromises.length > 0) await Promise.all(deletionPromises);
     });
   },
 
@@ -887,14 +898,14 @@ export const BarbarianFeatures = {
 
     if (frightenedTokens.length === 0) return;
 
-    // Apply Frightened with auto-expire flag
-    for (const token of frightenedTokens) {
-      const frightDef = CONFIG.statusEffects.find(e => e.id === "frightened");
-      if (!frightDef) continue;
+    // Apply Frightened with auto-expire flag (concurrent for performance)
+    const frightDef = CONFIG.statusEffects.find(e => e.id === "frightened");
+    if (!frightDef) return;
 
-      await token.actor.createEmbeddedDocuments("ActiveEffect", [{
-        name: frightDef.name || "Frightened",
-        img: frightDef.img || "icons/svg/hazard.svg",
+    const effectPromises = frightenedTokens.map(token => {
+      const effectData = {
+        name: game.i18n?.localize(frightDef.name) || frightDef.name || "Frightened",
+        icon: frightDef.icon || frightDef.img || "icons/svg/hazard.svg",
         statuses: ["frightened"],
         changes: frightDef.changes || [],
         flags: {
@@ -902,10 +913,12 @@ export const BarbarianFeatures = {
             fearmongerExpireRound: currentRound + 1
           }
         }
-      }]);
-      this._log(`Fearmonger: Applied Frightened to ${token.actor.name} (expires round ${currentRound + 2})`);
-    }
+      };
+      this._log(`Fearmonger: Applied Frightened to ${token.actor.name} (expires after round ${currentRound + 1})`);
+      return token.actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
+    });
 
+    await Promise.all(effectPromises);
     ui.notifications.info(`Fearmonger: ${frightenedTokens.length} enemy(s) Frightened!`);
   },
 
