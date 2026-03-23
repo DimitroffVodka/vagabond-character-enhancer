@@ -130,6 +130,19 @@ Hooks.once("ready", async () => {
           }
         }
 
+        // Virtuoso: Valor grants favor on attacks
+        const virtuosoBuff = actor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
+        if (virtuosoBuff) {
+          const buffType = virtuosoBuff.getFlag(MODULE_ID, "virtuosoBuff");
+          if (buffType === "valor" && favorHinder !== "favor") {
+            if (favorHinder === "hinder") favorHinder = "none";
+            else favorHinder = "favor";
+            if (game.settings.get(MODULE_ID, "debugMode")) {
+              console.log(`${MODULE_ID} | Virtuoso Valor: upgraded to ${favorHinder}`);
+            }
+          }
+        }
+
         // Bloodthirsty: Favor on attacks against wounded targets
         if (features?.barbarian_bloodthirsty && favorHinder !== "favor") {
           // Check if any current target is missing HP
