@@ -173,6 +173,64 @@ Hooks.once("ready", async () => {
       console.log(`${MODULE_ID} | Patched rollAttack for Bloodthirsty.`);
     }
 
+    // --- Inspiration: Add d6 to healing item formulas (potions, etc.) ---
+    // Potions auto-apply healing via item.roll() which evaluates the formula
+    // immediately. We wrap roll() to modify the formula for healing items,
+    // appending "+1d6" when Inspiration is active.
+    // This covers potions (auto-heal) while handleApplyRestorative covers
+    // button-based healing (Life spell apply button).
+    if (VagabondItem?.prototype?.roll) {
+      const origItemRoll = VagabondItem.prototype.roll;
+      VagabondItem.prototype.roll = async function (event, targetsAtRollTime = []) {
+        // Only intercept equipment items with healing damageType
+        if (this.type === "equipment" && this.system.damageType === "healing") {
+          let hasInspiration = false;
+          const actor = this.actor;
+
+          if (game.combat) {
+            // In combat: check if any PC combatant has Inspiration AE
+            for (const combatant of game.combat.combatants) {
+              if (combatant.actor?.type === "character" &&
+                  combatant.actor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff") === "inspiration")) {
+                hasInspiration = true;
+                break;
+              }
+            }
+          } else {
+            // Out of combat: any PC on scene with bard_virtuoso
+            const scenePCs = canvas.tokens?.placeables?.filter(t => t.actor?.type === "character") || [];
+            hasInspiration = scenePCs.some(t => {
+              const features = t.actor?.getFlag(MODULE_ID, "features");
+              return features?.bard_virtuoso;
+            });
+          }
+
+          if (hasInspiration) {
+            // Temporarily modify the item's formula to add +1d6
+            // getRollData() inside roll() reads from item data, so we modify system data
+            const origFormula = this.system.formula;
+            if (origFormula) {
+              this.system.formula = `${origFormula} + 1d6[Inspiration]`;
+              if (game.settings.get(MODULE_ID, "debugMode")) {
+                console.log(`${MODULE_ID} | Inspiration: Modified healing formula: ${origFormula} → ${this.system.formula}`);
+              }
+            }
+            try {
+              const result = await origItemRoll.call(this, event, targetsAtRollTime);
+              // Restore original formula
+              this.system.formula = origFormula;
+              return result;
+            } catch (e) {
+              this.system.formula = origFormula;
+              throw e;
+            }
+          }
+        }
+        return origItemRoll.call(this, event, targetsAtRollTime);
+      };
+      console.log(`${MODULE_ID} | Patched item.roll for Inspiration healing.`);
+    }
+
     // --- Virtuoso: Apply favor from Virtuoso buff, combining with system state ---
     // Monkey-patch buildAndEvaluateD20 to check for Virtuoso buff flags on the actor.
     // This properly combines with existing favor/hinder (e.g., flanking hinder + Virtuoso
