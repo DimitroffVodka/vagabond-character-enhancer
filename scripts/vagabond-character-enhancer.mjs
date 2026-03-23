@@ -14,6 +14,7 @@ let _currentRollActor = null;
 import { FeatureDetector } from "./feature-detector.mjs";
 import { BarbarianFeatures } from "./class-features/barbarian.mjs";
 import { BardFeatures } from "./class-features/bard.mjs";
+import { DancerFeatures } from "./class-features/dancer.mjs";
 import { AlchemistFeatures } from "./class-features/alchemist.mjs";
 
 /* -------------------------------------------- */
@@ -285,9 +286,23 @@ Hooks.once("ready", async () => {
           }
         }
       }
+
+      // Choreographer: One-check Favor (consume on any d20 roll)
+      // This covers skill checks, stat checks, and sheet-initiated save rolls.
+      if (actor.getFlag?.(MODULE_ID, "choreographerFavor")) {
+        if (favorHinder === "hinder") favorHinder = "none";
+        else if (favorHinder !== "favor") favorHinder = "favor";
+        // Consume the one-check favor asynchronously (don't block the roll)
+        actor.unsetFlag(MODULE_ID, "choreographerFavor");
+        actor.unsetFlag(MODULE_ID, "choreographerFavorExpireRound");
+        if (game.settings.get(MODULE_ID, "debugMode")) {
+          console.log(`${MODULE_ID} | Choreographer: Consumed one-check Favor on d20 roll for ${actor.name}`);
+        }
+      }
+
       return origBuildD20.call(this, actor, favorHinder, baseFormula);
     };
-    console.log(`${MODULE_ID} | Patched buildAndEvaluateD20 for Virtuoso.`);
+    console.log(`${MODULE_ID} | Patched buildAndEvaluateD20 for Virtuoso + Choreographer.`);
 
     // --- Virtuoso: Apply Resolve/Valor favor on chat-card save buttons ---
     // buildAndEvaluateD20WithConditionalHinder is a SEPARATE code path from
@@ -372,6 +387,17 @@ Hooks.once("ready", async () => {
             if (game.settings.get(MODULE_ID, "debugMode")) {
               console.log(`${MODULE_ID} | Virtuoso Valor: applied on attack/spell for ${_currentRollActor.name} — effective: ${favorHinder}`);
             }
+          }
+        }
+
+        // Choreographer: One-check Favor on attacks/spells
+        if (_currentRollActor.getFlag?.(MODULE_ID, "choreographerFavor")) {
+          if (favorHinder === "hinder") favorHinder = "none";
+          else if (favorHinder !== "favor") favorHinder = "favor";
+          _currentRollActor.unsetFlag(MODULE_ID, "choreographerFavor");
+          _currentRollActor.unsetFlag(MODULE_ID, "choreographerFavorExpireRound");
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Choreographer: Consumed one-check Favor on attack/spell for ${_currentRollActor.name}`);
           }
         }
       }
@@ -469,58 +495,124 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched handleApplyRestorative for Inspiration.`);
 
-    // --- Bravado: Will Saves can't be Hindered ---
-    // Wrap _rollSave to strip hinder from Will saves when the actor has Bravado
-    // and isn't Incapacitated. This catches ALL hinder sources: global favorHinder,
-    // conditional isHindered, attacker modifier, and keyboard overrides.
+    // --- Bravado + Evasive + Step Up + Choreographer: _rollSave patches ---
+    // Wrap _rollSave to handle multiple class features on save rolls:
+    //   - Bravado (Bard): Will saves can't be Hindered
+    //   - Evasive (Dancer): Reflex saves can't be Hindered
+    //   - Step Up (Dancer): 2d20kh on Reflex saves when stepUpActive
+    //   - Choreographer (Dancer): Consume one-check Favor on saves
     const origRollSave = VagabondDamageHelper._rollSave;
     VagabondDamageHelper._rollSave = async function (actor, saveType, isHindered, shiftKey = false, ctrlKey = false, attackerModifier = 'none') {
-      if (saveType === "will") {
-        const features = actor?.getFlag(MODULE_ID, "features");
-        if (features?.bard_bravado && !actor.statuses?.has("incapacitated")) {
-          // Strip hinder from all sources:
-          // 1. isHindered (conditional) — force false
-          isHindered = false;
-          // 2. ctrlKey (keyboard hinder override) — force false
-          ctrlKey = false;
-          // 3. attackerModifier hinder — cancel to none
-          if (attackerModifier === "hinder") attackerModifier = "none";
-          // 4. Global favorHinder on actor — if it's "hinder", temporarily override to "none".
-          //    _rollSave reads actor.system.favorHinder internally, so we temporarily patch it.
-          const origFH = actor.system.favorHinder;
-          if (origFH === "hinder") {
-            actor.system.favorHinder = "none";
-          }
-          if (game.settings.get(MODULE_ID, "debugMode")) {
-            console.log(`${MODULE_ID} | Bravado: Will save can't be Hindered for ${actor.name} — stripped all hinder sources`);
-          }
-          try {
-            const result = await origRollSave.call(this, actor, saveType, isHindered, shiftKey, ctrlKey, attackerModifier);
-            actor.system.favorHinder = origFH;
-            return result;
-          } catch (e) {
-            actor.system.favorHinder = origFH;
-            throw e;
-          }
+      const features = actor?.getFlag(MODULE_ID, "features");
+      let origFH = null;
+      let needRestore = false;
+
+      // --- Bravado: Will saves can't be Hindered ---
+      if (saveType === "will" && features?.bard_bravado && !actor.statuses?.has("incapacitated")) {
+        isHindered = false;
+        ctrlKey = false;
+        if (attackerModifier === "hinder") attackerModifier = "none";
+        origFH = actor.system.favorHinder;
+        if (origFH === "hinder") {
+          actor.system.favorHinder = "none";
+          needRestore = true;
+        }
+        if (game.settings.get(MODULE_ID, "debugMode")) {
+          console.log(`${MODULE_ID} | Bravado: Will save can't be Hindered for ${actor.name} — stripped all hinder sources`);
         }
       }
-      return origRollSave.call(this, actor, saveType, isHindered, shiftKey, ctrlKey, attackerModifier);
-    };
-    console.log(`${MODULE_ID} | Patched _rollSave for Bravado.`);
 
-    // --- Bravado: Sheet-initiated Will saves (roll-handler path) ---
-    // When the player clicks the Will save on the character sheet, RollHandler.roll()
-    // resolves favorHinder BEFORE calling buildAndEvaluateD20. Our buildAndEvaluateD20
-    // patch doesn't know the roll type, so we patch RollHandler.prototype.roll to strip
-    // hinder when it's a Will save and the actor has Bravado.
+      // --- Evasive: Reflex saves can't be Hindered ---
+      if (saveType === "reflex" && features?.dancer_evasive && !actor.statuses?.has("incapacitated")) {
+        isHindered = false;
+        ctrlKey = false;
+        if (attackerModifier === "hinder") attackerModifier = "none";
+        if (!needRestore) origFH = actor.system.favorHinder;
+        if (actor.system.favorHinder === "hinder") {
+          actor.system.favorHinder = "none";
+          needRestore = true;
+        }
+        if (game.settings.get(MODULE_ID, "debugMode")) {
+          console.log(`${MODULE_ID} | Evasive: Reflex save can't be Hindered for ${actor.name} — stripped all hinder sources`);
+        }
+      }
+
+      // --- Choreographer: One-check Favor (consume on save) ---
+      if (actor.getFlag?.(MODULE_ID, "choreographerFavor")) {
+        // Upgrade favor: hinder → none, none → favor
+        if (!needRestore) origFH = actor.system.favorHinder;
+        if (actor.system.favorHinder === "hinder") {
+          actor.system.favorHinder = "none";
+        } else if (actor.system.favorHinder !== "favor") {
+          actor.system.favorHinder = "favor";
+        }
+        needRestore = true;
+        // Consume the one-check favor
+        await actor.unsetFlag(MODULE_ID, "choreographerFavor");
+        await actor.unsetFlag(MODULE_ID, "choreographerFavorExpireRound");
+        if (game.settings.get(MODULE_ID, "debugMode")) {
+          console.log(`${MODULE_ID} | Choreographer: Consumed one-check Favor on save for ${actor.name}`);
+        }
+      }
+
+      // --- Step Up: 2d20kh on Reflex saves ---
+      // _rollSave calls buildAndEvaluateD20WithConditionalHinder which accepts baseFormula.
+      // We need to intercept and pass "2d20kh" as baseFormula.
+      // Since _rollSave doesn't expose baseFormula, we temporarily patch the roll builder.
+      let rollBuilderPatched = false;
+      let origConditionalHinder = null;
+      if (saveType === "reflex" && actor.getFlag?.(MODULE_ID, "stepUpActive")) {
+        const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+        origConditionalHinder = VagabondRollBuilder.buildAndEvaluateD20WithConditionalHinder;
+        VagabondRollBuilder.buildAndEvaluateD20WithConditionalHinder = async function (
+          a, effectiveFH, isCondHindered, baseFormula = null
+        ) {
+          return origConditionalHinder.call(this, a, effectiveFH, isCondHindered, "2d20kh");
+        };
+        rollBuilderPatched = true;
+        if (game.settings.get(MODULE_ID, "debugMode")) {
+          console.log(`${MODULE_ID} | Step Up: Injecting 2d20kh baseFormula for Reflex save on ${actor.name}`);
+        }
+      }
+
+      try {
+        const result = await origRollSave.call(this, actor, saveType, isHindered, shiftKey, ctrlKey, attackerModifier);
+        if (needRestore) actor.system.favorHinder = origFH;
+        if (rollBuilderPatched) {
+          const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+          VagabondRollBuilder.buildAndEvaluateD20WithConditionalHinder = origConditionalHinder;
+        }
+        return result;
+      } catch (e) {
+        if (needRestore) actor.system.favorHinder = origFH;
+        if (rollBuilderPatched) {
+          const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+          VagabondRollBuilder.buildAndEvaluateD20WithConditionalHinder = origConditionalHinder;
+        }
+        throw e;
+      }
+    };
+    console.log(`${MODULE_ID} | Patched _rollSave for Bravado + Evasive + Step Up + Choreographer.`);
+
+    // --- Bravado + Evasive + Step Up + Choreographer: Sheet-initiated saves ---
+    // When the player clicks a save on the character sheet, RollHandler.roll()
+    // resolves favorHinder BEFORE calling buildAndEvaluateD20. We intercept to:
+    //   - Bravado: Strip hinder from Will saves
+    //   - Evasive: Strip hinder from Reflex saves
+    //   - Step Up: Inject 2d20kh baseFormula for Reflex saves
+    //   - Choreographer: Consume one-check Favor
     const { RollHandler } = await import("/systems/vagabond/module/sheets/handlers/roll-handler.mjs");
     const origRoll = RollHandler.prototype.roll;
     RollHandler.prototype.roll = async function (event, target) {
       const dataset = target.dataset;
-      if (dataset.type === "save" && dataset.key === "will" && dataset.roll) {
+      if (dataset.type === "save" && dataset.roll) {
         const features = this.actor?.getFlag(MODULE_ID, "features");
-        if (features?.bard_bravado && !this.actor.statuses?.has("incapacitated")) {
-          // Override keyboard hinder (Ctrl) — create a synthetic event without ctrlKey
+        const saveKey = dataset.key;
+        let needRestore = false;
+        let origFH = null;
+
+        // Helper to strip hinder from all sources
+        const stripHinder = (label) => {
           if (event.ctrlKey) {
             event = new Proxy(event, {
               get(obj, prop) {
@@ -530,27 +622,81 @@ Hooks.once("ready", async () => {
               }
             });
           }
-          // If the actor's global favorHinder is "hinder", temporarily override to "none"
-          const origFH = this.actor.system.favorHinder;
-          if (origFH === "hinder") {
+          if (!needRestore) origFH = this.actor.system.favorHinder;
+          if (this.actor.system.favorHinder === "hinder") {
             this.actor.system.favorHinder = "none";
+            needRestore = true;
           }
           if (game.settings.get(MODULE_ID, "debugMode")) {
-            console.log(`${MODULE_ID} | Bravado: Will save from sheet — stripped hinder for ${this.actor.name}`);
+            console.log(`${MODULE_ID} | ${label}: ${saveKey} save from sheet — stripped hinder for ${this.actor.name}`);
           }
+        };
+
+        // Bravado: Will saves can't be Hindered
+        if (saveKey === "will" && features?.bard_bravado && !this.actor.statuses?.has("incapacitated")) {
+          stripHinder("Bravado");
+        }
+
+        // Evasive: Reflex saves can't be Hindered
+        if (saveKey === "reflex" && features?.dancer_evasive && !this.actor.statuses?.has("incapacitated")) {
+          stripHinder("Evasive");
+        }
+
+        // Choreographer: One-check Favor (consume on save)
+        if (this.actor.getFlag?.(MODULE_ID, "choreographerFavor")) {
+          if (!needRestore) origFH = this.actor.system.favorHinder;
+          if (this.actor.system.favorHinder === "hinder") {
+            this.actor.system.favorHinder = "none";
+          } else if (this.actor.system.favorHinder !== "favor") {
+            this.actor.system.favorHinder = "favor";
+          }
+          needRestore = true;
+          await this.actor.unsetFlag(MODULE_ID, "choreographerFavor");
+          await this.actor.unsetFlag(MODULE_ID, "choreographerFavorExpireRound");
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Choreographer: Consumed one-check Favor on sheet save for ${this.actor.name}`);
+          }
+        }
+
+        // Step Up: 2d20kh on Reflex saves
+        // RollHandler.roll calls buildAndEvaluateD20(actor, favorHinder) with no baseFormula.
+        // We temporarily patch it to inject "2d20kh".
+        let rollPatched = false;
+        let origBuildD20Ref = null;
+        if (saveKey === "reflex" && this.actor.getFlag?.(MODULE_ID, "stepUpActive")) {
+          const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+          origBuildD20Ref = VagabondRollBuilder.buildAndEvaluateD20;
+          VagabondRollBuilder.buildAndEvaluateD20 = async function (actor, favorHinder, baseFormula = null) {
+            return origBuildD20Ref.call(this, actor, favorHinder, "2d20kh");
+          };
+          rollPatched = true;
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Step Up: Injecting 2d20kh for sheet Reflex save on ${this.actor.name}`);
+          }
+        }
+
+        if (needRestore || rollPatched) {
           try {
             const result = await origRoll.call(this, event, target);
-            this.actor.system.favorHinder = origFH;
+            if (needRestore) this.actor.system.favorHinder = origFH;
+            if (rollPatched) {
+              const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+              VagabondRollBuilder.buildAndEvaluateD20 = origBuildD20Ref;
+            }
             return result;
           } catch (e) {
-            this.actor.system.favorHinder = origFH;
+            if (needRestore) this.actor.system.favorHinder = origFH;
+            if (rollPatched) {
+              const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+              VagabondRollBuilder.buildAndEvaluateD20 = origBuildD20Ref;
+            }
             throw e;
           }
         }
       }
       return origRoll.call(this, event, target);
     };
-    console.log(`${MODULE_ID} | Patched RollHandler.roll for Bravado.`);
+    console.log(`${MODULE_ID} | Patched RollHandler.roll for Bravado + Evasive + Step Up + Choreographer.`);
 
     // --- Virtuoso Valor: Set _currentRollActor for spell casts ---
     // SpellHandler.castSpell calls buildAndEvaluateD20WithRollData which needs
@@ -614,6 +760,7 @@ Hooks.once("ready", async () => {
     detector: FeatureDetector,
     barbarian: BarbarianFeatures,
     bard: BardFeatures,
+    dancer: DancerFeatures,
     alchemist: AlchemistFeatures,
     alchemy: AlchemistFeatures.api,
     rescan: (actor) => FeatureDetector.scan(actor),
@@ -639,6 +786,7 @@ Hooks.once("ready", async () => {
   // Register class feature runtime hooks
   BarbarianFeatures.registerHooks();
   BardFeatures.registerHooks();
+  DancerFeatures.registerHooks();
   AlchemistFeatures.registerHooks();
 
   // Scan all existing characters on first load
