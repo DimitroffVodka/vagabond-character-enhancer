@@ -313,49 +313,73 @@ export const BardFeatures = {
 
     this._log(`Virtuoso: ${actor.name} rolled ${roll.total} vs DC ${difficulty} — ${isSuccess ? "PASS" : "FAIL"}`);
 
-    // Build buff choice buttons (only shown on success)
+    // Build the chat card using the system's vagabond-chat-card-v2 structure
+    // so it matches the visual style of attack/skill/save cards.
+    const resultClass = isSuccess ? "result-hit" : "result-miss";
+    const resultText = isSuccess ? "PASS" : "FAIL";
+
+    // Extract the raw d20 value from the roll terms
+    const d20Value = roll.terms?.[0]?.results?.[0]?.result ?? roll.total;
+
     let buttonsHtml = "";
     if (isSuccess) {
       buttonsHtml = `
-        <div style="display:flex; gap:4px; margin-top:8px;">
-          <button class="vce-virtuoso-btn" data-buff="valor" data-bard-id="${actor.id}"
-            style="flex:1; background:#4a7c4b; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer;">
-            Valor
+        <div class="vce-virtuoso-choices" style="display:flex; gap:6px; padding:8px;">
+          <button class="vce-virtuoso-btn" data-buff="valor" data-bard-id="${actor.id}">
+            <i class="fas fa-swords"></i> Valor
           </button>
-          <button class="vce-virtuoso-btn" data-buff="resolve" data-bard-id="${actor.id}"
-            style="flex:1; background:#4a5c8c; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer;">
-            Resolve
+          <button class="vce-virtuoso-btn" data-buff="resolve" data-bard-id="${actor.id}">
+            <i class="fas fa-shield-alt"></i> Resolve
           </button>
-          <button class="vce-virtuoso-btn" data-buff="inspiration" data-bard-id="${actor.id}"
-            style="flex:1; background:#8c6a4a; color:white; border:none; padding:6px; border-radius:4px; cursor:pointer;">
-            Inspiration
+          <button class="vce-virtuoso-btn" data-buff="inspiration" data-bard-id="${actor.id}">
+            <i class="fas fa-heart"></i> Inspiration
           </button>
         </div>
       `;
     }
 
     const cardContent = `
-      <div class="vce-virtuoso-card" style="border:2px solid #7b5ea7; border-radius:8px; padding:10px; background:#1a1a2e;">
-        <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-          <img src="icons/tools/instruments/harp-yellow-teal.webp" width="36" height="36" style="border:none;">
-          <div>
-            <h3 style="margin:0; color:#c9a0dc;">Virtuoso</h3>
-            <span style="font-size:0.8em; color:#aaa;">Performance Check</span>
-          </div>
+      <div class="vagabond-chat-card-v2" data-card-type="generic">
+        <div class="card-body">
+          <header class="card-header">
+            <div class="header-icon">
+              <img src="icons/tools/instruments/harp-yellow-teal.webp" alt="Virtuoso">
+            </div>
+            <div class="header-info">
+              <h3 class="header-title">Virtuoso</h3>
+              <div class="metadata-tags-row">
+                <div class="meta-tag">
+                  <i class="fas fa-music"></i>
+                  <span>Performance</span>
+                </div>
+              </div>
+            </div>
+          </header>
+          <section class="roll-strip">
+            <div class="roll-info-group">
+              <div class="roll-skill-label">Performance</div>
+              <div class="roll-result-banner ${resultClass}">
+                <span class="roll-value">${roll.total}</span>
+                <span class="roll-vs">vs</span>
+                <span class="roll-target">${difficulty}</span>
+                <span class="roll-outcome-text">${resultText}</span>
+              </div>
+            </div>
+            <div class="roll-dice-container" title="${roll.formula} = ${roll.total}" style="cursor:help;">
+              <div class="vb-die-wrapper die-type-check" data-faces="20" title="1d20 → [${d20Value}]" style="cursor:help;">
+                <div class="vb-die-bg dmg-pool" style="background-image:url('systems/vagabond/assets/ui/dice/d20-bg.webp')"></div>
+                <span class="vb-die-val">${d20Value}</span>
+              </div>
+            </div>
+          </section>
+          <section class="content-body">
+            ${isSuccess
+              ? `<div class="card-description" style="text-align:center; padding:4px 0;">
+                  <p>Choose a buff for the party this Round:</p>
+                </div>${buttonsHtml}`
+              : '<div class="card-description" style="text-align:center; padding:4px 0;"><p>The performance fails to inspire.</p></div>'}
+          </section>
         </div>
-        <div style="text-align:center; padding:6px; background:#0d0d1a; border-radius:4px; margin-bottom:8px;">
-          <span style="font-size:1.4em; font-weight:bold; color:${isSuccess ? "#4caf50" : "#f44336"};">${roll.total}</span>
-          <span style="color:#888;"> vs </span>
-          <span style="font-size:1.1em;">${difficulty}</span>
-          <span style="margin-left:8px; font-weight:bold; color:${isSuccess ? "#4caf50" : "#f44336"};">${isSuccess ? "PASS" : "FAIL"}</span>
-        </div>
-        <div style="font-size:0.85em; color:#aaa; text-align:center;">
-          ${roll.formula} = ${roll.total}
-        </div>
-        ${isSuccess
-          ? '<p style="text-align:center; color:#c9a0dc; margin:8px 0 4px;">Choose a buff for the party:</p>'
-          : '<p style="text-align:center; color:#f44336; margin:8px 0 0;">The performance fails to inspire.</p>'}
-        ${buttonsHtml}
       </div>
     `;
 

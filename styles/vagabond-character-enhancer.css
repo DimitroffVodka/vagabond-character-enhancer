@@ -47,3 +47,46 @@
 .vce-managed-effect {
   border-left: 2px solid var(--vce-accent);
 }
+
+/* -------------------------------------------- */
+/*  Virtuoso Chat Card Buttons                  */
+/* -------------------------------------------- */
+
+.vce-virtuoso-choices {
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+}
+
+.vce-virtuoso-btn {
+  flex: 1;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: opacity 0.2s, border-color 0.2s;
+}
+
+.vce-virtuoso-btn:hover:not(:disabled) {
+  opacity: 0.85;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.vce-virtuoso-btn:disabled {
+  cursor: default;
+}
+
+.vce-virtuoso-btn[data-buff="valor"] {
+  background: #4a7c4b;
+}
+
+.vce-virtuoso-btn[data-buff="resolve"] {
+  background: #4a5c8c;
+}
+
+.vce-virtuoso-btn[data-buff="inspiration"] {
+  background: #8c6a4a;
+}
