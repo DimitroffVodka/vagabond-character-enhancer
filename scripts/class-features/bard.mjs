@@ -49,7 +49,9 @@ export const BARD_REGISTRY = {
   //     so both Valor and Resolve apply global favor. This is a known limitation.
   //     The fork solved this by adding dedicated system fields (virtuosoSavesFavor,
   //     virtuosoAttacksFavor) which don't exist in base system v5.0.0.
-  //   - Inspiration: sets a module flag; d6 healing bonus tracked via notification.
+  //   - Inspiration: creates AE with flag only (no mechanical change). The d6
+  //     healing bonus is not automated — system has no healing bonus field we can
+  //     hook from module level. Players/GM track it manually via the AE indicator.
   //
   // APPROACHES THAT DIDN'T WORK:
   //   - Type-specific favor (attack-only, save-only) — system's favorHinder is global.
@@ -217,6 +219,21 @@ export const BardFeatures = {
       const buttons = el.querySelectorAll(".vce-virtuoso-btn");
       if (buttons.length === 0) return;
 
+      // Check if a choice was already made (persisted via message flag).
+      // This ensures button state is consistent across reloads and for all clients.
+      const chosenBuff = message.getFlag(MODULE_ID, "virtuosoChoice");
+      if (chosenBuff) {
+        buttons.forEach(b => {
+          b.disabled = true;
+          b.style.opacity = b.dataset.buff === chosenBuff ? "1" : "0.5";
+          if (b.dataset.buff === chosenBuff) {
+            b.style.fontWeight = "bold";
+            b.style.border = "2px solid #c9a0dc";
+          }
+        });
+        return;
+      }
+
       buttons.forEach(btn => {
         btn.addEventListener("click", async (event) => {
           event.preventDefault();
@@ -237,6 +254,9 @@ export const BardFeatures = {
           btn.style.opacity = "1";
           btn.style.fontWeight = "bold";
           btn.style.border = "2px solid #c9a0dc";
+
+          // Persist choice on the message — triggers re-render for all clients
+          await message.setFlag(MODULE_ID, "virtuosoChoice", buff);
         });
       });
     });
@@ -422,10 +442,13 @@ export const BardFeatures = {
     // Apply to all PCs in combat. RAW says "your Group" which means the party.
     // Only apply to combatants in the active encounter — non-combatant actors
     // on other scenes or not in the fight shouldn't get the buff.
+    // Deduplicate by actor ID — an actor can have multiple combatants/tokens
     let targetActors = [];
+    const seen = new Set();
     if (game.combat) {
       for (const combatant of game.combat.combatants) {
-        if (combatant.actor?.type === "character") {
+        if (combatant.actor?.type === "character" && !seen.has(combatant.actor.id)) {
+          seen.add(combatant.actor.id);
           targetActors.push(combatant.actor);
         }
       }
@@ -435,8 +458,6 @@ export const BardFeatures = {
       const sceneTokenActors = canvas.tokens?.placeables
         ?.filter(t => t.actor?.type === "character")
         ?.map(t => t.actor) || [];
-      // Deduplicate by actor ID
-      const seen = new Set();
       for (const actor of sceneTokenActors) {
         if (!seen.has(actor.id)) {
           seen.add(actor.id);
@@ -454,7 +475,7 @@ export const BardFeatures = {
 
       await actor.createEmbeddedDocuments("ActiveEffect", [{
         name: config.name,
-        icon: "icons/tools/instruments/harp-yellow-teal.webp",
+        img: "icons/tools/instruments/harp-yellow-teal.webp",
         origin: bard.uuid,
         flags: {
           [MODULE_ID]: {
