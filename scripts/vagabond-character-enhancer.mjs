@@ -14,6 +14,13 @@ let _currentRollActor = null;
 import { FeatureDetector } from "./feature-detector.mjs";
 import { BarbarianFeatures } from "./class-features/barbarian.mjs";
 import { BardFeatures } from "./class-features/bard.mjs";
+import { AlchemyCookbook } from "./alchemy/alchemy-cookbook.mjs";
+import {
+  registerMaterialsHook, registerCountdownDamageHook, registerEffectExpirationHook,
+  registerCountdownLinkedAEHook, registerOilBonusDamageHook, registerAlchemicalAttackHook,
+  registerEurekaHook, registerConsumableUseHook, populateAlchemicalFolder, useConsumable,
+  getConsumableEffect, getAlchemistData, craftItem, migrateAlchemyFlags
+} from "./alchemy/alchemy-helpers.mjs";
 
 /* -------------------------------------------- */
 /*  Init                                        */
@@ -44,6 +51,23 @@ Hooks.once("init", () => {
     hint: "Log feature detection and effect management to the console.",
     scope: "client",
     config: true,
+    type: Boolean,
+    default: false
+  });
+
+  game.settings.register(MODULE_ID, "alchemistCookbook", {
+    name: "Alchemist Cookbook",
+    hint: "Enable crafting UI for Alchemists — adds right-click cookbook on Alchemy Tools and alchemical combat hooks.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+
+  // Hidden setting for one-time flag migration tracking
+  game.settings.register(MODULE_ID, "alchemyFlagsMigrated", {
+    scope: "world",
+    config: false,
     type: Boolean,
     default: false
   });
@@ -588,16 +612,63 @@ Hooks.once("ready", async () => {
     if (frightImmune) await frightImmune.delete();
   });
 
+  // --- Alchemist Cookbook: init + hooks ---
+  if (game.settings.get(MODULE_ID, "alchemistCookbook")) {
+    AlchemyCookbook.init();
+    registerMaterialsHook();
+    registerCountdownDamageHook();
+    registerEffectExpirationHook();
+    registerCountdownLinkedAEHook();
+    registerOilBonusDamageHook();
+    registerAlchemicalAttackHook();
+    registerEurekaHook();
+    registerConsumableUseHook();
+
+    // Right-click "Use" on consumable items (potions, antitoxin)
+    Hooks.on("renderApplicationV2", (app, html) => {
+      if (!game.user.isGM) return;
+      const el = html instanceof jQuery ? html[0] : html;
+      if (!el?.classList?.contains("vagabond-actor-sheet")) return;
+
+      el.querySelectorAll('.item-list .item, [data-item-id]').forEach(row => {
+        row.addEventListener("contextmenu", async (ev) => {
+          const itemId = row.dataset.itemId || row.closest("[data-item-id]")?.dataset.itemId;
+          if (!itemId) return;
+          const actor = app.actor || app.document;
+          if (!actor) return;
+          const actorItem = actor.items.get(itemId);
+          if (!actorItem) return;
+          if (actorItem.type !== "equipment" || actorItem.system.equipmentType !== "consumable") return;
+          const effect = getConsumableEffect(actorItem.name);
+          if (!effect) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          await useConsumable(actor, actorItem);
+        });
+      });
+    });
+
+    console.log(`${MODULE_ID} | Alchemist Cookbook hooks registered.`);
+  }
+
+  // Migrate alchemy flags from vagabond-crawler namespace (one-time)
+  await migrateAlchemyFlags();
+
   // Expose module API
   game.vagabondCharacterEnhancer = {
     detector: FeatureDetector,
     barbarian: BarbarianFeatures,
     bard: BardFeatures,
+    alchemy: {
+      cookbook: AlchemyCookbook,
+      getAlchemistData,
+      craftItem,
+      useConsumable,
+      populateAlchemicalFolder
+    },
     rescan: (actor) => FeatureDetector.scan(actor),
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
-    // Virtuoso action — call from macro or console:
-    //   game.vagabondCharacterEnhancer.virtuoso(game.actors.get("bardActorId"))
     virtuoso: (actor) => BardFeatures.useVirtuoso(actor),
     debug: (actor) => {
       if (!actor) {
