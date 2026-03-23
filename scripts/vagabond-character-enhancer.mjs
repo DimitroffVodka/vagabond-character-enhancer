@@ -197,6 +197,58 @@ Hooks.once("ready", async () => {
       return origBuildD20.call(this, actor, favorHinder, baseFormula);
     };
     console.log(`${MODULE_ID} | Patched buildAndEvaluateD20 for Virtuoso.`);
+
+    // --- Inspiration: Add d6 bonus to healing ---
+    // Monkey-patch handleApplyRestorative to roll an extra d6 when Inspiration is active.
+    // In combat: checks if the target has the Inspiration AE.
+    // Out of combat: checks if any PC on the scene has bard_virtuoso (assumed always-on).
+    const origHandleRestorative = VagabondDamageHelper.handleApplyRestorative;
+    VagabondDamageHelper.handleApplyRestorative = async function (button) {
+      const damageType = button.dataset.damageType?.toLowerCase();
+      if (damageType === "healing") {
+        // Check if Inspiration should apply
+        let hasInspiration = false;
+        if (game.combat) {
+          // In combat: check if any PC combatant has Inspiration AE
+          for (const combatant of game.combat.combatants) {
+            if (combatant.actor?.type === "character" &&
+                combatant.actor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff") === "inspiration")) {
+              hasInspiration = true;
+              break;
+            }
+          }
+        } else {
+          // Out of combat: any PC on scene with bard_virtuoso
+          const scenePCs = canvas.tokens?.placeables?.filter(t => t.actor?.type === "character") || [];
+          hasInspiration = scenePCs.some(t => {
+            const features = t.actor?.getFlag(MODULE_ID, "features");
+            return features?.bard_virtuoso;
+          });
+        }
+
+        if (hasInspiration) {
+          // Roll the d6 bonus and add it to the amount
+          const bonusRoll = new Roll("1d6");
+          await bonusRoll.evaluate();
+          const bonusAmount = bonusRoll.total;
+          const originalAmount = parseInt(button.dataset.damageAmount) || 0;
+          button.dataset.damageAmount = String(originalAmount + bonusAmount);
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Inspiration: +${bonusAmount} healing (d6 rolled ${bonusAmount}), total: ${button.dataset.damageAmount}`);
+          }
+          // Post the bonus to chat
+          await ChatMessage.create({
+            speaker: ChatMessage.getSpeaker(),
+            content: `<div style="text-align:center; padding:4px; border:1px solid #7b5ea7; border-radius:4px;">
+              <i class="fas fa-music" style="color:#c9a0dc;"></i>
+              <strong>Inspiration:</strong> +${bonusAmount} healing (1d6 → ${bonusAmount})
+            </div>`
+          });
+        }
+      }
+      return origHandleRestorative.call(this, button);
+    };
+    console.log(`${MODULE_ID} | Patched handleApplyRestorative for Inspiration.`);
   } catch (err) {
     console.error(`${MODULE_ID} | Failed to patch system methods:`, err);
   }
