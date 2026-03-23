@@ -44,7 +44,9 @@ export const BARD_REGISTRY = {
   //   - On success, presents chat card with Valor/Resolve/Inspiration buttons
   //   - Applies temporary AE to all PCs in combat with chosen buff
   //   - Auto-expires on round change via updateCombat hook
-  //   - Valor/Resolve: sets system.favorHinder = "favor" via AE (global favor).
+  //   - Valor/Resolve: favor applied via monkey-patch of VagabondRollBuilder.buildAndEvaluateD20
+  //     (see vagabond-character-enhancer.mjs). Checks for Virtuoso buff AE flag on actor
+  //     and combines with existing favor/hinder (hinder + favor = cancel to "none").
   //     NOTE: System has no per-type favor fields (attack-only or save-only),
   //     so both Valor and Resolve apply global favor. This is a known limitation.
   //     The fork solved this by adding dedicated system fields (virtuosoSavesFavor,
@@ -54,6 +56,9 @@ export const BARD_REGISTRY = {
   //     hook from module level. Players/GM track it manually via the AE indicator.
   //
   // APPROACHES THAT DIDN'T WORK:
+  //   - AE OVERRIDE on system.favorHinder — bulldozed flanking hinder. Favor should
+  //     CANCEL hinder (to "none"), not override it. Solution: monkey-patch
+  //     buildAndEvaluateD20 to combine favor with existing state properly.
   //   - Type-specific favor (attack-only, save-only) — system's favorHinder is global.
   //     Would require monkey-patching RollHandler.prototype.roll() to check roll type
   //     and apply favor selectively. Planned for future refinement.
@@ -437,16 +442,21 @@ export const BardFeatures = {
    * Apply the chosen Virtuoso buff to all PCs in combat.
    */
   async _applyVirtuosoBuff(bard, buffType) {
+    // NOTE: Valor/Resolve no longer set system.favorHinder via AE (OVERRIDE mode
+    // bulldozed flanking hinder — favor should cancel hinder, not replace it).
+    // Instead, the favor is applied via monkey-patch of VagabondRollBuilder.buildAndEvaluateD20
+    // which checks for the virtuosoBuff flag and combines properly with existing state.
+    // See registerHooks() → _patchRollBuilder().
     const buffConfig = {
       valor: {
         name: "Virtuoso: Valor",
         description: "Favor on Attack and Cast Checks",
-        changes: [{ key: "system.favorHinder", mode: 5, value: "favor" }]
+        changes: [] // Favor applied via roll builder monkey-patch
       },
       resolve: {
         name: "Virtuoso: Resolve",
         description: "Favor on Saves",
-        changes: [{ key: "system.favorHinder", mode: 5, value: "favor" }]
+        changes: [] // Favor applied via roll builder monkey-patch
       },
       inspiration: {
         name: "Virtuoso: Inspiration",

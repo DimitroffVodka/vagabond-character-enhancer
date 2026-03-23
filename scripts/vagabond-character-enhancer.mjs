@@ -156,6 +156,31 @@ Hooks.once("ready", async () => {
       };
       console.log(`${MODULE_ID} | Patched rollAttack for Bloodthirsty.`);
     }
+
+    // --- Virtuoso: Apply favor from Virtuoso buff, combining with system state ---
+    // Monkey-patch buildAndEvaluateD20 to check for Virtuoso buff flags on the actor.
+    // This properly combines with existing favor/hinder (e.g., flanking hinder + Virtuoso
+    // favor = cancel to "none") instead of overriding the system's favorHinder field.
+    const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+    const origBuildD20 = VagabondRollBuilder.buildAndEvaluateD20;
+    VagabondRollBuilder.buildAndEvaluateD20 = async function (actor, favorHinder, baseFormula = null) {
+      // Check if actor has a Virtuoso Valor or Resolve buff
+      const virtuosoBuff = actor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
+      if (virtuosoBuff) {
+        const buffType = virtuosoBuff.getFlag(MODULE_ID, "virtuosoBuff");
+        if (buffType === "valor" || buffType === "resolve") {
+          // Combine Virtuoso favor with existing state:
+          // favor + favor = favor, none + favor = favor, hinder + favor = none (cancel)
+          if (favorHinder === "hinder") favorHinder = "none";
+          else favorHinder = "favor";
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Virtuoso: ${buffType} applied — effective favorHinder: ${favorHinder}`);
+          }
+        }
+      }
+      return origBuildD20.call(this, actor, favorHinder, baseFormula);
+    };
+    console.log(`${MODULE_ID} | Patched buildAndEvaluateD20 for Virtuoso.`);
   } catch (err) {
     console.error(`${MODULE_ID} | Failed to patch system methods:`, err);
   }
