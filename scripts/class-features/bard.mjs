@@ -153,13 +153,23 @@ export const BARD_REGISTRY = {
   // the following Statuses that affects it for Cd4 Rounds:
   // Berserk, Charmed, Confused, Frightened.
   //
-  // STATUS: todo
+  // STATUS: module
+  //
+  // MODULE HANDLES:
+  //   - Chains from _applyVirtuosoBuff after successful Virtuoso buff choice.
+  //   - L4: Requires enemy targeted (game.user.targets) before using Virtuoso.
+  //     If no target, warns but allows Virtuoso to proceed without Starstruck.
+  //   - Presents DialogV2 to choose status (Berserk/Charmed/Confused/Frightened).
+  //   - Applies status via toggleStatusEffect, checks immunity first.
+  //   - Creates Cd4 countdown die via system's CountdownDice.create() with
+  //     linkedActorUuid + linkedStatusId for automatic status removal on expiry.
+  //   - Posts result chat card using vagabond-chat-card-v2 structure.
   //
   "starstruck": {
     class: "bard",
     level: 4,
     flag: "bard_starstruck",
-    status: "todo",
+    status: "module",
     description: "On Virtuoso, choose a Near Enemy and make Performance Check. Pass applies Berserk, Charmed, Confused, or Frightened for Cd4 Rounds."
   },
 
@@ -199,16 +209,24 @@ export const BARD_REGISTRY = {
   // ──────────────────────────────────────────────
   // RULES: Your Starstruck Feature can now affect all Near Enemies.
   //
-  // STATUS: todo (depends on Starstruck)
+  // STATUS: module
   //
   // NOTE: Previously called "Encore" in old compendium data.
   // Renamed to "Starstruck Enhancement" in corrected compendium.
+  //
+  // MODULE HANDLES:
+  //   - Same as Starstruck but auto-targets ALL NPC tokens within 30ft (Near).
+  //   - No pre-targeting required — uses distance measurement like Fearmonger.
+  //   - Creates ONE Cd4 countdown die linked to first affected actor.
+  //   - Stores additional target token IDs in module flag on the die.
+  //   - deleteJournalEntry hook cleans up ALL targets when die expires
+  //     (system's built-in automation only handles the single linked actor).
   //
   "starstruck enhancement": {
     class: "bard",
     level: 10,
     flag: "bard_starstruckEnhancement",
-    status: "todo",
+    status: "module",
     description: "Starstruck can now affect all Near Enemies."
   }
 };
@@ -347,6 +365,42 @@ export const BardFeatures = {
         await Promise.all(deletionPromises);
         ui.notifications.info("Virtuoso: Performance buffs have expired.");
       }
+    });
+
+    // Clean up AoE Starstruck statuses when the countdown die expires.
+    // The system's built-in linkedActorUuid/linkedStatusId handles the FIRST
+    // target automatically. This hook handles ADDITIONAL targets for L10 AoE.
+    Hooks.on("deleteJournalEntry", async (journal, options, userId) => {
+      if (!game.user.isGM) return;
+      const starstruckData = journal.getFlag(MODULE_ID, "starstruckTargets");
+      if (!starstruckData) return;
+
+      const { status, tokenIds, sceneId } = starstruckData;
+      if (!status || !Array.isArray(tokenIds)) return;
+
+      this._log(`Starstruck: Countdown die expired — cleaning up ${status} from ${tokenIds.length} targets`);
+
+      // Find tokens on the scene and remove the status
+      const scene = game.scenes.get(sceneId);
+      if (!scene) return;
+
+      const cleanupPromises = [];
+      for (const tokenId of tokenIds) {
+        const tokenDoc = scene.tokens.get(tokenId);
+        const actor = tokenDoc?.actor;
+        if (!actor) continue;
+
+        // Skip if the system's built-in cleanup already handled this actor
+        // (the first linkedActorUuid target). Check if status is still active.
+        if (!actor.statuses?.has(status)) continue;
+
+        cleanupPromises.push(
+          actor.toggleStatusEffect(status, { active: false }).then(() => {
+            this._log(`Starstruck: Removed ${status} from ${actor.name} (die expired)`);
+          })
+        );
+      }
+      if (cleanupPromises.length > 0) await Promise.all(cleanupPromises);
     });
 
     // Remove Virtuoso buffs when combat ends — check all character actors
@@ -568,5 +622,176 @@ export const BardFeatures = {
 
     await Promise.all(applyPromises);
     ui.notifications.info(`Virtuoso: ${bard.name} grants ${config.name}! (${config.description})`);
+
+    // Chain Starstruck if the Bard has the feature
+    if (this._hasFeature(bard, "bard_starstruck")) {
+      await this._handleStarstruck(bard);
+    }
+  },
+
+  /* -------------------------------------------- */
+  /*  Starstruck: Debuff Enemies After Virtuoso   */
+  /* -------------------------------------------- */
+
+  /**
+   * Starstruck (L4): Apply a status to a single targeted Near Enemy for Cd4 rounds.
+   * Starstruck Enhancement (L10): Apply to ALL Near Enemies within 30ft.
+   *
+   * Uses the system's CountdownDice with linkedActorUuid/linkedStatusId for
+   * automatic status removal when the die expires (rolls 1 on a d4).
+   * For AoE (L10), stores additional target IDs in a module flag on the die
+   * and hooks deleteJournalEntry for bulk cleanup (system only auto-removes
+   * the single linked actor's status).
+   */
+  async _handleStarstruck(bard) {
+    if (!canvas?.tokens?.placeables) return;
+
+    const hasEnhancement = this._hasFeature(bard, "bard_starstruckEnhancement");
+    const bardToken = canvas.tokens.placeables.find(t => t.actor?.id === bard.id);
+    if (!bardToken) {
+      this._log("Starstruck: No token found for Bard on canvas");
+      return;
+    }
+
+    let targetTokens = [];
+
+    if (hasEnhancement) {
+      // L10: All NPC tokens within 30ft (Near)
+      for (const token of canvas.tokens.placeables) {
+        if (!token.actor || token.actor.type !== "npc") continue;
+        if ((token.actor.system.health?.value ?? 0) <= 0) continue; // skip dead
+        const dist = canvas.grid.measurePath([bardToken.center, token.center]).distance;
+        if (dist <= 30) targetTokens.push(token);
+      }
+      if (targetTokens.length === 0) {
+        ui.notifications.info("Starstruck Enhancement: No Near Enemies found within 30ft.");
+        return;
+      }
+      this._log(`Starstruck Enhancement: Found ${targetTokens.length} enemies within 30ft`);
+    } else {
+      // L4: Single target — must have an enemy targeted
+      const targets = Array.from(game.user.targets);
+      targetTokens = targets.filter(t => t.actor && t.actor.type === "npc");
+      if (targetTokens.length === 0) {
+        ui.notifications.warn("Starstruck: Target an enemy before using Virtuoso.");
+        return;
+      }
+      // Use only the first targeted NPC
+      targetTokens = [targetTokens[0]];
+      this._log(`Starstruck: Targeting ${targetTokens[0].actor.name}`);
+    }
+
+    // Choose which status to apply
+    const chosenStatus = await foundry.applications.api.DialogV2.wait({
+      window: { title: "Starstruck — Choose Status" },
+      content: `<p><strong>${bard.name}</strong> — choose a status to inflict:</p>`,
+      buttons: [
+        { action: "berserk", label: "Berserk", icon: "fas fa-fire" },
+        { action: "charmed", label: "Charmed", icon: "fas fa-heart" },
+        { action: "confused", label: "Confused", icon: "fas fa-question" },
+        { action: "frightened", label: "Frightened", icon: "fas fa-ghost" }
+      ]
+    });
+    if (!chosenStatus) return; // Cancelled
+
+    // Apply status to targets, skipping immune and already-affected
+    const affectedTokens = [];
+    for (const token of targetTokens) {
+      const targetActor = token.actor;
+      if (!targetActor) continue;
+
+      // Check immunity
+      const immunities = targetActor.system?.statusImmunities || [];
+      if (immunities.includes(chosenStatus)) {
+        ui.notifications.info(`${targetActor.name} is immune to ${chosenStatus}!`);
+        continue;
+      }
+
+      // Skip if already has this status
+      if (targetActor.statuses?.has(chosenStatus)) {
+        this._log(`Starstruck: ${targetActor.name} already has ${chosenStatus}, skipping`);
+        continue;
+      }
+
+      await targetActor.toggleStatusEffect(chosenStatus, { active: true });
+      affectedTokens.push(token);
+      this._log(`Starstruck: Applied ${chosenStatus} to ${targetActor.name}`);
+    }
+
+    if (affectedTokens.length === 0) {
+      ui.notifications.info("Starstruck: No enemies were affected.");
+      return;
+    }
+
+    // Create Cd4 countdown die with status automation
+    const statusLabel = chosenStatus.charAt(0).toUpperCase() + chosenStatus.slice(1);
+    const affectedNames = affectedTokens.map(t => t.actor.name);
+    const dieName = `Starstruck: ${statusLabel} (${affectedNames.join(", ")})`;
+
+    try {
+      const { CountdownDice } = await import("/systems/vagabond/module/documents/countdown-dice.mjs");
+
+      // Link to first affected actor for system's built-in status auto-removal
+      const firstActor = affectedTokens[0].actor;
+      const die = await CountdownDice.create({
+        name: dieName,
+        diceType: "d4",
+        size: "S",
+        ownership: { default: 3, [game.user.id]: 3 },
+        linkedActorUuid: firstActor.uuid,
+        linkedStatusId: chosenStatus
+      });
+
+      // For AoE (multiple targets), store all affected token IDs in module flag
+      // so our deleteJournalEntry hook can clean up ALL targets when die expires.
+      // The system's built-in automation only handles the single linkedActorUuid.
+      if (die && affectedTokens.length > 1) {
+        await die.setFlag(MODULE_ID, "starstruckTargets", {
+          status: chosenStatus,
+          tokenIds: affectedTokens.map(t => t.id),
+          sceneId: canvas.scene?.id || ""
+        });
+      }
+
+      this._log(`Starstruck: Created Cd4 countdown die "${dieName}"`);
+    } catch (e) {
+      console.warn(`${MODULE_ID} | Failed to create Starstruck countdown die:`, e);
+    }
+
+    // Post result to chat
+    const featureName = hasEnhancement ? "Starstruck Enhancement" : "Starstruck";
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: bard }),
+      content: `
+        <div class="vagabond-chat-card-v2" data-card-type="generic">
+          <div class="card-body">
+            <header class="card-header">
+              <div class="header-icon">
+                <img src="icons/tools/instruments/harp-yellow-teal.webp" alt="Starstruck">
+              </div>
+              <div class="header-info">
+                <h3 class="header-title">${featureName}</h3>
+                <div class="metadata-tags-row">
+                  <div class="meta-tag">
+                    <i class="fas fa-star"></i>
+                    <span>${statusLabel}</span>
+                  </div>
+                </div>
+              </div>
+            </header>
+            <section class="content-body">
+              <div class="card-description" style="padding:8px;">
+                <p><strong>${affectedNames.join(", ")}</strong>
+                  ${affectedNames.length === 1 ? "is" : "are"} now
+                  <strong>${statusLabel}</strong>!</p>
+                <p><em>Cd4 countdown die created — status auto-removes when it expires.</em></p>
+              </div>
+            </section>
+          </div>
+        </div>
+      `
+    });
+
+    ui.notifications.info(`${featureName}: ${affectedNames.length} enemy(s) now ${statusLabel}!`);
   }
 };
