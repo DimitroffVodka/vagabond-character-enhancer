@@ -335,39 +335,56 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched evaluateRoll for Climax.`);
 
-    // --- Climax: Attack/spell path (buildAndEvaluateD20WithRollData) ---
-    // This method takes rollData (plain object) instead of an actor, so we
-    // use _currentRollActor stashed by our rollAttack wrapper to check for
-    // the Climax AE. Covers weapon attacks and spell cast rolls.
+    // --- Virtuoso Valor + Climax: Attack/spell path (buildAndEvaluateD20WithRollData) ---
+    // This method takes rollData (plain object) instead of an actor, so we use
+    // _currentRollActor (stashed by rollAttack/castSpell wrappers) to check flags.
+    // Two responsibilities:
+    //   1. Valor: Apply favor on attack/cast checks (pre-roll)
+    //   2. Climax: Explode the favor d6 on max (post-roll)
     const origBuildD20WithRollData = VagabondRollBuilder.buildAndEvaluateD20WithRollData;
     VagabondRollBuilder.buildAndEvaluateD20WithRollData = async function (rollData, favorHinder, baseFormula = null) {
+      // Valor: Apply favor on attacks and cast checks
+      if (_currentRollActor) {
+        const virtuosoBuff = _currentRollActor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
+        if (virtuosoBuff) {
+          const buffType = virtuosoBuff.getFlag(MODULE_ID, "virtuosoBuff");
+          if (buffType === "valor" && favorHinder !== "favor") {
+            if (favorHinder === "hinder") favorHinder = "none";
+            else favorHinder = "favor";
+            if (game.settings.get(MODULE_ID, "debugMode")) {
+              console.log(`${MODULE_ID} | Virtuoso Valor: applied on attack/spell for ${_currentRollActor.name} — effective: ${favorHinder}`);
+            }
+          }
+        }
+      }
+
       const roll = await origBuildD20WithRollData.call(this, rollData, favorHinder, baseFormula);
 
-      if (favorHinder !== "favor" || !_currentRollActor) return roll;
-
-      const virtuosoAE = _currentRollActor.effects?.find(e =>
-        e.getFlag(MODULE_ID, "climaxExplode")
-      );
-      if (!virtuosoAE) return roll;
-
-      const d6Term = roll.terms.find(t =>
-        t.constructor?.name === "Die" && t.faces === 6
-      );
-      if (!d6Term) return roll;
-
-      const maxFace = d6Term.faces;
-      const hasMaxResult = d6Term.results?.some(r => r.result === maxFace && r.active);
-      if (!hasMaxResult) return roll;
-
-      await VagabondDamageHelper._manuallyExplodeDice(roll, [maxFace]);
-
-      if (game.settings.get(MODULE_ID, "debugMode")) {
-        console.log(`${MODULE_ID} | Climax: Exploded favor d6 on attack/spell for ${_currentRollActor.name} — new total: ${roll.total}`);
+      // Climax: Explode the favor d6
+      if (favorHinder === "favor" && _currentRollActor) {
+        const climaxAE = _currentRollActor.effects?.find(e =>
+          e.getFlag(MODULE_ID, "climaxExplode")
+        );
+        if (climaxAE) {
+          const d6Term = roll.terms.find(t =>
+            t.constructor?.name === "Die" && t.faces === 6
+          );
+          if (d6Term) {
+            const maxFace = d6Term.faces;
+            const hasMaxResult = d6Term.results?.some(r => r.result === maxFace && r.active);
+            if (hasMaxResult) {
+              await VagabondDamageHelper._manuallyExplodeDice(roll, [maxFace]);
+              if (game.settings.get(MODULE_ID, "debugMode")) {
+                console.log(`${MODULE_ID} | Climax: Exploded favor d6 on attack/spell for ${_currentRollActor.name} — new total: ${roll.total}`);
+              }
+            }
+          }
+        }
       }
 
       return roll;
     };
-    console.log(`${MODULE_ID} | Patched buildAndEvaluateD20WithRollData for Climax.`);
+    console.log(`${MODULE_ID} | Patched buildAndEvaluateD20WithRollData for Valor + Climax.`);
 
     // --- Inspiration: Add d6 bonus to healing (button path) ---
     // Covers spell-based healing (Life spell "Apply X Healing" button).
@@ -516,6 +533,24 @@ Hooks.once("ready", async () => {
       return origRoll.call(this, event, target);
     };
     console.log(`${MODULE_ID} | Patched RollHandler.roll for Bravado.`);
+
+    // --- Virtuoso Valor: Set _currentRollActor for spell casts ---
+    // SpellHandler.castSpell calls buildAndEvaluateD20WithRollData which needs
+    // _currentRollActor to apply Valor favor and Climax explosion.
+    const { SpellHandler } = await import("/systems/vagabond/module/sheets/handlers/spell-handler.mjs");
+    const origCastSpell = SpellHandler.prototype.castSpell;
+    SpellHandler.prototype.castSpell = async function (event, target) {
+      _currentRollActor = this.actor;
+      try {
+        const result = await origCastSpell.call(this, event, target);
+        _currentRollActor = null;
+        return result;
+      } catch (e) {
+        _currentRollActor = null;
+        throw e;
+      }
+    };
+    console.log(`${MODULE_ID} | Patched SpellHandler.castSpell for Valor + Climax.`);
   } catch (err) {
     console.error(`${MODULE_ID} | Failed to patch system methods:`, err);
   }
