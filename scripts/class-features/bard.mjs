@@ -241,16 +241,15 @@ export const BardFeatures = {
       });
     });
 
-    // Auto-expire Virtuoso buffs on round change
+    // Auto-expire Virtuoso buffs on round change.
+    // Checks ALL character actors, not just combatants, because the buff
+    // applies to the whole Group regardless of who's in the encounter.
     Hooks.on("updateCombat", async (combat, changed) => {
       if (!game.user.isGM) return;
       if (!("round" in changed)) return;
 
       const deletionPromises = [];
-      for (const combatant of combat.combatants) {
-        const actor = combatant.actor;
-        if (!actor) continue;
-
+      for (const actor of game.actors.filter(a => a.type === "character")) {
         const virtuosoEffects = actor.effects.filter(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
         if (virtuosoEffects.length > 0) {
           const ids = virtuosoEffects.map(e => e.id);
@@ -265,14 +264,11 @@ export const BardFeatures = {
       }
     });
 
-    // Remove Virtuoso buffs when combat ends
+    // Remove Virtuoso buffs when combat ends — check all character actors
     Hooks.on("deleteCombat", async (combat) => {
       if (!game.user.isGM) return;
       const cleanupPromises = [];
-      for (const combatant of combat.combatants) {
-        const actor = combatant.actor;
-        if (!actor) continue;
-
+      for (const actor of game.actors.filter(a => a.type === "character")) {
         const virtuosoEffects = actor.effects.filter(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
         if (virtuosoEffects.length > 0) {
           const ids = virtuosoEffects.map(e => e.id);
@@ -399,7 +395,9 @@ export const BardFeatures = {
 
     this._log(`Virtuoso: ${bard.name} chose ${buffType} — applying to all PCs`);
 
-    // Find all PCs in combat (fallback: all character actors)
+    // Apply to all PCs in combat. RAW says "your Group" which means the party.
+    // Only apply to combatants in the active encounter — non-combatant actors
+    // on other scenes or not in the fight shouldn't get the buff.
     let targetActors = [];
     if (game.combat) {
       for (const combatant of game.combat.combatants) {
@@ -409,7 +407,18 @@ export const BardFeatures = {
       }
     }
     if (targetActors.length === 0) {
-      targetActors = game.actors.filter(a => a.type === "character");
+      // No combat or no PC combatants — apply to PCs on the active scene
+      const sceneTokenActors = canvas.tokens?.placeables
+        ?.filter(t => t.actor?.type === "character")
+        ?.map(t => t.actor) || [];
+      // Deduplicate by actor ID
+      const seen = new Set();
+      for (const actor of sceneTokenActors) {
+        if (!seen.has(actor.id)) {
+          seen.add(actor.id);
+          targetActors.push(actor);
+        }
+      }
     }
 
     const applyPromises = targetActors.map(async (actor) => {
