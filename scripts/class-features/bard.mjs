@@ -35,35 +35,68 @@ export const BARD_REGISTRY = {
   //
   // SYSTEM HANDLES:
   //   - favorHinder field exists on actor schema (global for all rolls)
-  //   - VagabondRollBuilder reads actor.system.favorHinder for roll construction
-  //   - Performance skill exists with trained/difficulty/bonus fields
+  //   - VagabondRollBuilder has two d20 roll methods:
+  //     * buildAndEvaluateD20(actor, favorHinder) — used for skill/save/stat checks
+  //     * buildAndEvaluateD20WithRollData(rollData, favorHinder) — used inside
+  //       item.rollAttack() for weapon attacks. These are INDEPENDENT code paths.
+  //   - Roll handler reads actor.system.favorHinder, resolves with keyboard modifiers
+  //     via calculateEffectiveFavorHinder(), then passes result to the roll method.
+  //   - Performance skill exists with trained/difficulty/bonus fields.
   //
   // MODULE HANDLES:
-  //   - Virtuoso action: triggered via game.vagabondCharacterEnhancer.virtuoso(actor)
-  //     or via macro. Rolls Performance check using system's VagabondRollBuilder.
-  //   - On success, presents chat card with Valor/Resolve/Inspiration buttons
-  //   - Applies temporary AE to all PCs in combat with chosen buff
-  //   - Auto-expires on round change via updateCombat hook
-  //   - Valor/Resolve: favor applied via monkey-patch of VagabondRollBuilder.buildAndEvaluateD20
-  //     (see vagabond-character-enhancer.mjs). Checks for Virtuoso buff AE flag on actor
-  //     and combines with existing favor/hinder (hinder + favor = cancel to "none").
-  //     NOTE: System has no per-type favor fields (attack-only or save-only),
-  //     so both Valor and Resolve apply global favor. This is a known limitation.
-  //     The fork solved this by adding dedicated system fields (virtuosoSavesFavor,
-  //     virtuosoAttacksFavor) which don't exist in base system v5.0.0.
+  //   - Item trigger: Bard clicks "Virtuoso" relic item on character sheet.
+  //     preCreateChatMessage hook intercepts the item card, suppresses it,
+  //     and runs useVirtuoso() instead. No macro needed.
+  //   - Performance check: dynamically imports VagabondRollBuilder, rolls d20
+  //     with actor's check bonuses against Performance skill difficulty.
+  //   - Chat card: uses system's vagabond-chat-card-v2 HTML structure for visual
+  //     consistency. On success, shows Valor/Resolve/Inspiration buttons.
+  //   - Button choice persisted via message.setFlag() — survives page reloads
+  //     and shows correctly for all connected clients.
+  //   - Buff AEs: creates flag-only AEs (no system.favorHinder changes) on all
+  //     PC combatants. The AE's virtuosoBuff flag is read by monkey-patches.
+  //   - Favor application via TWO monkey-patches (see vagabond-character-enhancer.mjs):
+  //     * buildAndEvaluateD20 patch — covers skill, save, and stat checks.
+  //       Checks actor.effects for virtuosoBuff flag, combines with existing
+  //       favorHinder state (hinder + favor = "none", none + favor = "favor").
+  //     * rollAttack patch — covers weapon attack rolls (Valor only).
+  //       Same combination logic. MUST be separate from buildAndEvaluateD20 because
+  //       rollAttack internally uses buildAndEvaluateD20WithRollData, a different
+  //       code path that doesn't go through buildAndEvaluateD20.
+  //   - Auto-expires: updateCombat hook removes all Virtuoso AEs on round change.
+  //     Checks ALL character actors (not just combatants) to catch stragglers.
+  //     deleteCombat hook also cleans up on combat end.
+  //   - Targeting: applies to PC combatants in active combat. Falls back to PCs
+  //     with tokens on the active scene if no combat. Deduplicates by actor ID.
   //   - Inspiration: creates AE with flag only (no mechanical change). The d6
   //     healing bonus is not automated — system has no healing bonus field we can
   //     hook from module level. Players/GM track it manually via the AE indicator.
   //
   // APPROACHES THAT DIDN'T WORK:
-  //   - AE OVERRIDE on system.favorHinder — bulldozed flanking hinder. Favor should
-  //     CANCEL hinder (to "none"), not override it. Solution: monkey-patch
-  //     buildAndEvaluateD20 to combine favor with existing state properly.
+  //   - AE OVERRIDE (mode 5) on system.favorHinder — bulldozed flanking hinder.
+  //     Favor should CANCEL hinder (to "none"), not replace it. The system's
+  //     roll handler reads actor.system.favorHinder BEFORE calling the roll method,
+  //     so an AE override made it always read "favor" regardless of flanking or
+  //     other conditions. Solution: flag-only AEs + monkey-patches that combine
+  //     favor with the already-resolved favorHinder state.
+  //   - Single monkey-patch on buildAndEvaluateD20 for ALL rolls — weapon attacks
+  //     go through buildAndEvaluateD20WithRollData (called inside item.rollAttack),
+  //     a completely separate code path. The two methods never call each other.
+  //     Solution: patch BOTH rollAttack (for attacks) AND buildAndEvaluateD20
+  //     (for skills/saves/stats) independently.
+  //   - Applying Virtuoso in BOTH rollAttack AND buildAndEvaluateD20 — caused
+  //     double-application because rollAttack modifies favorHinder then passes it
+  //     to the original, which calls buildAndEvaluateD20WithRollData (not patched).
+  //     AI reviewers incorrectly suggested this was happening (they assumed
+  //     buildAndEvaluateD20 was called inside rollAttack — it's not). In reality,
+  //     each patch covers its own independent code path.
   //   - Type-specific favor (attack-only, save-only) — system's favorHinder is global.
-  //     Would require monkey-patching RollHandler.prototype.roll() to check roll type
-  //     and apply favor selectively. Planned for future refinement.
+  //     No per-roll-type favor fields exist. Would require monkey-patching
+  //     RollHandler.prototype.roll() to check rollType and apply selectively.
   //   - Setting Bard-specific schema fields (virtuosoSavesFavor etc.) — these fields
   //     don't exist in base system v5.0.0, only in the fork.
+  //   - Macro-based trigger — required players to set up macros manually. Replaced
+  //     with preCreateChatMessage intercept on the "Virtuoso" relic item.
   //
   "virtuoso": {
     class: "bard",
@@ -213,9 +246,15 @@ export const BardFeatures = {
 
   /**
    * Virtuoso hooks:
-   * 1. renderChatMessage: adds click handlers to buff choice buttons
-   * 2. updateCombat: auto-expires Virtuoso buffs on round change
-   * 3. deleteCombat: cleans up Virtuoso buffs when combat ends
+   * 1. preCreateChatMessage: intercepts Virtuoso relic item use, replaces with
+   *    Performance check flow (suppresses default item card)
+   * 2. renderChatMessage: adds click handlers to buff choice buttons, restores
+   *    persisted choice state from message flags on re-render/reload
+   * 3. updateCombat: auto-expires Virtuoso buffs on round change (all PCs)
+   * 4. deleteCombat: cleans up Virtuoso buffs when combat ends (all PCs)
+   *
+   * Favor application is NOT here — it's in vagabond-character-enhancer.mjs via
+   * monkey-patches on buildAndEvaluateD20 (skills/saves) and rollAttack (attacks).
    */
   _registerVirtuosoHooks() {
     // Intercept Virtuoso item usage from the character sheet.
@@ -442,11 +481,17 @@ export const BardFeatures = {
    * Apply the chosen Virtuoso buff to all PCs in combat.
    */
   async _applyVirtuosoBuff(bard, buffType) {
-    // NOTE: Valor/Resolve no longer set system.favorHinder via AE (OVERRIDE mode
-    // bulldozed flanking hinder — favor should cancel hinder, not replace it).
-    // Instead, the favor is applied via monkey-patch of VagabondRollBuilder.buildAndEvaluateD20
-    // which checks for the virtuosoBuff flag and combines properly with existing state.
-    // See registerHooks() → _patchRollBuilder().
+    // AE changes are intentionally EMPTY for Valor/Resolve. The favor is applied
+    // via monkey-patches in vagabond-character-enhancer.mjs, not via AE changes.
+    // The AE exists purely as a flag carrier — the patches check for the
+    // virtuosoBuff flag on the actor's effects and combine favor with the
+    // already-resolved favorHinder state from the roll handler.
+    //
+    // Why not AE OVERRIDE on system.favorHinder?
+    // The system reads actor.system.favorHinder BEFORE calling roll methods.
+    // An AE override makes it always "favor", bulldozing flanking hinder and
+    // other conditions. The monkey-patches run AFTER the system resolves
+    // favorHinder, so they can properly combine (hinder + favor = "none").
     const buffConfig = {
       valor: {
         name: "Virtuoso: Valor",
