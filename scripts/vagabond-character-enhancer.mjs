@@ -5,6 +5,12 @@
 
 export const MODULE_ID = "vagabond-character-enhancer";
 
+// Module-global context for passing actor through wrapped call chains.
+// Set before calling a wrapped method, cleared after. Used by Climax
+// to pass the actor to buildAndEvaluateD20WithRollData (which only
+// receives rollData, not the actor).
+let _currentRollActor = null;
+
 import { FeatureDetector } from "./feature-detector.mjs";
 import { BarbarianFeatures } from "./class-features/barbarian.mjs";
 import { BardFeatures } from "./class-features/bard.mjs";
@@ -168,7 +174,16 @@ Hooks.once("ready", async () => {
             }
           }
         }
-        return origRollAttack.call(this, actor, favorHinder);
+        // Stash actor for Climax d6 explosion in buildAndEvaluateD20WithRollData
+        _currentRollActor = actor;
+        try {
+          const result = await origRollAttack.call(this, actor, favorHinder);
+          _currentRollActor = null;
+          return result;
+        } catch (e) {
+          _currentRollActor = null;
+          throw e;
+        }
       };
       console.log(`${MODULE_ID} | Patched rollAttack for Bloodthirsty.`);
     }
@@ -255,6 +270,78 @@ Hooks.once("ready", async () => {
       return origBuildD20.call(this, actor, favorHinder, baseFormula);
     };
     console.log(`${MODULE_ID} | Patched buildAndEvaluateD20 for Virtuoso.`);
+
+    // --- Climax: Explode the favor d6 when Virtuoso grants Climax ---
+    // After a favored d20 roll is evaluated, if the actor has a Virtuoso AE with
+    // climaxExplode=true, find the d6 favor die and explode it on max (6).
+    // Wraps evaluateRoll which is the single exit point for all d20 rolls.
+    const origEvaluateRoll = VagabondRollBuilder.evaluateRoll;
+    VagabondRollBuilder.evaluateRoll = async function (formula, actor, favorHinder) {
+      const roll = await origEvaluateRoll.call(this, formula, actor, favorHinder);
+
+      // Only intervene on favored rolls
+      if (favorHinder !== "favor") return roll;
+
+      // Check if actor has a Virtuoso AE with Climax explosion
+      const virtuosoAE = actor?.effects?.find(e =>
+        e.getFlag(MODULE_ID, "climaxExplode")
+      );
+      if (!virtuosoAE) return roll;
+
+      // Find the d6 favor die term and explode it on 6
+      const d6Term = roll.terms.find(t =>
+        t.constructor?.name === "Die" && t.faces === 6
+      );
+      if (!d6Term) return roll;
+
+      // Check if the d6 rolled max — if so, explode it
+      const maxFace = d6Term.faces; // 6
+      const hasMaxResult = d6Term.results?.some(r => r.result === maxFace && r.active);
+      if (!hasMaxResult) return roll;
+
+      await VagabondDamageHelper._manuallyExplodeDice(roll, [maxFace]);
+
+      if (game.settings.get(MODULE_ID, "debugMode")) {
+        console.log(`${MODULE_ID} | Climax: Exploded favor d6 for ${actor.name} — new total: ${roll.total}`);
+      }
+
+      return roll;
+    };
+    console.log(`${MODULE_ID} | Patched evaluateRoll for Climax.`);
+
+    // --- Climax: Attack/spell path (buildAndEvaluateD20WithRollData) ---
+    // This method takes rollData (plain object) instead of an actor, so we
+    // use _currentRollActor stashed by our rollAttack wrapper to check for
+    // the Climax AE. Covers weapon attacks and spell cast rolls.
+    const origBuildD20WithRollData = VagabondRollBuilder.buildAndEvaluateD20WithRollData;
+    VagabondRollBuilder.buildAndEvaluateD20WithRollData = async function (rollData, favorHinder, baseFormula = null) {
+      const roll = await origBuildD20WithRollData.call(this, rollData, favorHinder, baseFormula);
+
+      if (favorHinder !== "favor" || !_currentRollActor) return roll;
+
+      const virtuosoAE = _currentRollActor.effects?.find(e =>
+        e.getFlag(MODULE_ID, "climaxExplode")
+      );
+      if (!virtuosoAE) return roll;
+
+      const d6Term = roll.terms.find(t =>
+        t.constructor?.name === "Die" && t.faces === 6
+      );
+      if (!d6Term) return roll;
+
+      const maxFace = d6Term.faces;
+      const hasMaxResult = d6Term.results?.some(r => r.result === maxFace && r.active);
+      if (!hasMaxResult) return roll;
+
+      await VagabondDamageHelper._manuallyExplodeDice(roll, [maxFace]);
+
+      if (game.settings.get(MODULE_ID, "debugMode")) {
+        console.log(`${MODULE_ID} | Climax: Exploded favor d6 on attack/spell for ${_currentRollActor.name} — new total: ${roll.total}`);
+      }
+
+      return roll;
+    };
+    console.log(`${MODULE_ID} | Patched buildAndEvaluateD20WithRollData for Climax.`);
 
     // --- Inspiration: Add d6 bonus to healing (button path) ---
     // Covers spell-based healing (Life spell "Apply X Healing" button).

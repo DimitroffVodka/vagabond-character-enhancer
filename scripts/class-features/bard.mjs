@@ -209,13 +209,23 @@ export const BARD_REGISTRY = {
   // ──────────────────────────────────────────────
   // RULES: Favor and bonus dice you grant can Explode.
   //
-  // STATUS: todo
+  // STATUS: module
+  //
+  // MODULE HANDLES:
+  //   - When Virtuoso buff is applied (_applyVirtuosoBuff), if the Bard has
+  //     bard_climax, the AE flag includes climaxExplode=true.
+  //   - Monkey-patches in vagabond-character-enhancer.mjs:
+  //     * evaluateRoll: after favored d20 rolls, if actor has climaxExplode AE,
+  //       explodes the d6 favor die on max (6). Covers sheet rolls, saves, skills.
+  //     * buildAndEvaluateD20WithRollData: same logic for weapon attack rolls,
+  //       using _currentRollActor context variable set by rollAttack wrapper.
+  //   - Uses VagabondDamageHelper._manuallyExplodeDice for recursive explosion.
   //
   "climax": {
     class: "bard",
     level: 8,
     flag: "bard_climax",
-    status: "todo",
+    status: "module",
     description: "Favor and bonus dice you grant can Explode."
   },
 
@@ -751,21 +761,28 @@ export const BardFeatures = {
         await actor.deleteEmbeddedDocuments("ActiveEffect", existing.map(e => e.id));
       }
 
+      const aeFlags = {
+        managed: true,
+        virtuosoBuff: buffType
+      };
+
+      // Climax (L8): If the Bard has Climax, granted dice can Explode
+      if (this._hasFeature(bard, "bard_climax")) {
+        aeFlags.climaxExplode = true;
+      }
+
       await actor.createEmbeddedDocuments("ActiveEffect", [{
         name: config.name,
         img: "icons/tools/instruments/harp-yellow-teal.webp",
         origin: bard.uuid,
         flags: {
-          [MODULE_ID]: {
-            managed: true,
-            virtuosoBuff: buffType
-          }
+          [MODULE_ID]: aeFlags
         },
         changes: config.changes,
         disabled: false,
         transfer: false
       }]);
-      this._log(`Virtuoso: Applied ${config.name} to ${actor.name}`);
+      this._log(`Virtuoso: Applied ${config.name} to ${actor.name}${aeFlags.climaxExplode ? " (Climax: dice can Explode)" : ""}`);
     });
 
     await Promise.all(applyPromises);
