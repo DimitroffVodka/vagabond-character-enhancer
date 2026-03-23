@@ -344,6 +344,50 @@ export const BardFeatures = {
       });
     });
 
+    // Inspiration: Add +1d6 to healing roll buttons when active.
+    // Healing buttons use data-damage-amount which is rolled on click (unlike
+    // attack damage which is pre-rolled), so modifying the button formula works.
+    // In combat: checks if the healer has the Inspiration AE.
+    // Out of combat: checks if any PC on scene has bard_virtuoso (assumed always-on).
+    Hooks.on("renderChatMessage", (message, html) => {
+      const el = html instanceof jQuery ? html[0] : html;
+      const healButtons = el.querySelectorAll('.vagabond-item-damage-button[data-damage-type="healing"]');
+      if (healButtons.length === 0) return;
+
+      const speakerActorId = message.speaker?.actor;
+      if (!speakerActorId) return;
+      const speakerActor = game.actors.get(speakerActorId);
+      if (!speakerActor) return;
+
+      let hasInspiration = false;
+
+      if (game.combat) {
+        // In combat: check if the healer has the Inspiration AE
+        hasInspiration = !!speakerActor.effects?.find(e =>
+          e.getFlag(MODULE_ID, "virtuosoBuff") === "inspiration"
+        );
+      } else {
+        // Out of combat: any PC on the scene with bard_virtuoso means Inspiration is assumed
+        const scenePCs = canvas.tokens?.placeables
+          ?.filter(t => t.actor?.type === "character") || [];
+        hasInspiration = scenePCs.some(t => this._hasFeature(t.actor, "bard_virtuoso"));
+      }
+
+      if (!hasInspiration) return;
+
+      // Modify healing button formulas to add +1d6
+      healButtons.forEach(btn => {
+        const formula = btn.dataset.damageAmount;
+        if (!formula || btn.dataset.vceInspiration) return; // already modified
+        btn.dataset.damageAmount = `${formula} + 1d6[Inspiration]`;
+        btn.dataset.vceInspiration = "true";
+        // Update button text to show the bonus
+        const label = btn.textContent.trim();
+        btn.innerHTML = `<i class="fas fa-heart"></i> ${label} + d6 <i class="fas fa-music" style="color:#c9a0dc;"></i>`;
+        this._log(`Inspiration: Added +1d6 to healing formula: ${formula} → ${btn.dataset.damageAmount}`);
+      });
+    });
+
     // Auto-expire Virtuoso buffs on round change.
     // Checks ALL character actors, not just combatants, because the buff
     // applies to the whole Group regardless of who's in the encounter.
