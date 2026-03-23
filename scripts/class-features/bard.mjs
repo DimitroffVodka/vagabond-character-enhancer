@@ -183,13 +183,24 @@ export const BARD_REGISTRY = {
   // RULES: Your Will Saves can't be Hindered while you aren't Incapacitated, and
   // you can ignore effects that rely on you hearing them to be affected.
   //
-  // STATUS: todo
+  // STATUS: partial — Will Save hinder immunity is automated. Hearing immunity
+  //   is narrative/flavor and not automated (no system mechanic to hook).
+  //
+  // MODULE HANDLES:
+  //   - Two monkey-patches in vagabond-character-enhancer.mjs:
+  //     * _rollSave (damage-helper.mjs): Strips ALL hinder sources on Will saves
+  //       for actors with bard_bravado (covers chat-card save buttons).
+  //     * RollHandler.roll: Strips hinder from sheet-initiated Will save clicks
+  //       (covers character sheet save buttons).
+  //   - Both patches check !incapacitated before intervening.
+  //   - Hinder sources stripped: global favorHinder, conditional isHindered,
+  //     keyboard Ctrl override, attacker outgoingSavesModifier.
   //
   "bravado": {
     class: "bard",
     level: 6,
     flag: "bard_bravado",
-    status: "todo",
+    status: "partial",
     description: "Will Saves can't be Hindered while not Incapacitated. Ignore effects that rely on hearing."
   },
 

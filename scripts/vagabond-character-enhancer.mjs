@@ -320,6 +320,89 @@ Hooks.once("ready", async () => {
       return origHandleRestorative.call(this, button);
     };
     console.log(`${MODULE_ID} | Patched handleApplyRestorative for Inspiration.`);
+
+    // --- Bravado: Will Saves can't be Hindered ---
+    // Wrap _rollSave to strip hinder from Will saves when the actor has Bravado
+    // and isn't Incapacitated. This catches ALL hinder sources: global favorHinder,
+    // conditional isHindered, attacker modifier, and keyboard overrides.
+    const origRollSave = VagabondDamageHelper._rollSave;
+    VagabondDamageHelper._rollSave = async function (actor, saveType, isHindered, shiftKey = false, ctrlKey = false, attackerModifier = 'none') {
+      if (saveType === "will") {
+        const features = actor?.getFlag(MODULE_ID, "features");
+        if (features?.bard_bravado && !actor.statuses?.has("incapacitated")) {
+          // Strip hinder from all sources:
+          // 1. isHindered (conditional) — force false
+          isHindered = false;
+          // 2. ctrlKey (keyboard hinder override) — force false
+          ctrlKey = false;
+          // 3. attackerModifier hinder — cancel to none
+          if (attackerModifier === "hinder") attackerModifier = "none";
+          // 4. Global favorHinder on actor — if it's "hinder", temporarily override to "none".
+          //    _rollSave reads actor.system.favorHinder internally, so we temporarily patch it.
+          const origFH = actor.system.favorHinder;
+          if (origFH === "hinder") {
+            actor.system.favorHinder = "none";
+          }
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Bravado: Will save can't be Hindered for ${actor.name} — stripped all hinder sources`);
+          }
+          try {
+            const result = await origRollSave.call(this, actor, saveType, isHindered, shiftKey, ctrlKey, attackerModifier);
+            actor.system.favorHinder = origFH;
+            return result;
+          } catch (e) {
+            actor.system.favorHinder = origFH;
+            throw e;
+          }
+        }
+      }
+      return origRollSave.call(this, actor, saveType, isHindered, shiftKey, ctrlKey, attackerModifier);
+    };
+    console.log(`${MODULE_ID} | Patched _rollSave for Bravado.`);
+
+    // --- Bravado: Sheet-initiated Will saves (roll-handler path) ---
+    // When the player clicks the Will save on the character sheet, RollHandler.roll()
+    // resolves favorHinder BEFORE calling buildAndEvaluateD20. Our buildAndEvaluateD20
+    // patch doesn't know the roll type, so we patch RollHandler.prototype.roll to strip
+    // hinder when it's a Will save and the actor has Bravado.
+    const { RollHandler } = await import("/systems/vagabond/module/sheets/handlers/roll-handler.mjs");
+    const origRoll = RollHandler.prototype.roll;
+    RollHandler.prototype.roll = async function (event, target) {
+      const dataset = target.dataset;
+      if (dataset.type === "save" && dataset.key === "will" && dataset.roll) {
+        const features = this.actor?.getFlag(MODULE_ID, "features");
+        if (features?.bard_bravado && !this.actor.statuses?.has("incapacitated")) {
+          // Override keyboard hinder (Ctrl) — create a synthetic event without ctrlKey
+          if (event.ctrlKey) {
+            event = new Proxy(event, {
+              get(obj, prop) {
+                if (prop === "ctrlKey") return false;
+                const val = obj[prop];
+                return typeof val === "function" ? val.bind(obj) : val;
+              }
+            });
+          }
+          // If the actor's global favorHinder is "hinder", temporarily override to "none"
+          const origFH = this.actor.system.favorHinder;
+          if (origFH === "hinder") {
+            this.actor.system.favorHinder = "none";
+          }
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Bravado: Will save from sheet — stripped hinder for ${this.actor.name}`);
+          }
+          try {
+            const result = await origRoll.call(this, event, target);
+            this.actor.system.favorHinder = origFH;
+            return result;
+          } catch (e) {
+            this.actor.system.favorHinder = origFH;
+            throw e;
+          }
+        }
+      }
+      return origRoll.call(this, event, target);
+    };
+    console.log(`${MODULE_ID} | Patched RollHandler.roll for Bravado.`);
   } catch (err) {
     console.error(`${MODULE_ID} | Failed to patch system methods:`, err);
   }
