@@ -213,6 +213,27 @@ export const BardFeatures = {
    * 3. deleteCombat: cleans up Virtuoso buffs when combat ends
    */
   _registerVirtuosoHooks() {
+    // Intercept Virtuoso item usage from the character sheet.
+    // When the Bard clicks their "Virtuoso" relic item, the system posts
+    // a generic item card. We suppress it and run our Performance check flow instead.
+    Hooks.on("preCreateChatMessage", (message) => {
+      if (!game.user.isGM) return;
+      const itemId = message.flags?.vagabond?.itemId;
+      const actorId = message.flags?.vagabond?.actorId || message.speaker?.actor;
+      if (!itemId || !actorId) return;
+
+      const actor = game.actors.get(actorId);
+      if (!actor) return;
+      const item = actor.items.get(itemId);
+      if (!item || item.name.toLowerCase() !== "virtuoso") return;
+      if (!this._hasFeature(actor, "bard_virtuoso")) return;
+
+      // Suppress the default item card and run our Virtuoso flow instead
+      this._log(`Virtuoso: Intercepted item use — running Performance check for ${actor.name}`);
+      this.useVirtuoso(actor);
+      return false;
+    });
+
     // Handle Virtuoso buff choice buttons in chat
     Hooks.on("renderChatMessage", (message, html) => {
       const el = html instanceof jQuery ? html[0] : html;
