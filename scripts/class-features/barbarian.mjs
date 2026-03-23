@@ -621,7 +621,8 @@ export const BarbarianFeatures = {
       if (this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
-      const newHP = changes.system?.health?.value;
+      // Handle both nested and flat (dot-notation) update payloads
+      const newHP = changes.system?.health?.value ?? changes["system.health.value"];
       if (newHP === undefined) return;
 
       const oldHP = options.vceOldHP;
@@ -815,7 +816,8 @@ export const BarbarianFeatures = {
       if (!game.user.isGM) return;
       if (actor.type !== "npc") return;
 
-      const newHP = changes.system?.health?.value;
+      // Handle both nested and flat (dot-notation) update payloads
+      const newHP = changes.system?.health?.value ?? changes["system.health.value"];
       if (newHP === undefined || newHP > 0) return;
 
       const oldHP = options.vceOldHP;
