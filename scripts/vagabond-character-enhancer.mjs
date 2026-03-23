@@ -130,18 +130,10 @@ Hooks.once("ready", async () => {
           }
         }
 
-        // Virtuoso: Valor grants favor on attacks
-        const virtuosoBuff = actor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
-        if (virtuosoBuff) {
-          const buffType = virtuosoBuff.getFlag(MODULE_ID, "virtuosoBuff");
-          if (buffType === "valor" && favorHinder !== "favor") {
-            if (favorHinder === "hinder") favorHinder = "none";
-            else favorHinder = "favor";
-            if (game.settings.get(MODULE_ID, "debugMode")) {
-              console.log(`${MODULE_ID} | Virtuoso Valor: upgraded to ${favorHinder}`);
-            }
-          }
-        }
+        // NOTE: Virtuoso favor is NOT applied here — it's handled in the
+        // buildAndEvaluateD20 patch which covers all d20 rolls (attacks included).
+        // Applying it here AND in buildAndEvaluateD20 caused double-application:
+        // hinder → none (here) → favor (buildAndEvaluateD20). See commit history.
 
         // Bloodthirsty: Favor on attacks against wounded targets
         if (features?.barbarian_bloodthirsty && favorHinder !== "favor") {
