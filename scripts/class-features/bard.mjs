@@ -134,14 +134,18 @@ export const BARD_REGISTRY = {
   // STATUS: flavor
   //
   // MODULE HANDLES:
-  //   - Nothing yet. The fork integrated this into downtime-app.mjs (system-level).
-  //     Module-level implementation would require hooking the rest dialog.
+  //   - Hooks createChatMessage to detect Breather cards (system posts these from
+  //     DowntimeApp._onProcessBreather after updating HP).
+  //   - Finds a non-incapacitated bard with Song of Rest in the party.
+  //   - Applies extra HP (Presence + Bard Level, capped at max) to the resting actor.
+  //   - Grants +1 Studied Die to the resting actor.
+  //   - Posts a follow-up chat card showing the Song of Rest bonus.
   //
   "song of rest": {
     class: "bard",
     level: 2,
     flag: "bard_songOfRest",
-    status: "flavor",
+    status: "module",
     description: "During a Breather, you and Allies gain a Studied die and regain additional HP equal to Presence + Bard Level."
   },
 
@@ -241,6 +245,7 @@ export const BardFeatures = {
    */
   registerHooks() {
     this._registerVirtuosoHooks();
+    this._registerSongOfRestHooks();
     this._log("Bard hooks registered.");
   },
 
@@ -256,6 +261,94 @@ export const BardFeatures = {
   _hasFeature(actor, flag) {
     const features = actor?.getFlag(MODULE_ID, "features");
     return features?.[flag] ?? false;
+  },
+
+  /* -------------------------------------------- */
+  /*  Song of Rest: Bonus HP + Studied Die        */
+  /* -------------------------------------------- */
+
+  /**
+   * Song of Rest (L2): During a Breather, allies gain extra HP (Presence + Bard Level)
+   * and a Studied Die, as long as the Bard isn't Incapacitated.
+   *
+   * Hooks createChatMessage to detect Breather cards posted by the system's
+   * DowntimeApp._onProcessBreather. The system has already updated HP by the
+   * time the message is created, so we apply Song of Rest as additional HP
+   * on top and post a follow-up chat card.
+   */
+  _registerSongOfRestHooks() {
+    Hooks.on("createChatMessage", async (message) => {
+      if (!game.user.isGM) return;
+
+      // Detect Breather cards — the system's _onProcessBreather creates cards
+      // with "takes a breather" in the description HTML.
+      const content = message.content || "";
+      if (!content.includes("takes a breather")) return;
+
+      // Get the resting actor from the message speaker
+      const actorId = message.speaker?.actor;
+      if (!actorId) return;
+      const actor = game.actors.get(actorId);
+      if (!actor || actor.type !== "character") return;
+
+      // Find a bard with Song of Rest who isn't incapacitated
+      const bard = game.actors.find(a => {
+        if (a.type !== "character") return false;
+        if (!this._hasFeature(a, "bard_songOfRest")) return false;
+        if (a.statuses?.has("incapacitated")) return false;
+        return true;
+      });
+      if (!bard) return;
+
+      // Calculate Song of Rest bonus: Presence + Bard Level
+      const bardPresence = bard.system.stats?.presence?.value ?? 0;
+      const bardLevel = bard.system.attributes?.level?.value ?? 0;
+      const songBonus = bardPresence + bardLevel;
+
+      if (songBonus <= 0) {
+        this._log("Song of Rest: bonus is 0, skipping.");
+        return;
+      }
+
+      // Apply extra HP (the system already set HP = current + Might)
+      const currentHP = actor.system.health.value;
+      const maxHP = actor.system.health.max;
+      const newHP = Math.min(maxHP, currentHP + songBonus);
+      const actualBonus = newHP - currentHP;
+
+      // Grant +1 Studied Die
+      const currentStudied = actor.system.studiedDice || 0;
+
+      const updates = { "system.studiedDice": currentStudied + 1 };
+      if (actualBonus > 0) {
+        updates["system.health.value"] = newHP;
+      }
+      await actor.update(updates);
+
+      this._log(`Song of Rest: ${bard.name} grants ${actor.name} +${actualBonus} HP (Presence ${bardPresence} + Level ${bardLevel} = ${songBonus}, capped at max) and +1 Studied Die`);
+
+      // Post a follow-up chat card showing the Song of Rest bonus
+      const { VagabondChatCard } = await import("/systems/vagabond/module/helpers/chat-card.mjs");
+
+      let descHTML = `
+        <p><i class="fas fa-music"></i> <strong>${bard.name}'s Song of Rest</strong></p>
+      `;
+      if (actualBonus > 0) {
+        descHTML += `<p><i class="fas fa-heart"></i> <strong>+${actualBonus} HP</strong> (Presence ${bardPresence} + Bard Level ${bardLevel})</p>`;
+      } else {
+        descHTML += `<p><i class="fas fa-heart"></i> HP already at max — no additional healing.</p>`;
+      }
+      descHTML += `<p><i class="fas fa-book-open"></i> Gained a <strong>Studied Die</strong>! (${currentStudied} → ${currentStudied + 1})</p>`;
+
+      const card = new VagabondChatCard()
+        .setType("generic")
+        .setActor(actor)
+        .setTitle("Song of Rest")
+        .setSubtitle(bard.name)
+        .setDescription(descHTML);
+
+      await card.send();
+    });
   },
 
   /* -------------------------------------------- */
