@@ -4,6 +4,13 @@
  */
 
 import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { AlchemyCookbook } from "../alchemy/alchemy-cookbook.mjs";
+import {
+  registerMaterialsHook, registerCountdownDamageHook, registerEffectExpirationHook,
+  registerCountdownLinkedAEHook, registerOilBonusDamageHook, registerAlchemicalAttackHook,
+  registerEurekaHook, registerConsumableUseHook, populateAlchemicalFolder, useConsumable,
+  getConsumableEffect, getAlchemistData, craftItem, migrateAlchemyFlags
+} from "../alchemy/alchemy-helpers.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -88,11 +95,61 @@ export const ALCHEMIST_REGISTRY = {
 /* -------------------------------------------- */
 
 export const AlchemistFeatures = {
+
+  /** Expose API for crawl strip and macros */
+  api: {
+    cookbook: AlchemyCookbook,
+    getAlchemistData,
+    craftItem,
+    useConsumable,
+    populateAlchemicalFolder
+  },
+
+  /** One-time flag migration from vagabond-crawler namespace */
+  async migrate() {
+    await migrateAlchemyFlags();
+  },
+
   registerHooks() {
-    // TODO: Implement runtime hooks
-    // - Eureka: Hook crit results on Craft checks to award Studied die
-    // - Potency: Hook into explode values for alchemical weapons
-    // - Big Bang: Expand explode values + add d6 bonus damage
-    // - Mix: UI for combining two alchemical items
+    if (!game.settings.get(MODULE_ID, "alchemistCookbook")) return;
+
+    // Cookbook UI (right-click on Alchemy Tools, context menus)
+    AlchemyCookbook.init();
+
+    // Core alchemy hooks
+    registerMaterialsHook();
+    registerCountdownDamageHook();
+    registerEffectExpirationHook();
+    registerCountdownLinkedAEHook();
+    registerOilBonusDamageHook();
+    registerAlchemicalAttackHook();
+    registerEurekaHook();
+    registerConsumableUseHook();
+
+    // Right-click "Use" on consumable items (potions, antitoxin)
+    Hooks.on("renderApplicationV2", (app, html) => {
+      if (!game.user.isGM) return;
+      const el = html instanceof jQuery ? html[0] : html;
+      if (!el?.classList?.contains("vagabond-actor-sheet")) return;
+
+      el.querySelectorAll('.item-list .item, [data-item-id]').forEach(row => {
+        row.addEventListener("contextmenu", async (ev) => {
+          const itemId = row.dataset.itemId || row.closest("[data-item-id]")?.dataset.itemId;
+          if (!itemId) return;
+          const actor = app.actor || app.document;
+          if (!actor) return;
+          const actorItem = actor.items.get(itemId);
+          if (!actorItem) return;
+          if (actorItem.type !== "equipment" || actorItem.system.equipmentType !== "consumable") return;
+          const effect = getConsumableEffect(actorItem.name);
+          if (!effect) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          await useConsumable(actor, actorItem);
+        });
+      });
+    });
+
+    console.log(`${MODULE_ID} | Alchemist Cookbook hooks registered.`);
   }
 };

@@ -14,13 +14,7 @@ let _currentRollActor = null;
 import { FeatureDetector } from "./feature-detector.mjs";
 import { BarbarianFeatures } from "./class-features/barbarian.mjs";
 import { BardFeatures } from "./class-features/bard.mjs";
-import { AlchemyCookbook } from "./alchemy/alchemy-cookbook.mjs";
-import {
-  registerMaterialsHook, registerCountdownDamageHook, registerEffectExpirationHook,
-  registerCountdownLinkedAEHook, registerOilBonusDamageHook, registerAlchemicalAttackHook,
-  registerEurekaHook, registerConsumableUseHook, populateAlchemicalFolder, useConsumable,
-  getConsumableEffect, getAlchemistData, craftItem, migrateAlchemyFlags
-} from "./alchemy/alchemy-helpers.mjs";
+import { AlchemistFeatures } from "./class-features/alchemist.mjs";
 
 /* -------------------------------------------- */
 /*  Init                                        */
@@ -612,60 +606,16 @@ Hooks.once("ready", async () => {
     if (frightImmune) await frightImmune.delete();
   });
 
-  // --- Alchemist Cookbook: init + hooks ---
-  if (game.settings.get(MODULE_ID, "alchemistCookbook")) {
-    AlchemyCookbook.init();
-    registerMaterialsHook();
-    registerCountdownDamageHook();
-    registerEffectExpirationHook();
-    registerCountdownLinkedAEHook();
-    registerOilBonusDamageHook();
-    registerAlchemicalAttackHook();
-    registerEurekaHook();
-    registerConsumableUseHook();
-
-    // Right-click "Use" on consumable items (potions, antitoxin)
-    Hooks.on("renderApplicationV2", (app, html) => {
-      if (!game.user.isGM) return;
-      const el = html instanceof jQuery ? html[0] : html;
-      if (!el?.classList?.contains("vagabond-actor-sheet")) return;
-
-      el.querySelectorAll('.item-list .item, [data-item-id]').forEach(row => {
-        row.addEventListener("contextmenu", async (ev) => {
-          const itemId = row.dataset.itemId || row.closest("[data-item-id]")?.dataset.itemId;
-          if (!itemId) return;
-          const actor = app.actor || app.document;
-          if (!actor) return;
-          const actorItem = actor.items.get(itemId);
-          if (!actorItem) return;
-          if (actorItem.type !== "equipment" || actorItem.system.equipmentType !== "consumable") return;
-          const effect = getConsumableEffect(actorItem.name);
-          if (!effect) return;
-          ev.preventDefault();
-          ev.stopPropagation();
-          await useConsumable(actor, actorItem);
-        });
-      });
-    });
-
-    console.log(`${MODULE_ID} | Alchemist Cookbook hooks registered.`);
-  }
-
   // Migrate alchemy flags from vagabond-crawler namespace (one-time)
-  await migrateAlchemyFlags();
+  await AlchemistFeatures.migrate();
 
   // Expose module API
   game.vagabondCharacterEnhancer = {
     detector: FeatureDetector,
     barbarian: BarbarianFeatures,
     bard: BardFeatures,
-    alchemy: {
-      cookbook: AlchemyCookbook,
-      getAlchemistData,
-      craftItem,
-      useConsumable,
-      populateAlchemicalFolder
-    },
+    alchemist: AlchemistFeatures,
+    alchemy: AlchemistFeatures.api,
     rescan: (actor) => FeatureDetector.scan(actor),
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
@@ -689,6 +639,7 @@ Hooks.once("ready", async () => {
   // Register class feature runtime hooks
   BarbarianFeatures.registerHooks();
   BardFeatures.registerHooks();
+  AlchemistFeatures.registerHooks();
 
   // Scan all existing characters on first load
   FeatureDetector.scanAll();
