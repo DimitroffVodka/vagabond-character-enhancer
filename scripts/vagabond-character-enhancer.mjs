@@ -7,6 +7,7 @@ export const MODULE_ID = "vagabond-character-enhancer";
 
 import { FeatureDetector } from "./feature-detector.mjs";
 import { BarbarianFeatures } from "./class-features/barbarian.mjs";
+import { BardFeatures } from "./class-features/bard.mjs";
 
 /* -------------------------------------------- */
 /*  Init                                        */
@@ -196,9 +197,13 @@ Hooks.once("ready", async () => {
   game.vagabondCharacterEnhancer = {
     detector: FeatureDetector,
     barbarian: BarbarianFeatures,
+    bard: BardFeatures,
     rescan: (actor) => FeatureDetector.scan(actor),
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
+    // Virtuoso action — call from macro or console:
+    //   game.vagabondCharacterEnhancer.virtuoso(game.actors.get("bardActorId"))
+    virtuoso: (actor) => BardFeatures.useVirtuoso(actor),
     debug: (actor) => {
       if (!actor) {
         console.warn(`${MODULE_ID} | debug: No actor provided. Usage: game.vagabondCharacterEnhancer.debug(game.actors.get("id"))`);
@@ -217,6 +222,7 @@ Hooks.once("ready", async () => {
 
   // Register class feature runtime hooks
   BarbarianFeatures.registerHooks();
+  BardFeatures.registerHooks();
 
   // Scan all existing characters on first load
   FeatureDetector.scanAll();
