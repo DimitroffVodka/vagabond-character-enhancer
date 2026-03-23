@@ -271,6 +271,32 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched buildAndEvaluateD20 for Virtuoso.`);
 
+    // --- Virtuoso: Apply Resolve/Valor favor on chat-card save buttons ---
+    // buildAndEvaluateD20WithConditionalHinder is a SEPARATE code path from
+    // buildAndEvaluateD20. It's used by _rollSave (chat-card save buttons)
+    // and never goes through our buildAndEvaluateD20 patch above.
+    // Apply Virtuoso favor here too so Resolve works on chat-card saves.
+    const origBuildD20Conditional = VagabondRollBuilder.buildAndEvaluateD20WithConditionalHinder;
+    VagabondRollBuilder.buildAndEvaluateD20WithConditionalHinder = async function (
+      actor, effectiveFavorHinder, isConditionallyHindered, baseFormula = null
+    ) {
+      const virtuosoBuff = actor?.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
+      if (virtuosoBuff) {
+        const buffType = virtuosoBuff.getFlag(MODULE_ID, "virtuosoBuff");
+        if (buffType === "valor" || buffType === "resolve") {
+          // Apply favor BEFORE conditional hinder, so they interact correctly:
+          // Virtuoso favor + conditional hinder = cancel to "none"
+          if (effectiveFavorHinder === "hinder") effectiveFavorHinder = "none";
+          else effectiveFavorHinder = "favor";
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Virtuoso: ${buffType} applied on save (conditional path) — effective: ${effectiveFavorHinder}`);
+          }
+        }
+      }
+      return origBuildD20Conditional.call(this, actor, effectiveFavorHinder, isConditionallyHindered, baseFormula);
+    };
+    console.log(`${MODULE_ID} | Patched buildAndEvaluateD20WithConditionalHinder for Virtuoso.`);
+
     // --- Climax: Explode the favor d6 when Virtuoso grants Climax ---
     // After a favored d20 roll is evaluated, if the actor has a Virtuoso AE with
     // climaxExplode=true, find the d6 favor die and explode it on max (6).
