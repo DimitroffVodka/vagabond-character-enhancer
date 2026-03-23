@@ -256,14 +256,27 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched buildAndEvaluateD20 for Virtuoso.`);
 
-    // --- Inspiration: Add d6 bonus to healing ---
-    // Monkey-patch handleApplyRestorative to roll an extra d6 when Inspiration is active.
-    // In combat: checks if the target has the Inspiration AE.
-    // Out of combat: checks if any PC on the scene has bard_virtuoso (assumed always-on).
+    // --- Inspiration: Add d6 bonus to healing (button path) ---
+    // Covers spell-based healing (Life spell "Apply X Healing" button).
+    // Potion healing is covered by the item.roll() patch above — skip equipment items
+    // here to avoid double-application (potions auto-heal AND have a button).
     const origHandleRestorative = VagabondDamageHelper.handleApplyRestorative;
     VagabondDamageHelper.handleApplyRestorative = async function (button) {
       const damageType = button.dataset.damageType?.toLowerCase();
       if (damageType === "healing") {
+        // Skip equipment items (potions) — already handled by item.roll() patch.
+        // Only apply Inspiration bonus for spell-based healing buttons.
+        const actorId = button.dataset.actorId;
+        const itemId = button.dataset.itemId;
+        if (actorId && itemId) {
+          const sourceActor = game.actors.get(actorId);
+          const sourceItem = sourceActor?.items.get(itemId);
+          if (sourceItem?.type === "equipment") {
+            // Potion/equipment — item.roll() already added the d6
+            return origHandleRestorative.call(this, button);
+          }
+        }
+
         // Check if Inspiration should apply
         let hasInspiration = false;
         if (game.combat) {
