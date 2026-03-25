@@ -86,8 +86,9 @@ nav.sheet-tabs [data-tab="vce-beast-form"] {
   white-space: nowrap;
 }
 
-/* Flexible centering with overflow protection */
-nav.sheet-tabs:has([data-tab="vce-beast-form"]) {
+/* Flexible centering with overflow protection — any VCE-injected tab */
+nav.sheet-tabs:has([data-tab="vce-beast-form"]),
+nav.sheet-tabs:has([data-tab="vce-cookbook"]) {
   justify-content: center !important;
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -95,12 +96,14 @@ nav.sheet-tabs:has([data-tab="vce-beast-form"]) {
   scrollbar-width: none; /* Firefox */
 }
 
-nav.sheet-tabs:has([data-tab="vce-beast-form"])::-webkit-scrollbar {
+nav.sheet-tabs:has([data-tab="vce-beast-form"])::-webkit-scrollbar,
+nav.sheet-tabs:has([data-tab="vce-cookbook"])::-webkit-scrollbar {
   display: none; /* Chrome/Safari */
 }
 
 /* Tabs should not shrink at normal widths — only scroll if needed */
-nav.sheet-tabs:has([data-tab="vce-beast-form"]) [data-tab] {
+nav.sheet-tabs:has([data-tab="vce-beast-form"]) [data-tab],
+nav.sheet-tabs:has([data-tab="vce-cookbook"]) [data-tab] {
   flex-shrink: 0;
   white-space: nowrap;
 }
