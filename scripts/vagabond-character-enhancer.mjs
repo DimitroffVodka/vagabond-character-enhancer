@@ -288,7 +288,8 @@ Hooks.once("ready", async () => {
               attackResult.critStatBonus = actor.getRollData().stats?.[attackResult.weaponSkill.stat]?.value || 0;
             }
 
-            // Damage roll (includes explosion check via _getExplodeValues)
+            // Always roll damage on hit for consumable alchemical weapons —
+            // the item is consumed after, so the "Roll Damage" button won't work.
             let damageRoll = null;
             const isHit = attackResult.isHit ?? false;
             if (isHit || attackResult.isCritical) {
