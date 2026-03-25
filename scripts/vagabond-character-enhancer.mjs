@@ -166,6 +166,22 @@ Hooks.once("ready", async () => {
 
     console.log(`${MODULE_ID} | Patched calculateFinalDamage for Rage DR + Tempest Within.`);
 
+    // --- Consumable weapons: force auto-roll damage ---
+    // When "roll damage with check" is off, the system shows a "Roll Damage" button.
+    // But consumable weapons get deleted after the attack, so the button can't read
+    // canExplode/explodeValues from the now-deleted item. We patch shouldRollDamage
+    // to return true when a consumable weapon attack is in progress.
+    const origShouldRoll = VagabondDamageHelper.shouldRollDamage;
+    VagabondDamageHelper.shouldRollDamage = function (isHit) {
+      if (VagabondDamageHelper._vceForceRollDamage) {
+        // Clear the flag after it's consumed — one-shot override
+        VagabondDamageHelper._vceForceRollDamage = false;
+        return true;
+      }
+      return origShouldRoll.call(this, isHit);
+    };
+    console.log(`${MODULE_ID} | Patched shouldRollDamage for consumable weapons.`);
+
     // --- Bloodthirsty: Favor on attacks vs wounded targets ---
     // Wrap item.rollAttack to upgrade favorHinder when attacker has Bloodthirsty
     // and any target is missing HP.
@@ -233,14 +249,25 @@ Hooks.once("ready", async () => {
             }
           }
         }
+        // Consumable weapons: force auto-roll damage so explosions work
+        // (the item is consumed after the attack, so "Roll Damage" button won't work)
+        const isConsumableWeapon = this.system?.isConsumable
+          && this.system?.equipmentType === "weapon";
+        if (isConsumableWeapon) {
+          VagabondDamageHelper._vceForceRollDamage = true;
+        }
+
         // Stash actor for Climax d6 explosion in buildAndEvaluateD20WithRollData
         _currentRollActor = actor;
         try {
           const result = await origRollAttack.call(this, actor, favorHinder);
           _currentRollActor = null;
+          // Don't clear _vceForceRollDamage here — shouldRollDamage() will
+          // consume it when the system calls it after rollAttack returns.
           return result;
         } catch (e) {
           _currentRollActor = null;
+          VagabondDamageHelper._vceForceRollDamage = false;
           throw e;
         }
       };
