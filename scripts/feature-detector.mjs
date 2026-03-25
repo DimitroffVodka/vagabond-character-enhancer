@@ -264,6 +264,10 @@ export const FeatureDetector = {
       }
     }
 
+    // Allow class feature modules to dynamically modify effect definitions
+    // (e.g., Valor scaling crit bonus with level, Deep Pockets scaling slots)
+    Hooks.callAll(`${MODULE_ID}.preSyncEffects`, actor, desiredEffects);
+
     // Remove effects that should no longer exist
     const toDelete = existingManaged.filter(e => {
       const key = e.getFlag(MODULE_ID, "effectKey");

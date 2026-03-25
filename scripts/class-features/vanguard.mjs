@@ -10,75 +10,66 @@ import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
 /* -------------------------------------------- */
 
 export const VANGUARD_REGISTRY = {
-  // L1: Stalwart
-  // You gain the Protector Perk and, when you take the Hold Action, you can use the
-  // held Action or Move as late as the end of your next Turn.
-  // Grants Perk: Protector — Block on behalf of an Ally that fails their Save against a Close Enemy's attack.
+  // L1: Stalwart — Protector Perk + extended Hold duration
+  // STATUS: flavor — Perk grant + action economy extension
   "stalwart": {
-    class: "vanguard",
-    level: 1,
-    flag: "vanguard_stalwart",
+    class: "vanguard", level: 1, flag: "vanguard_stalwart", status: "flavor",
     description: "Gain Protector Perk. Hold Action can be used as late as end of next Turn."
   },
 
-  // L1: Guard
-  // Once per Round, you can try to Shove a Close Target (no Action) when they become
-  // Close to you, or if you successfully Block their Attack.
+  // L1: Guard — Free Shove when enemy becomes Close or on Block
+  // STATUS: flavor — reaction-based, no mechanical enforcement
   "guard": {
-    class: "vanguard",
-    level: 1,
-    flag: "vanguard_guard",
-    description: "Once per Round, free Shove on a Close Target when they enter Close range or you Block their Attack."
+    class: "vanguard", level: 1, flag: "vanguard_guard", status: "flavor",
+    description: "Once per Round, free Shove attempt when a Target becomes Close or you Block their Attack."
   },
 
-  // L2: Rampant Charge
-  // You can push Targets you Shove ahead of you while you Move during the same Turn,
-  // shoving it Prone when you stop or push it into an occupied space. If you push it
-  // into an occupied space, it deals your weapon's damage to the Target and whatever
-  // occupied the space.
+  // L2: Rampant Charge — Push shoved targets during Move
+  // STATUS: flavor — movement-based combo, no automation needed
   "rampant charge": {
-    class: "vanguard",
-    level: 2,
-    flag: "vanguard_rampantCharge",
-    description: "Push Shoved Targets ahead while Moving. Prone on stop or collision. Collision deals weapon damage to both."
+    class: "vanguard", level: 2, flag: "vanguard_rampantCharge", status: "flavor",
+    description: "Push Shoved Targets ahead of you while Moving. Prone on stop or collision (deals weapon damage)."
   },
 
-  // L4: Wall
-  // You are considered Large for Shoves.
+  // L4: Wall — Considered Large for Shoves
+  // STATUS: module — Managed AE
+  // NOTE: The system may track "effective size for shoves" differently.
+  // If no specific field exists, this is informational only.
   "wall": {
-    class: "vanguard",
-    level: 4,
-    flag: "vanguard_wallLarge",
-    description: "You are considered Large for Shoves."
+    class: "vanguard", level: 4, flag: "vanguard_wall", status: "partial",
+    description: "Considered Large for Shoves.",
+    effects: [{
+      label: "Wall (Large)",
+      icon: "icons/environment/settlement/wall-shield.webp",
+      changes: []  // No clear system field for "shove size override"
+    }]
   },
 
-  // L6: Unstoppable
-  // If you use Rampant Charge and push a Being into another Being, you can make
-  // another shove attempt to push the additional Being ahead of you as well.
+  // L6: Unstoppable — Chain shoves during Rampant Charge
+  // STATUS: flavor — extends Rampant Charge, no automation
   "unstoppable": {
-    class: "vanguard",
-    level: 6,
-    flag: "vanguard_unstoppable",
-    description: "Rampant Charge collision: can Shove the additional Being ahead of you too."
+    class: "vanguard", level: 6, flag: "vanguard_unstoppable", status: "flavor",
+    description: "Rampant Charge can chain: push additional Beings you collide with."
   },
 
-  // L8: Wall Enhancement
-  // When you become an 8th Level Vanguard, you are considered Huge for Shoves.
+  // L8: Wall (Huge) — Considered Huge for Shoves
+  // STATUS: partial — same as Wall
   "wall (huge)": {
-    class: "vanguard",
-    level: 8,
-    flag: "vanguard_wallHuge",
-    description: "Wall upgrade: considered Huge for Shoves instead of Large."
+    class: "vanguard", level: 8, flag: "vanguard_wallHuge", status: "partial",
+    description: "Considered Huge for Shoves.",
+    effects: [{
+      label: "Wall (Huge)",
+      icon: "icons/environment/settlement/wall-shield.webp",
+      changes: []  // No clear system field for "shove size override"
+    }]
   },
 
-  // L10: Indestructible
-  // While you aren't Incapacitated and have an Armor Rating of 1 or more, you are
-  // Immune to attack damage.
+  // L10: Indestructible — Immune to attack damage with Armor ≥ 1
+  // STATUS: todo — needs hook on incoming attack damage to check armor and negate
+  // This is extremely powerful and needs careful implementation.
   "indestructible": {
-    class: "vanguard",
-    level: 10,
-    flag: "vanguard_indestructible",
-    description: "While not Incapacitated and Armor Rating 1+, Immune to attack damage."
+    class: "vanguard", level: 10, flag: "vanguard_indestructible", status: "todo",
+    description: "While not Incapacitated and Armor ≥ 1, Immune to attack damage."
   }
 };
 
@@ -87,11 +78,13 @@ export const VANGUARD_REGISTRY = {
 /* -------------------------------------------- */
 
 export const VanguardFeatures = {
+  _log(...args) {
+    if (game.settings.get(MODULE_ID, "debugMode")) {
+      console.log(`${MODULE_ID} | VanguardFeatures |`, ...args);
+    }
+  },
+
   registerHooks() {
-    // TODO: Implement runtime hooks
-    // - Wall: Store size override flag for Shove checks (Large at L4, Huge at L8)
-    // - Guard: Hook proximity/Block to trigger free Shove
-    // - Rampant Charge: Hook Shove + Move to push target
-    // - Indestructible: Conditional immunity (requires armor + not Incapacitated)
+    this._log("Hooks registered.");
   }
 };

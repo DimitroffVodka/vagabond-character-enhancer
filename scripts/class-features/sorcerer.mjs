@@ -10,77 +10,69 @@ import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
 /* -------------------------------------------- */
 
 export const SORCERER_REGISTRY = {
-  // L1: Glamour
-  // You can Cast Spells using Influence.
-  // Spells: You learn 4 Spells. You learn 1 other Spell every 2 Sorcerer Levels hereafter.
-  // Mana: Your Maximum Mana is equal to (4 x your Sorcerer Level), and the highest
-  // amount of Mana you can spend is equal to (Presence + half your Sorcerer Level, round up).
+  // L1: Glamour — Cast Spells using Influence
+  // STATUS: system
   "glamour": {
-    class: "sorcerer",
-    level: 1,
-    flag: "sorcerer_glamour",
-    description: "Cast Spells using Influence. Learn 4 Spells. Max Mana = 4 x Level."
+    class: "sorcerer", level: 1, flag: "sorcerer_glamour", status: "system",
+    description: "Cast Spells using Influence. Learn 4 Spells. Max Mana = 4 × Level."
   },
 
-  // L1: Tap
-  // You gain the Metamagic Perk. Further, when you Cast, you can reduce your Max HP
-  // to regain Mana equal to (2 x the reduction). This reduction ends when you Rest.
-  // If you die from this reduction, the Cast resolves before your death, and your
-  // body is vaporized.
-  // Grants Perk: Metamagic — The Maximum Mana you can spend on a Spell increases by 1. Can take multiple times.
+  // L1: Tap — Metamagic Perk + reduce Max HP to regain Mana
+  // STATUS: todo — needs custom UI for HP→Mana conversion
   "tap": {
-    class: "sorcerer",
-    level: 1,
-    flag: "sorcerer_tap",
-    description: "Gain Metamagic Perk. When Casting, reduce Max HP to regain Mana (2x the reduction). Resets on Rest."
+    class: "sorcerer", level: 1, flag: "sorcerer_tap", status: "todo",
+    description: "Gain Metamagic Perk. Reduce Max HP to regain Mana (2× the reduction). Restores on Rest."
   },
 
-  // L2: Spell-Slinger
-  // You Crit on Cast Checks on a roll of 19 to 20, and your Spells use a d8 damage
-  // die, rather than a d6.
+  // L2: Spell-Slinger — Crit on 19-20, spell die d8
+  // STATUS: module — Managed AE
   "spell-slinger": {
-    class: "sorcerer",
-    level: 2,
-    flag: "sorcerer_spellSlinger",
-    description: "Crit on Cast Checks on 19-20. Spells use d8 damage die instead of d6."
+    class: "sorcerer", level: 2, flag: "sorcerer_spellSlinger", status: "module",
+    description: "Crit on Cast Checks on 19-20. Spell damage die becomes d8.",
+    effects: [{
+      label: "Spell-Slinger",
+      icon: "icons/magic/lightning/bolt-strike-blue.webp",
+      changes: [
+        { key: "system.castCritBonus", mode: 2, value: "-1" },
+        { key: "system.spellDamageDieSize", mode: 5, value: "8" }
+      ]
+    }]
   },
 
-  // L4: Quickening
-  // You can skip your Move to Cast a Spell. No Mana can be spent on this Casting.
+  // L4: Quickening — Skip Move to Cast (no Mana)
+  // STATUS: flavor — action economy choice
   "quickening": {
-    class: "sorcerer",
-    level: 4,
-    flag: "sorcerer_quickening",
-    description: "Skip Move to Cast a Spell. No Mana can be spent on this Casting."
+    class: "sorcerer", level: 4, flag: "sorcerer_quickening", status: "flavor",
+    description: "Skip your Move to Cast a Spell (no Mana can be spent)."
   },
 
-  // L6: Arcane Anomaly
-  // You reduce damage you take from magic-based sources by half.
+  // L6: Arcane Anomaly — half damage from magic sources
+  // STATUS: todo — needs incoming damage hook for magic detection
   "arcane anomaly": {
-    class: "sorcerer",
-    level: 6,
-    flag: "sorcerer_arcaneAnomaly",
-    description: "Reduce magic-based damage taken by half."
+    class: "sorcerer", level: 6, flag: "sorcerer_arcaneAnomaly", status: "todo",
+    description: "Reduce damage from magic-based sources by half."
   },
 
-  // L8: Spell Twinning
-  // If you Cast the same Spell twice on a Turn, the second Cast Check is Favored.
+  // L8: Spell Twinning — 2nd cast of same spell is Favored
+  // STATUS: todo — needs turn-based spell tracking
   "spell twinning": {
-    class: "sorcerer",
-    level: 8,
-    flag: "sorcerer_spellTwinning",
-    description: "Casting the same Spell twice on a Turn: second Cast Check is Favored."
+    class: "sorcerer", level: 8, flag: "sorcerer_spellTwinning", status: "todo",
+    description: "If you Cast the same Spell twice on a Turn, the second Cast Check is Favored."
   },
 
-  // L10: Overpowered
-  // You Crit on Cast Checks on a roll of 18 to 20. Further, when you Cast, you can
-  // choose to gain 2 Fatigue. If you do, you regain Cd6 Mana at the start of your
-  // Turns, and you can spend as much Mana as you like to Cast.
+  // L10: Overpowered — Crit on 18-20 + Fatigue for Mana regen
+  // STATUS: module (crit) + todo (fatigue/mana)
   "overpowered": {
-    class: "sorcerer",
-    level: 10,
-    flag: "sorcerer_overpowered",
-    description: "Crit on Cast Checks 18-20. Gain 2 Fatigue to regain Cd6 Mana per Turn and remove Mana spending cap."
+    class: "sorcerer", level: 10, flag: "sorcerer_overpowered", status: "module",
+    description: "Crit on Cast Checks on 18-20. Can gain 2 Fatigue to regain Cd6 Mana and remove Mana cap.",
+    effects: [{
+      label: "Overpowered",
+      icon: "icons/magic/lightning/bolt-strike-purple.webp",
+      changes: [
+        // Additional -1 on top of Spell-Slinger's -1 = total -2 = crit on 18
+        { key: "system.castCritBonus", mode: 2, value: "-1" }
+      ]
+    }]
   }
 };
 
@@ -89,13 +81,13 @@ export const SORCERER_REGISTRY = {
 /* -------------------------------------------- */
 
 export const SorcererFeatures = {
+  _log(...args) {
+    if (game.settings.get(MODULE_ID, "debugMode")) {
+      console.log(`${MODULE_ID} | SorcererFeatures |`, ...args);
+    }
+  },
+
   registerHooks() {
-    // TODO: Implement runtime hooks
-    // - Spell-Slinger: Managed AE on castCritBonus + spellDamageDieSize
-    // - Tap: Hook casting to offer HP-for-Mana trade
-    // - Quickening: Hook casting to allow Move-skip casting (no Mana)
-    // - Arcane Anomaly: Hook damage to halve magic damage
-    // - Spell Twinning: Track same-spell casts per turn, grant Favor
-    // - Overpowered: Extend crit range + Fatigue-for-Mana option
+    this._log("Hooks registered.");
   }
 };

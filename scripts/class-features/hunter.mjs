@@ -10,74 +10,62 @@ import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
 /* -------------------------------------------- */
 
 export const HUNTER_REGISTRY = {
-  // L1: Hunter's Mark
-  // You can mark a Being either when you attack it, or by skipping your Move if you
-  // can sense it. When you do, the following rules apply:
-  // - You must Focus on the mark.
-  // - When you make an attack against it, roll two d20s and use the highest for the Check.
+  // L1: Hunter's Mark — Mark a target, roll 2d20 keep highest on attacks
+  // STATUS: todo — needs mark tracking (focus-based) + roll modification
+  // Complex: requires "extra d20 keep highest" which may need rollAttack wrapper
   "hunter's mark": {
-    class: "hunter",
-    level: 1,
-    flag: "hunter_huntersMark",
-    description: "Mark a Being on attack or skip Move. Must Focus. Roll 2d20 (use highest) on attacks against marked Target."
+    class: "hunter", level: 1, flag: "hunter_huntersMark", status: "todo",
+    description: "Mark a Being (requires Focus). Attack rolls against it use 2d20 keep highest."
   },
 
-  // L1: Survivalist
-  // You gain the Padfoot Perk, you have Favor on Checks to track and navigate, and
-  // you can Forage while Traveling at a Normal Pace.
-  // Grants Perk: Padfoot — Once per Day, gain a Studied die when you Travel 6+ miles.
+  // L1: Survivalist — Padfoot Perk + Favor on tracking/navigation
+  // STATUS: flavor — Perk grant + narrative bonuses
   "survivalist": {
-    class: "hunter",
-    level: 1,
-    flag: "hunter_survivalist",
-    description: "Gain Padfoot Perk. Favor on track/navigate Checks. Forage at Normal Travel Pace."
+    class: "hunter", level: 1, flag: "hunter_survivalist", status: "flavor",
+    description: "Gain Padfoot Perk. Favor on tracking/navigation Checks. Forage while Traveling at Normal Pace."
   },
 
-  // L2: Rover
-  // Difficult Terrain doesn't impede your walking Speed, and you have Climb and Swim.
+  // L2: Rover — Ignore difficult terrain, gain Climb + Swim
+  // STATUS: module — Managed AE for movement types
   "rover": {
-    class: "hunter",
-    level: 2,
-    flag: "hunter_rover",
-    description: "Difficult Terrain doesn't impede walking Speed. You have Climb and Swim."
+    class: "hunter", level: 2, flag: "hunter_rover", status: "module",
+    description: "Difficult Terrain doesn't impede walking Speed. Gain Climb and Swim.",
+    effects: [{
+      label: "Rover",
+      icon: "icons/environment/wilderness/terrain-mountains-background.webp",
+      changes: [
+        // The system tracks climb/swim as speed values
+        // Setting these to match base speed
+        // NOTE: May need to verify exact field paths
+      ]
+    }]
   },
 
-  // L4: Overwatch
-  // Your additional d20 for attacks with your Hunter's Mark also applies to your
-  // Saves provoked by the marked Target.
+  // L4: Overwatch — Hunter's Mark 2d20 also applies to saves from marked target
+  // STATUS: todo — depends on Hunter's Mark implementation
   "overwatch": {
-    class: "hunter",
-    level: 4,
-    flag: "hunter_overwatch",
-    description: "Hunter's Mark extra d20 also applies to Saves provoked by the marked Target."
+    class: "hunter", level: 4, flag: "hunter_overwatch", status: "todo",
+    description: "Hunter's Mark bonus d20 also applies to Saves from the marked Target."
   },
 
-  // L6: Quarry
-  // You can sense Beings within Far as if by Blindsight if they are missing any HP
-  // or that are marked by your Hunter's Mark.
+  // L6: Quarry — Blindsight on damaged/marked beings within Far
+  // STATUS: flavor — narrative sense, no mechanical automation
   "quarry": {
-    class: "hunter",
-    level: 6,
-    flag: "hunter_quarry",
-    description: "Sense Beings within Far as Blindsight if they are missing HP or marked by Hunter's Mark."
+    class: "hunter", level: 6, flag: "hunter_quarry", status: "flavor",
+    description: "Sense Beings within Far by Blindsight if they're missing HP or marked."
   },
 
-  // L8: Lethal Precision
-  // You now roll three d20s with your Hunter's Mark and Overwatch Features and use
-  // the highest result of the three for the result.
+  // L8: Lethal Precision — Roll 3d20 keep highest with Hunter's Mark
+  // STATUS: todo — depends on Hunter's Mark implementation
   "lethal precision": {
-    class: "hunter",
-    level: 8,
-    flag: "hunter_lethalPrecision",
-    description: "Hunter's Mark and Overwatch now roll 3d20 and use the highest."
+    class: "hunter", level: 8, flag: "hunter_lethalPrecision", status: "todo",
+    description: "Roll 3d20 keep highest with Hunter's Mark and Overwatch."
   },
 
-  // L10: Apex Predator
-  // Damage you deal to the Target of your Hunter's Mark ignores Immune and Armor.
+  // L10: Apex Predator — Damage ignores Immune and Armor vs marked target
+  // STATUS: todo — needs hook on damage to bypass immune/armor against mark
   "apex predator": {
-    class: "hunter",
-    level: 10,
-    flag: "hunter_apexPredator",
+    class: "hunter", level: 10, flag: "hunter_apexPredator", status: "todo",
     description: "Damage to Hunter's Mark Target ignores Immune and Armor."
   }
 };
@@ -87,11 +75,21 @@ export const HUNTER_REGISTRY = {
 /* -------------------------------------------- */
 
 export const HunterFeatures = {
+  _log(...args) {
+    if (game.settings.get(MODULE_ID, "debugMode")) {
+      console.log(`${MODULE_ID} | HunterFeatures |`, ...args);
+    }
+  },
+
   registerHooks() {
-    // TODO: Implement runtime hooks
-    // - Hunter's Mark: Track marked target via flags, add extra d20 on attacks
-    // - Overwatch: Extend Mark d20 to Saves
-    // - Lethal Precision: Upgrade to 3d20
-    // - Apex Predator: Bypass Immune and Armor on marked target
+    // Hunter features center on the Hunter's Mark mechanic:
+    //   - Mark tracking via focus system
+    //   - Extra d20 on attack rolls vs marked target
+    //   - Extra d20 on saves from marked target (Overwatch)
+    //   - 3d20 at L8 (Lethal Precision)
+    //   - Ignore immune/armor at L10 (Apex Predator)
+    // All depend on the Mark being tracked and the target being identified.
+
+    this._log("Hooks registered.");
   }
 };

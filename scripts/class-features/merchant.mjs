@@ -10,76 +10,54 @@ import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
 /* -------------------------------------------- */
 
 export const MERCHANT_REGISTRY = {
-  // L1: Gold Sink
-  // You gain the Deft Hands Perk, and can take the Use Action to place nonmagical
-  // valuables into a container and close it. You can then open that container to
-  // replace the valuables with an Item of equal or lesser value. This Item can't
-  // be a Relic or similar magic item.
-  // Grants Perk: Deft Hands — You can skip your Move to take the Use Action.
+  // L1: Gold Sink — Deft Hands Perk + item transmutation
+  // STATUS: todo — Gold Sink needs custom UI for item placement/retrieval
   "gold sink": {
-    class: "merchant",
-    level: 1,
-    flag: "merchant_goldSink",
-    description: "Gain Deft Hands Perk. Use Action to place valuables in container → open to get Item of equal/lesser value (no Relics)."
+    class: "merchant", level: 1, flag: "merchant_goldSink", status: "todo",
+    description: "Gain Deft Hands Perk. Place nonmagical valuables in container → replace with Item of equal or lesser value."
   },
 
-  // L1: Deep Pockets
-  // You have an extra number of Item Slots equal to (half your Merchant Level, round up).
+  // L1: Deep Pockets — Extra item slots
+  // STATUS: module — Managed AE on inventory.bonusSlots
   "deep pockets": {
-    class: "merchant",
-    level: 1,
-    flag: "merchant_deepPockets",
-    description: "Extra Item Slots equal to (ceil Merchant Level / 2)."
+    class: "merchant", level: 1, flag: "merchant_deepPockets", status: "module",
+    description: "Extra Item Slots equal to half your Merchant Level (round up).",
+    effects: []  // Populated dynamically — scales with level
   },
 
-  // L2: Bang for Your Buck
-  // When you use an Item with limited uses, you can spend 1 Luck and roll a d10.
-  // If the result is lower than your remaining Luck, the Item is not expended.
+  // L2: Bang for Your Buck — Luck to not expend items
+  // STATUS: todo — needs hook on item use to roll refund die
   "bang for your buck": {
-    class: "merchant",
-    level: 2,
-    flag: "merchant_bangForYourBuck",
-    description: "On limited-use Item, spend 1 Luck and roll d10. If lower than remaining Luck, Item not expended."
+    class: "merchant", level: 2, flag: "merchant_bangForYourBuck", status: "todo",
+    description: "When using an Item, spend 1 Luck and roll d10. If lower than remaining Luck, Item not expended."
   },
 
-  // L4: Diamond Hands
-  // You can spend a Shift to remove one Power from a non-Fabled Relic or expend
-  // valuables of equal or higher value to add a Power to an Item.
+  // L4: Diamond Hands — Remove/add Relic powers
+  // STATUS: flavor — downtime activity, no automation needed
   "diamond hands": {
-    class: "merchant",
-    level: 4,
-    flag: "merchant_diamondHands",
-    description: "Spend a Shift to remove/add a Power from a non-Fabled Relic using valuables."
+    class: "merchant", level: 4, flag: "merchant_diamondHands", status: "flavor",
+    description: "Spend a Shift to transfer a Power from one Relic to another Item."
   },
 
-  // L6: Treasure Seeker
-  // You can sense gold, gems, and Relics within Near as if by Telepathy. This sense
-  // is specific enough to tell you where they are, but not what they are.
+  // L6: Treasure Seeker — Sense gold/gems/Relics within Near
+  // STATUS: flavor — narrative sense, no mechanical automation
   "treasure seeker": {
-    class: "merchant",
-    level: 6,
-    flag: "merchant_treasureSeeker",
-    description: "Sense gold, gems, and Relics within Near (location but not identity)."
+    class: "merchant", level: 6, flag: "merchant_treasureSeeker", status: "flavor",
+    description: "Sense gold, gems, and Relics within Near as if by Telepathy."
   },
 
-  // L8: Bang for Your Buck Enhancement
-  // When you become an 8th Level Merchant, the d10 is a d8.
+  // L8: Bang for Your Buck (d8) — Upgrade refund die
+  // STATUS: todo — depends on L2 implementation
   "bang for your buck (d8)": {
-    class: "merchant",
-    level: 8,
-    flag: "merchant_bangForYourBuckD8",
+    class: "merchant", level: 8, flag: "merchant_bangForYourBuckD8", status: "todo",
     description: "Bang for Your Buck upgrade: roll d8 instead of d10."
   },
 
-  // L10: Top Shelf
-  // Once per week, you can pull a Relic from your Gold Sink Feature with a value no
-  // higher than (your Merchant Level x 200g), otherwise obeying all the rules for
-  // using that Feature.
+  // L10: Top Shelf — Pull Relic from Gold Sink
+  // STATUS: flavor — weekly downtime, no automation
   "top shelf": {
-    class: "merchant",
-    level: 10,
-    flag: "merchant_topShelf",
-    description: "Once per week, pull a Relic from Gold Sink worth up to (Merchant Level x 200g)."
+    class: "merchant", level: 10, flag: "merchant_topShelf", status: "flavor",
+    description: "Once per week, pull a Relic from Gold Sink (value ≤ Level × 200g)."
   }
 };
 
@@ -88,11 +66,42 @@ export const MERCHANT_REGISTRY = {
 /* -------------------------------------------- */
 
 export const MerchantFeatures = {
+  _log(...args) {
+    if (game.settings.get(MODULE_ID, "debugMode")) {
+      console.log(`${MODULE_ID} | MerchantFeatures |`, ...args);
+    }
+  },
+
+  _hasFeature(actor, flag) {
+    return actor.getFlag(MODULE_ID, `features.${flag}`);
+  },
+
   registerHooks() {
-    // TODO: Implement runtime hooks
-    // - Deep Pockets: Managed AE on bonus Item Slots (scales with level)
-    // - Bang for Your Buck: Hook item use to offer Luck refund roll
-    // - Diamond Hands: UI for Relic power management
-    // - Treasure Seeker: Sense ability (possibly just flavor/GM tool)
+    // Deep Pockets: Dynamic AE based on level
+    Hooks.on(`${MODULE_ID}.preSyncEffects`, (actor, desiredEffects) => {
+      this._applyDeepPocketsScaling(actor, desiredEffects);
+    });
+
+    this._log("Hooks registered.");
+  },
+
+  /**
+   * Calculate Deep Pockets bonus slots: ceil(merchantLevel / 2)
+   */
+  _applyDeepPocketsScaling(actor, desiredEffects) {
+    const key = "merchant_deepPockets_Deep Pockets";
+    const effectDef = desiredEffects.get(key);
+    if (!effectDef) return;
+
+    const level = actor.system.attributes?.level?.value ?? 1;
+    const bonusSlots = Math.ceil(level / 2);
+
+    effectDef.label = `Deep Pockets (+${bonusSlots} slots)`;
+    effectDef.icon = "icons/containers/bags/pouch-leather-tan.webp";
+    effectDef.changes = [
+      { key: "system.inventory.bonusSlots", mode: 2, value: `${bonusSlots}` }
+    ];
+
+    this._log(`Deep Pockets: Level ${level} → +${bonusSlots} inventory slots`);
   }
 };

@@ -10,74 +10,56 @@ import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
 /* -------------------------------------------- */
 
 export const GUNSLINGER_REGISTRY = {
-  // L1: Quick Draw
-  // You gain the Marksmanship Perk. Further, when combat occurs, you can make one
-  // Ranged attack before the first Turn, which is Hindered if it is made with a 2H Weapon.
-  // Grants Perk: Marksmanship — Ranged Weapon damage dice are one size larger.
+  // L1: Quick Draw — Marksmanship Perk + free ranged attack before combat
+  // STATUS: todo — Pre-combat attack needs combat start hook
   "quick draw": {
-    class: "gunslinger",
-    level: 1,
-    flag: "gunslinger_quickDraw",
-    description: "Gain Marksmanship Perk. Make one Ranged attack before first Turn of Combat (Hindered if 2H)."
+    class: "gunslinger", level: 1, flag: "gunslinger_quickDraw", status: "todo",
+    description: "Gain Marksmanship Perk. Make one Ranged attack before first Turn (Hindered if 2H)."
   },
 
-  // L1: Deadeye
-  // After you pass a Ranged Check, you Crit on subsequent Ranged attacks on a d20
-  // roll 1 lower, but no lower than 17. This resets to 0 at the end of your Turn
-  // if you didn't pass a Ranged Check since your last Turn.
+  // L1: Deadeye — Cascading crit threshold on consecutive hits
+  // STATUS: todo — Needs turn-based crit tracker that resets end of turn
+  // Complex: after passing Ranged Check, lower crit by 1 (min 17). Resets if
+  // no Ranged Check passed since last Turn.
   "deadeye": {
-    class: "gunslinger",
-    level: 1,
-    flag: "gunslinger_deadeye",
-    description: "After passing a Ranged Check, crit threshold lowers by 1 on subsequent Ranged attacks (min 17). Resets on miss."
+    class: "gunslinger", level: 1, flag: "gunslinger_deadeye", status: "todo",
+    description: "Each passed Ranged Check lowers crit by 1 (min 17). Resets end of Turn if no hit."
   },
 
-  // L2: Skeet Shooter
-  // Once per Round, you can make a Ranged attack on an Off-Turn to Target a
-  // projectile from an attack you can see. If you pass, reduce the damage of the
-  // triggering attack by the damage you would deal with your attack.
+  // L2: Skeet Shooter — Off-Turn ranged attack to reduce projectile damage
+  // STATUS: flavor — Reaction attack, no mechanical automation needed
   "skeet shooter": {
-    class: "gunslinger",
-    level: 2,
-    flag: "gunslinger_skeetShooter",
-    description: "Once per Round, Ranged attack Off-Turn to shoot down a projectile. Pass reduces triggering attack's damage."
+    class: "gunslinger", level: 2, flag: "gunslinger_skeetShooter", status: "flavor",
+    description: "Once per Round, make Off-Turn Ranged attack to reduce incoming projectile damage."
   },
 
-  // L4: Grit
-  // When you Crit on a Ranged attack, the damage dice can explode.
+  // L4: Grit — Exploding damage dice on Ranged crits
+  // STATUS: todo — needs hook on ranged crit to enable exploding
   "grit": {
-    class: "gunslinger",
-    level: 4,
-    flag: "gunslinger_grit",
-    description: "Ranged Crit damage dice can explode."
+    class: "gunslinger", level: 4, flag: "gunslinger_grit", status: "todo",
+    description: "When you Crit on Ranged attack, damage dice can explode."
   },
 
-  // L6: Devastator
-  // When you reduce an Enemy to 0 HP, the roll on the d20 to Crit as per your
-  // Deadeye Feature is immediately set to 17.
+  // L6: Devastator — Kill enemy → set Deadeye crit to 17
+  // STATUS: todo — depends on Deadeye implementation
   "devastator": {
-    class: "gunslinger",
-    level: 6,
-    flag: "gunslinger_devastator",
-    description: "Killing an Enemy instantly sets Deadeye crit threshold to 17."
+    class: "gunslinger", level: 6, flag: "gunslinger_devastator", status: "todo",
+    description: "Reduce an Enemy to 0 HP → Deadeye crit immediately set to 17."
   },
 
-  // L8: Bad Medicine
-  // You deal an extra die of damage when you Crit with a Ranged Check.
+  // L8: Bad Medicine — Extra damage die on Ranged crits
+  // STATUS: todo — needs hook on ranged crit to add extra die
+  // NOTE: Could be a managed AE if the system has a field for "extra crit dice"
   "bad medicine": {
-    class: "gunslinger",
-    level: 8,
-    flag: "gunslinger_badMedicine",
-    description: "Extra damage die on Ranged Crit."
+    class: "gunslinger", level: 8, flag: "gunslinger_badMedicine", status: "todo",
+    description: "Extra die of damage when you Crit with a Ranged Check."
   },
 
-  // L10: High Noon
-  // Once per Turn, if you Crit on a Ranged Check, you can make one additional attack.
+  // L10: High Noon — Crit on Ranged → extra attack
+  // STATUS: todo — needs hook on ranged crit to grant extra attack
   "high noon": {
-    class: "gunslinger",
-    level: 10,
-    flag: "gunslinger_highNoon",
-    description: "Once per Turn, Ranged Crit grants one additional attack."
+    class: "gunslinger", level: 10, flag: "gunslinger_highNoon", status: "todo",
+    description: "Once per Turn, Crit on Ranged → make one additional attack."
   }
 };
 
@@ -86,12 +68,20 @@ export const GUNSLINGER_REGISTRY = {
 /* -------------------------------------------- */
 
 export const GunslingerFeatures = {
+  _log(...args) {
+    if (game.settings.get(MODULE_ID, "debugMode")) {
+      console.log(`${MODULE_ID} | GunslingerFeatures |`, ...args);
+    }
+  },
+
   registerHooks() {
-    // TODO: Implement runtime hooks
-    // - Deadeye: Track consecutive hits via flags, adjust crit threshold
-    // - Grit: Add exploding to crit ranged damage
-    // - Devastator: Reset Deadeye counter on kill
-    // - Bad Medicine: Add extra damage die on ranged crit
-    // - High Noon: Grant extra attack on crit
+    // Gunslinger features are heavily roll-result dependent.
+    // Most need hooks on:
+    //   - Ranged attack results (Deadeye crit tracker)
+    //   - Ranged crits (Grit exploding, Bad Medicine extra die, High Noon extra attack)
+    //   - Enemy death (Devastator → set Deadeye to 17)
+    //   - Combat start (Quick Draw pre-Turn attack)
+
+    this._log("Hooks registered.");
   }
 };
