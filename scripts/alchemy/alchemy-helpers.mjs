@@ -1059,9 +1059,18 @@ export async function craftItem(actor, itemName, isFormula) {
     if (alcData.level >= 8) {
       // Big Bang: explode on two highest values + bonus d6
       updates["system.explodeValues"] = `${maxFace},${maxFace - 1}`;
-      // Add +d6 to the appropriate damage field
+      // Add +d6 to the appropriate damage field.
+      // NOTE: For weapons, currentDamage is a DERIVED field computed from
+      // damageOneHand/damageTwoHands based on grip — setting it directly
+      // gets overwritten on the next derivation. We must update the source
+      // fields (damageOneHand) instead.
       if (isOffensiveType(itemData)) {
-        updates["system.currentDamage"] = `${currentDmg} + 1d6`;
+        const oneHand = createdItem.system.damageOneHand || currentDmg;
+        updates["system.damageOneHand"] = `${oneHand} + 1d6`;
+        // Also update damageTwoHands if it exists (for versatile weapons)
+        if (createdItem.system.damageTwoHands) {
+          updates["system.damageTwoHands"] = `${createdItem.system.damageTwoHands} + 1d6`;
+        }
       } else if (currentDmg) {
         updates["system.damageAmount"] = `${currentDmg} + 1d6`;
       }
