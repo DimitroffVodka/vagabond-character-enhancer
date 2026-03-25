@@ -35,6 +35,65 @@ export const PolymorphManager = {
     }
   },
 
+  /**
+   * API for Vagabond Crawler integration.
+   * Returns beast action menu data if the actor is currently polymorphed,
+   * or null if not polymorphed.
+   * @param {Actor} actor
+   * @returns {object|null} { beastName, actions: [{label, dmg, type, index}], favorites: [{name, img}] }
+   */
+  getPolymorphMenuData(actor) {
+    if (!actor) return null;
+    const polyData = actor.getFlag(MODULE_ID, "polymorphData");
+
+    // Beast actions (only when polymorphed)
+    let beastActions = [];
+    if (polyData) {
+      beastActions = (polyData.actions || [])
+        .map((a, i) => ({ ...a, _origIndex: i }))
+        .filter(a => !a.isMultiAttackHeader && (a.rollDamage || a.flatDamage))
+        .map(a => {
+          const dmg = a.rollDamage || a.flatDamage || "";
+          return {
+            label: `${polyData.beastName}: ${a.name}`,
+            dmg: dmg ? `<span class="vcs-menu-dmg">${dmg}</span>` : "",
+            type: "beastaction",
+            index: a._origIndex,
+          };
+        });
+    }
+
+    // Favorited beasts (for transform dropdown, always available for druids)
+    const features = actor.getFlag(MODULE_ID, "features");
+    const isDruid = !!(features?.druid_feralShift || features?.druid_primalMystic);
+    let favorites = [];
+    if (isDruid) {
+      const favNames = actor.getFlag(MODULE_ID, "beastFavorites") || [];
+      if (favNames.length > 0) {
+        // Load from cache if available
+        const BeastCacheRef = globalThis._vceBeastCache;
+        if (BeastCacheRef?._ready) {
+          const level = actor.system.attributes?.level?.value ?? 1;
+          const allBeasts = BeastCacheRef.getAvailableBeasts(level);
+          favorites = favNames
+            .map(name => allBeasts.find(b => b.name === name))
+            .filter(Boolean)
+            .map(b => ({ name: b.name, img: b.img || "icons/svg/mystery-man.svg" }));
+        }
+      }
+    }
+
+    if (beastActions.length === 0 && favorites.length === 0) return null;
+
+    return {
+      isPolymorphed: !!polyData,
+      beastName: polyData?.beastName || null,
+      actions: beastActions,
+      favorites,
+      isDruid,
+    };
+  },
+
   /* -------------------------------------------- */
   /*  Focus Triggers                              */
   /* -------------------------------------------- */

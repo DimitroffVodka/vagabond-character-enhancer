@@ -850,6 +850,8 @@ Hooks.once("ready", async () => {
 
   // Initialize beast cache from compendiums
   BeastCache.initialize();
+  // Expose globally for polymorph manager API (used by Vagabond Crawler)
+  globalThis._vceBeastCache = BeastCache;
 
   // Expose populate function for GM use: game.modules.get("vagabond-character-enhancer").populateBeasts()
   const mod = game.modules.get(MODULE_ID);
