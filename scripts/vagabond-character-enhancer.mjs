@@ -930,6 +930,28 @@ Hooks.once("ready", async () => {
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
     virtuoso: (actor) => BardFeatures.useVirtuoso(actor),
+    stepUp: (actor) => DancerFeatures.performStepUp(actor),
+    /** API for Vagabond Crawler: get Step Up menu data for a dancer actor */
+    getStepUpData: (actor) => {
+      if (!actor) return null;
+      const features = actor.getFlag(MODULE_ID, "features");
+      if (!features?.dancer_stepUp) return null;
+      // Get ally tokens on canvas
+      const allyTokens = canvas.tokens?.placeables?.filter(t => {
+        if (!t.actor || t.actor.id === actor.id) return false;
+        return t.actor.type === "character";
+      }) ?? [];
+      return {
+        hasDancer: true,
+        hasChoreographer: !!features.dancer_choreographer,
+        hasDoubleTime: !!features.dancer_doubleTime,
+        allies: allyTokens.map(t => ({
+          id: t.actor.id, name: t.actor.name, img: t.actor.img,
+        })),
+        /** Call this to trigger Step Up from the crawler with selected ally IDs */
+        useStepUp: (allyIds) => DancerFeatures._executeStepUpFromTab(actor, allyIds, features),
+      };
+    },
     /** API for Vagabond Crawler: get Virtuoso menu data for a bard actor */
     getVirtuosoData: (actor) => {
       if (!actor) return null;

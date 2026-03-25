@@ -247,7 +247,9 @@ export const DancerFeatures = {
   /* -------------------------------------------- */
 
   _registerStepUpHooks() {
-    // Intercept "Step Up" relic item usage from character sheet
+    // Legacy fallback: intercept "Step Up" relic item usage from character sheet.
+    // Primary path is now the inline Step Up tab + Vagabond Crawler integration.
+    // This hook is kept for backward compatibility if a player still has the relic equipped.
     Hooks.on("preCreateChatMessage", (message) => {
       if (!game.user.isGM) return;
       const itemId = message.flags?.vagabond?.itemId;
