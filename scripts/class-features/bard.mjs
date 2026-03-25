@@ -1066,13 +1066,54 @@ export const BardFeatures = {
 
     // Bind buff buttons
     this._bindVirtuosoEvents(virtuosoSection, actor);
+
+    // Update Starstruck preview when targets change
+    if (features?.bard_starstruck) {
+      const self = this;
+      const hookId = Hooks.on("targetToken", () => {
+        const starstruckContainer = virtuosoSection.querySelector(".vce-virt-starstruck");
+        if (!starstruckContainer) return;
+        // Rebuild just the starstruck section
+        const targets = Array.from(game.user.targets);
+        const npcTargets = targets.filter(t => t.actor?.type === "npc");
+        if (npcTargets.length > 0) {
+          const targetCards = npcTargets.map(t => `
+            <div class="vce-virt-target">
+              <img src="${t.document.texture.src}" class="vce-virt-target-img" alt="${t.name}" />
+              <span class="vce-virt-target-name">${t.name}</span>
+            </div>
+          `).join("");
+          starstruckContainer.className = "vce-virt-starstruck";
+          starstruckContainer.innerHTML = `
+            <h3 class="vce-virt-section-title">
+              <i class="fas fa-star" aria-hidden="true"></i> Starstruck Target
+            </h3>
+            <div class="vce-virt-targets">${targetCards}</div>
+            <p class="vce-virt-hint">Debuff applied after successful Virtuoso</p>`;
+        } else {
+          starstruckContainer.className = "vce-virt-starstruck vce-virt-no-target";
+          starstruckContainer.innerHTML = `
+            <h3 class="vce-virt-section-title">
+              <i class="fas fa-star" aria-hidden="true"></i> Starstruck
+            </h3>
+            <p class="vce-virt-hint">No enemy targeted — target an NPC to apply Starstruck debuff</p>`;
+        }
+      });
+      // Clean up hook when sheet closes
+      const closeHookId = Hooks.on("closeApplicationV2", (closedApp) => {
+        if (closedApp === sheet) {
+          Hooks.off("targetToken", hookId);
+          Hooks.off("closeApplicationV2", closeHookId);
+        }
+      });
+    }
   },
 
   _buildVirtuosoHTML(actor, features) {
     const hasStarstruck = !!features?.bard_starstruck;
     const hasClimax = !!features?.bard_climax;
     const performanceSkill = actor.system?.skills?.performance;
-    const performanceValue = performanceSkill?.value ?? "?";
+    const performanceValue = performanceSkill?.difficulty ?? "?";
 
     // Check current Virtuoso buff
     const currentBuff = actor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
@@ -1265,14 +1306,11 @@ export const BardFeatures = {
         rolls: [roll],
       });
 
-      // On success: apply the buff
+      // On success: apply the buff.
+      // NOTE: _applyVirtuosoBuff already chains _handleStarstruck internally,
+      // so we do NOT call _handleStarstruck here — that caused a double dialog.
       if (isSuccess) {
         await this._applyVirtuosoBuff(actor, chosenBuff);
-
-        // Starstruck: apply status debuff to targeted enemy
-        if (this._hasFeature(actor, "bard_starstruck")) {
-          await this._handleStarstruck(actor);
-        }
       }
     } catch (e) {
       console.error(`${MODULE_ID} | Bard | Virtuoso from tab failed:`, e);

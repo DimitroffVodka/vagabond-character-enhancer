@@ -1124,9 +1124,11 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
 .vce-virt-buff-btn > i {
   font-size: 20px;
   color: var(--vce-accent);
-  width: 24px;
+  width: 28px;
+  min-width: 28px;
   text-align: center;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .vce-virt-buff-info {
