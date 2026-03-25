@@ -256,6 +256,50 @@ Hooks.once("ready", async () => {
     if (VagabondItem?.prototype?.roll) {
       const origItemRoll = VagabondItem.prototype.roll;
       VagabondItem.prototype.roll = async function (event, targetsAtRollTime = []) {
+        // --- Alchemical weapons: redirect "Use" to proper attack flow ---
+        // When a player right-clicks an alchemical weapon and presses "Use",
+        // the default item.roll() path skips rollDamage() (and thus explosions).
+        // Redirect to the full attack flow so canExplode/explodeValues work.
+        if (this.type === "equipment" && this.system.equipmentType === "weapon"
+            && this.system.alchemicalType) {
+          const actor = this.actor;
+          if (!actor) return origItemRoll.call(this, event, targetsAtRollTime);
+
+          try {
+            const { VagabondChatCard } = globalThis.vagabond.utils;
+            const { VagabondDamageHelper } = globalThis.vagabond.utils;
+
+            // Capture targets before the roll
+            const targets = Array.from(game.user.targets).map(t => ({
+              tokenId: t.id, sceneId: t.scene.id,
+              actorId: t.actor?.id, actorName: t.name, actorImg: t.document.texture.src,
+            }));
+
+            const favorHinder = actor.system?.favorHinder || "none";
+            const attackResult = await this.rollAttack(actor, favorHinder);
+            if (!attackResult) return;
+
+            // Crit stat bonus
+            if (attackResult.isCritical && attackResult.weaponSkill?.stat) {
+              attackResult.critStatBonus = actor.getRollData().stats?.[attackResult.weaponSkill.stat]?.value || 0;
+            }
+
+            // Damage roll (includes explosion check via _getExplodeValues)
+            let damageRoll = null;
+            if (VagabondDamageHelper.shouldRollDamage(attackResult.isHit)) {
+              damageRoll = await this.rollDamage(actor, attackResult.isCritical, attackResult.weaponSkill?.stat ?? null);
+            }
+
+            await VagabondChatCard.weaponAttack(actor, this, attackResult, damageRoll, targets);
+            await this.handleConsumption?.();
+            return attackResult.roll;
+          } catch (e) {
+            console.error(`${MODULE_ID} | Alchemical weapon attack failed:`, e);
+            ui.notifications.error("Alchemical attack failed — check console.");
+            return;
+          }
+        }
+
         // Only intercept equipment items with healing damageType
         if (this.type === "equipment" && this.system.damageType === "healing") {
           let hasInspiration = false;

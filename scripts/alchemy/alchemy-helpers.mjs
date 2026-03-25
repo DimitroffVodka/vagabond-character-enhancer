@@ -1015,19 +1015,24 @@ export async function craftItem(actor, itemName, isFormula) {
     newItemData.name = `${itemData.name} (Weapon)`;
   } else {
     newItemData = prepareForInventory(itemData);
-    // Self-use consumables: strip damage fields so the system doesn't treat
-    // them as attack items. Our useConsumable() handles the actual effect.
+    // Keep damage fields intact for healing items so the system handles
+    // healing natively (damageType: "healing", damageAmount: "1d6+1", etc.)
+    // Only strip damage fields for non-healing consumables that have custom
+    // effects handled by useConsumable().
     const consEffect = getConsumableEffect(itemData.name);
-    if (consEffect) {
+    if (consEffect && newItemData.system?.damageType !== "healing") {
       if (newItemData.system) {
         newItemData.system.damageAmount = "";
         newItemData.system.damageType = "-";
       }
     }
-    // Mark non-weapon alchemical items as equipped so they appear in the
-    // sliding panel immediately — no need to manually equip potions etc.
+    // Mark as consumable and equipped so they appear in the sliding panel
     if (newItemData.system) {
       newItemData.system.equipped = true;
+      if (newItemData.system.damageType === "healing") {
+        newItemData.system.isConsumable = true;
+        newItemData.system.locked = true;
+      }
     }
   }
 
@@ -1041,9 +1046,12 @@ export async function craftItem(actor, itemName, isFormula) {
   }
 
   // ── Potency (Level 4+) & Big Bang (Level 8+) ──
-  // Apply exploding dice and bonus damage to crafted weapons
-  if (createdItem && isOffensiveType(itemData) && alcData.level >= 4) {
-    const currentDmg = createdItem.system.currentDamage ?? "";
+  // Apply exploding dice and bonus damage to ALL crafted alchemical items
+  // (weapons, potions, oils, concoctions — not just offensive types)
+  if (createdItem && alcData.level >= 4) {
+    // For weapons, use currentDamage; for non-weapons, use damageAmount
+    const currentDmg = createdItem.system.currentDamage
+      || createdItem.system.damageAmount || "";
     const dieMatch = currentDmg.match(/d(\d+)/);
     const maxFace = dieMatch ? parseInt(dieMatch[1]) : 6;
     const updates = { "system.canExplode": true };
@@ -1051,7 +1059,12 @@ export async function craftItem(actor, itemName, isFormula) {
     if (alcData.level >= 8) {
       // Big Bang: explode on two highest values + bonus d6
       updates["system.explodeValues"] = `${maxFace},${maxFace - 1}`;
-      updates["system.currentDamage"] = `${currentDmg} + 1d6`;
+      // Add +d6 to the appropriate damage field
+      if (isOffensiveType(itemData)) {
+        updates["system.currentDamage"] = `${currentDmg} + 1d6`;
+      } else if (currentDmg) {
+        updates["system.damageAmount"] = `${currentDmg} + 1d6`;
+      }
     } else {
       // Potency: explode on max value only
       updates["system.explodeValues"] = `${maxFace}`;
