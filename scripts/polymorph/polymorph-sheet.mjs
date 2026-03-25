@@ -393,7 +393,8 @@ export const PolymorphSheet = {
 
       return `
         <tr class="vce-beast-row${favClass}" data-beast-name="${b.name}"
-            role="button" tabindex="0" aria-label="${b.name}, HD ${hd}, ${size}">
+            role="button" tabindex="0" aria-label="${b.name}, HD ${hd}, ${size}"
+            title="${isFav ? "Right-click to unfavorite" : "Right-click to favorite"}">
           <td class="vce-bd-cell vce-bd-cell-img">
             <img src="${img}" class="vce-bd-beast-img" alt="" loading="lazy" />
           </td>
