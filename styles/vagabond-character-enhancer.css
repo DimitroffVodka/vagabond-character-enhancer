@@ -88,7 +88,8 @@ nav.sheet-tabs [data-tab="vce-beast-form"] {
 
 /* Flexible centering with overflow protection — any VCE-injected tab */
 nav.sheet-tabs:has([data-tab="vce-beast-form"]),
-nav.sheet-tabs:has([data-tab="vce-cookbook"]) {
+nav.sheet-tabs:has([data-tab="vce-cookbook"]),
+nav.sheet-tabs:has([data-tab="vce-virtuoso"]) {
   justify-content: center !important;
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -97,13 +98,15 @@ nav.sheet-tabs:has([data-tab="vce-cookbook"]) {
 }
 
 nav.sheet-tabs:has([data-tab="vce-beast-form"])::-webkit-scrollbar,
-nav.sheet-tabs:has([data-tab="vce-cookbook"])::-webkit-scrollbar {
+nav.sheet-tabs:has([data-tab="vce-cookbook"])::-webkit-scrollbar,
+nav.sheet-tabs:has([data-tab="vce-virtuoso"])::-webkit-scrollbar {
   display: none; /* Chrome/Safari */
 }
 
 /* Tabs should not shrink at normal widths — only scroll if needed */
 nav.sheet-tabs:has([data-tab="vce-beast-form"]) [data-tab],
-nav.sheet-tabs:has([data-tab="vce-cookbook"]) [data-tab] {
+nav.sheet-tabs:has([data-tab="vce-cookbook"]) [data-tab],
+nav.sheet-tabs:has([data-tab="vce-virtuoso"]) [data-tab] {
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -1041,4 +1044,157 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
   .vce-bf-action:hover .vce-bf-roll-icon {
     transform: none;
   }
+}
+
+/* -------------------------------------------- */
+/*  Virtuoso Tab (Bard)                         */
+/* -------------------------------------------- */
+
+.vce-virtuoso-panel {
+  padding: 12px;
+}
+
+.vce-virt-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.vce-virt-icon {
+  font-size: 32px;
+  color: var(--vce-accent);
+}
+
+.vce-virt-title {
+  font-family: "Germania", serif;
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--vagabond-c-text-primary);
+  margin: 0;
+  border: none;
+}
+
+.vce-virt-subtitle {
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  color: var(--vagabond-c-muted);
+  margin: 0;
+}
+
+/* Buff buttons */
+.vce-virt-buffs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.vce-virt-buff-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--vagabond-c-inset-2);
+  border: 1px solid var(--vagabond-c-tan);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+  min-height: 44px;
+  font-family: "Paradigm", serif;
+  color: var(--vagabond-c-text-primary);
+}
+
+.vce-virt-buff-btn:hover {
+  background: var(--vagabond-c-tan-lite);
+  border-color: var(--vce-accent);
+}
+
+.vce-virt-buff-btn:active {
+  background: var(--vagabond-c-tan);
+}
+
+.vce-virt-buff-btn.vce-virt-active {
+  border-color: var(--vce-accent);
+  background: rgba(212, 168, 67, 0.15);
+  box-shadow: 0 0 6px rgba(212, 168, 67, 0.3);
+}
+
+.vce-virt-buff-btn > i {
+  font-size: 20px;
+  color: var(--vce-accent);
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.vce-virt-buff-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.vce-virt-buff-info strong {
+  font-family: "Germania", serif;
+  font-size: 15px;
+}
+
+.vce-virt-buff-info span {
+  font-size: 11px;
+  color: var(--vagabond-c-muted);
+}
+
+/* Starstruck section */
+.vce-virt-starstruck {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--vagabond-c-tan);
+}
+
+.vce-virt-section-title {
+  font-family: "Germania", serif;
+  font-size: 14px;
+  color: var(--vce-accent);
+  margin: 0 0 8px 0;
+  border: none;
+}
+
+.vce-virt-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.vce-virt-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--vagabond-c-inset-2);
+  border-radius: 4px;
+  border: 1px solid var(--vagabond-c-tan);
+}
+
+.vce-virt-target-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: none;
+}
+
+.vce-virt-target-name {
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+}
+
+.vce-virt-no-target {
+  opacity: 0.6;
+}
+
+.vce-virt-hint {
+  font-family: "Paradigm", serif;
+  font-size: 11px;
+  color: var(--vagabond-c-muted);
+  margin: 4px 0 0 0;
+  font-style: italic;
 }

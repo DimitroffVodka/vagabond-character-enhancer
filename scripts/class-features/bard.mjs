@@ -267,6 +267,7 @@ export const BardFeatures = {
   registerHooks() {
     this._registerVirtuosoHooks();
     this._registerSongOfRestHooks();
+    this._patchVirtuosoSheet();
     this._log("Bard hooks registered.");
   },
 
@@ -958,5 +959,324 @@ export const BardFeatures = {
     });
 
     ui.notifications.info(`${featureName}: ${affectedNames.length} enemy(s) now ${statusLabel}!`);
+  },
+
+  /* -------------------------------------------- */
+  /*  Virtuoso Sheet Tab                           */
+  /* -------------------------------------------- */
+
+  /**
+   * Inject a "Virtuoso" tab on bard character sheets.
+   * Shows 3 buff buttons (Inspiration, Resolve, Valor) that trigger
+   * a Performance check and auto-apply the buff on success.
+   * At Level 4+ (Starstruck), shows targeted enemy preview below.
+   *
+   * Same pattern as Beast Form (druid) and Cookbook (alchemist).
+   */
+  _patchVirtuosoSheet() {
+    const self = this;
+
+    Hooks.on("renderApplicationV2", (app) => {
+      if (app.document?.type === "character") {
+        self._injectVirtuosoTab(app);
+      }
+    });
+
+    console.log(`${MODULE_ID} | Bard | Registered render hook for Virtuoso tab.`);
+  },
+
+  _injectVirtuosoTab(sheet) {
+    const actor = sheet.document;
+    if (actor?.type !== "character") return;
+
+    const sheetEl = sheet.element;
+    if (!sheetEl) return;
+
+    const windowContent = sheetEl.querySelector(".window-content");
+    if (!windowContent) return;
+
+    const tabNav = windowContent.querySelector("nav.sheet-tabs");
+    if (!tabNav) return;
+
+    // Check if this actor is a bard with Virtuoso
+    const features = actor.getFlag(MODULE_ID, "features");
+    const isBard = !!features?.bard_virtuoso;
+
+    if (!isBard) {
+      windowContent.querySelector('section.tab[data-tab="vce-virtuoso"]')?.remove();
+      tabNav.querySelector('[data-tab="vce-virtuoso"]')?.remove();
+      return;
+    }
+
+    // Remove stale elements
+    windowContent.querySelector('section.tab[data-tab="vce-virtuoso"]')?.remove();
+    tabNav.querySelector('[data-tab="vce-virtuoso"]')?.remove();
+
+    // Create tab link
+    const virtuosoTab = document.createElement("a");
+    virtuosoTab.dataset.action = "tab";
+    virtuosoTab.dataset.tab = "vce-virtuoso";
+    virtuosoTab.dataset.group = "primary";
+    virtuosoTab.innerHTML = "<span>Virtuoso</span>";
+    tabNav.appendChild(virtuosoTab);
+
+    // Create tab section
+    const virtuosoSection = document.createElement("section");
+    virtuosoSection.className = "tab vce-virtuoso-tab scrollable";
+    virtuosoSection.dataset.tab = "vce-virtuoso";
+    virtuosoSection.dataset.group = "primary";
+    virtuosoSection.innerHTML = this._buildVirtuosoHTML(actor, features);
+
+    // Insert before sliding panel
+    const slidingPanel = windowContent.querySelector("aside.sliding-panel");
+    if (slidingPanel) {
+      windowContent.insertBefore(virtuosoSection, slidingPanel);
+    } else {
+      windowContent.appendChild(virtuosoSection);
+    }
+
+    const actorSheet = actor.sheet;
+
+    // Click handler for Virtuoso tab
+    virtuosoTab.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      tabNav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
+      windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+      virtuosoTab.classList.add("active");
+      virtuosoSection.classList.add("active");
+      actorSheet._vceActiveTab = "vce-virtuoso";
+      if (actorSheet.tabGroups) actorSheet.tabGroups.primary = "vce-virtuoso";
+    });
+
+    // Maintain tab state across re-renders
+    const desiredTab = actorSheet._vceActiveTab;
+    if (desiredTab === "vce-virtuoso") {
+      tabNav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
+      windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+      virtuosoTab.classList.add("active");
+      virtuosoSection.classList.add("active");
+      if (actorSheet.tabGroups) actorSheet.tabGroups.primary = "vce-virtuoso";
+    }
+
+    // Track other tab clicks
+    tabNav.querySelectorAll("[data-tab]:not([data-tab='vce-virtuoso'])").forEach(t => {
+      t.addEventListener("click", () => { actorSheet._vceActiveTab = t.dataset.tab; });
+    });
+
+    // Bind buff buttons
+    this._bindVirtuosoEvents(virtuosoSection, actor);
+  },
+
+  _buildVirtuosoHTML(actor, features) {
+    const hasStarstruck = !!features?.bard_starstruck;
+    const hasClimax = !!features?.bard_climax;
+    const performanceSkill = actor.system?.skills?.performance;
+    const performanceValue = performanceSkill?.value ?? "?";
+
+    // Check current Virtuoso buff
+    const currentBuff = actor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
+    const currentBuffType = currentBuff?.getFlag(MODULE_ID, "virtuosoBuff") || null;
+
+    // Target preview for Starstruck
+    let starstruckHTML = "";
+    if (hasStarstruck) {
+      const targets = Array.from(game.user.targets);
+      const npcTargets = targets.filter(t => t.actor?.type === "npc");
+
+      if (npcTargets.length > 0) {
+        const targetCards = npcTargets.map(t => `
+          <div class="vce-virt-target">
+            <img src="${t.document.texture.src}" class="vce-virt-target-img" alt="${t.name}" />
+            <span class="vce-virt-target-name">${t.name}</span>
+          </div>
+        `).join("");
+        starstruckHTML = `
+          <div class="vce-virt-starstruck">
+            <h3 class="vce-virt-section-title">
+              <i class="fas fa-star" aria-hidden="true"></i> Starstruck Target
+            </h3>
+            <div class="vce-virt-targets">${targetCards}</div>
+            <p class="vce-virt-hint">Debuff applied after successful Virtuoso</p>
+          </div>`;
+      } else {
+        starstruckHTML = `
+          <div class="vce-virt-starstruck vce-virt-no-target">
+            <h3 class="vce-virt-section-title">
+              <i class="fas fa-star" aria-hidden="true"></i> Starstruck
+            </h3>
+            <p class="vce-virt-hint">No enemy targeted — target an NPC to apply Starstruck debuff</p>
+          </div>`;
+      }
+    }
+
+    return `
+      <div class="vce-virtuoso-panel">
+        <div class="vce-virt-header">
+          <i class="fas fa-music vce-virt-icon" aria-hidden="true"></i>
+          <div>
+            <h2 class="vce-virt-title">Virtuoso</h2>
+            <p class="vce-virt-subtitle">Performance ${performanceValue} · Choose a buff for the party</p>
+          </div>
+        </div>
+
+        <div class="vce-virt-buffs">
+          <button class="vce-virt-buff-btn${currentBuffType === "valor" ? " vce-virt-active" : ""}"
+                  data-buff="valor" type="button"
+                  title="Favor on Attack and Cast Checks this Round">
+            <i class="fas fa-sword" aria-hidden="true"></i>
+            <div class="vce-virt-buff-info">
+              <strong>Valor</strong>
+              <span>Favor on Attack and Cast Checks</span>
+            </div>
+          </button>
+
+          <button class="vce-virt-buff-btn${currentBuffType === "resolve" ? " vce-virt-active" : ""}"
+                  data-buff="resolve" type="button"
+                  title="Favor on Saves this Round">
+            <i class="fas fa-shield-alt" aria-hidden="true"></i>
+            <div class="vce-virt-buff-info">
+              <strong>Resolve</strong>
+              <span>Favor on Saves</span>
+            </div>
+          </button>
+
+          <button class="vce-virt-buff-btn${currentBuffType === "inspiration" ? " vce-virt-active" : ""}"
+                  data-buff="inspiration" type="button"
+                  title="+d6 bonus to Healing rolls this Round">
+            <i class="fas fa-heart" aria-hidden="true"></i>
+            <div class="vce-virt-buff-info">
+              <strong>Inspiration</strong>
+              <span>+d6 bonus to Healing</span>
+            </div>
+          </button>
+        </div>
+
+        ${hasClimax ? `<p class="vce-virt-hint"><i class="fas fa-bolt"></i> Climax: Favor d6 explodes on 6</p>` : ""}
+
+        ${starstruckHTML}
+      </div>
+    `;
+  },
+
+  _bindVirtuosoEvents(container, actor) {
+    container.querySelectorAll(".vce-virt-buff-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const buffType = btn.dataset.buff;
+        btn.disabled = true;
+
+        // Trigger the full Virtuoso flow: Performance check → apply buff
+        await this._useVirtuosoFromTab(actor, buffType);
+
+        // Re-render sheet to update active buff indicator
+        actor.sheet?.render(false);
+      });
+    });
+  },
+
+  /**
+   * Virtuoso flow triggered from the sheet tab (replaces the old relic item flow).
+   * Rolls Performance check, on success applies the chosen buff to the party,
+   * then triggers Starstruck if applicable.
+   */
+  async _useVirtuosoFromTab(actor, chosenBuff) {
+    try {
+      const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+
+      // Roll Performance check
+      const systemFavorHinder = actor.system?.favorHinder || "none";
+      const favorHinder = VagabondRollBuilder.calculateEffectiveFavorHinder(
+        systemFavorHinder, false, false
+      );
+      const roll = await VagabondRollBuilder.buildAndEvaluateD20(actor, favorHinder);
+      const difficulty = actor.system?.skills?.performance?.difficulty || 10;
+      const isSuccess = roll.total >= difficulty;
+
+      // Extract d20 result for display
+      const d20Term = roll.terms?.find(t => t.constructor?.name === "Die" && t.faces === 20);
+      const d20Result = d20Term?.results?.[0]?.result || roll.total;
+
+      // Build result class
+      const resultClass = isSuccess ? "result-hit" : "result-miss";
+      const outcomeText = isSuccess ? "PASS" : "FAIL";
+
+      // Buff labels
+      const BUFF_INFO = {
+        valor: { name: "Valor", icon: "fas fa-sword", desc: "Favor on Attack and Cast Checks" },
+        resolve: { name: "Resolve", icon: "fas fa-shield-alt", desc: "Favor on Saves" },
+        inspiration: { name: "Inspiration", icon: "fas fa-heart", desc: "+d6 bonus to Healing" },
+      };
+      const buff = BUFF_INFO[chosenBuff];
+
+      // Build dice display HTML
+      const diceHTML = roll.dice?.map(d =>
+        d.results.map(r => {
+          const maxClass = r.result === d.faces ? " max" : "";
+          const minClass = r.result === 1 ? " min" : "";
+          return `<span class="die d${d.faces}${maxClass}${minClass}">${r.result}</span>`;
+        }).join("")
+      ).join("") || `<span class="die d20">${d20Result}</span>`;
+
+      // Post chat card
+      const content = `
+        <div class="vagabond-chat-card-v2" data-card-type="virtuoso">
+          <div class="card-body">
+            <header class="card-header">
+              <div class="header-icon">
+                <img src="icons/tools/instruments/lute-brown.webp" alt="Virtuoso">
+              </div>
+              <div class="header-info">
+                <h3 class="header-title">Virtuoso: ${buff.name}</h3>
+                <div class="metadata-tags-row">
+                  <div class="meta-tag tag-skill"><i class="fas fa-music"></i><span>Performance</span></div>
+                  <span class="tag-separator">//</span>
+                  <div class="meta-tag tag-standard"><i class="${buff.icon}"></i><span>${buff.desc}</span></div>
+                </div>
+              </div>
+            </header>
+            <section class="roll-strip">
+              <div class="roll-info-group">
+                <div class="roll-skill-label">Performance</div>
+                <div class="roll-result-banner ${resultClass}">
+                  <span class="roll-value">${roll.total}</span>
+                  <span class="roll-vs">vs</span>
+                  <span class="roll-target">${difficulty}</span>
+                  <span class="roll-outcome-text">${outcomeText}</span>
+                </div>
+              </div>
+              <div class="roll-dice-container">${diceHTML}</div>
+            </section>
+            ${isSuccess
+              ? `<section class="content-body">
+                  <div class="card-description">
+                    <i class="${buff.icon}"></i> <strong>${buff.name}</strong> granted to the party!
+                  </div>
+                </section>`
+              : `<section class="content-body">
+                  <div class="card-description">The performance fails to inspire.</div>
+                </section>`
+            }
+          </div>
+        </div>`;
+
+      await ChatMessage.create({
+        content,
+        speaker: ChatMessage.getSpeaker({ actor }),
+        rolls: [roll],
+      });
+
+      // On success: apply the buff
+      if (isSuccess) {
+        await this._applyVirtuosoBuff(actor, chosenBuff);
+
+        // Starstruck: apply status debuff to targeted enemy
+        if (this._hasFeature(actor, "bard_starstruck")) {
+          await this._handleStarstruck(actor);
+        }
+      }
+    } catch (e) {
+      console.error(`${MODULE_ID} | Bard | Virtuoso from tab failed:`, e);
+      ui.notifications.error("Virtuoso failed — check console.");
+    }
   }
 };
