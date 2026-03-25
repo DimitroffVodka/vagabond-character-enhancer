@@ -260,8 +260,12 @@ Hooks.once("ready", async () => {
         // When a player right-clicks an alchemical weapon and presses "Use",
         // the default item.roll() path skips rollDamage() (and thus explosions).
         // Redirect to the full attack flow so canExplode/explodeValues work.
-        if (this.type === "equipment" && this.system.equipmentType === "weapon"
-            && this.system.alchemicalType) {
+        const ALCHEMICAL_WEAPON_TYPES = new Set(["acid", "explosive", "poison"]);
+        const alcType = (this.system.alchemicalType ?? "").toLowerCase();
+        const isAlchemicalWeapon = this.type === "equipment"
+          && this.system.equipmentType === "weapon"
+          && (ALCHEMICAL_WEAPON_TYPES.has(alcType) || this.name?.toLowerCase().includes("holy water"));
+        if (isAlchemicalWeapon) {
           const actor = this.actor;
           if (!actor) return origItemRoll.call(this, event, targetsAtRollTime);
 

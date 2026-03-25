@@ -1073,10 +1073,39 @@ export async function craftItem(actor, itemName, isFormula) {
     console.log(`${MODULE_ID} | Applied ${alcData.level >= 8 ? "Big Bang" : "Potency"} to ${createdItem.name}: explode=${updates["system.explodeValues"]}`);
   }
 
-  // Chat message
+  // Chat message — styled to match system chat cards
   const costStr = formatCost(cost);
+  const itemImg = itemData.img ?? "icons/svg/item-bag.svg";
+  const alcType = (itemData.system?.alchemicalType ?? "").charAt(0).toUpperCase()
+    + (itemData.system?.alchemicalType ?? "").slice(1);
+  const potencyLabel = alcData.level >= 8 ? "Big Bang" : alcData.level >= 4 ? "Potency" : "";
+  const potencyTag = potencyLabel
+    ? `<span class="tag-separator">//</span><div class="meta-tag tag-standard"><i class="fas fa-burst"></i><span>${potencyLabel}</span></div>`
+    : "";
+
   ChatMessage.create({
-    content: `<p><strong>${actor.name}</strong> crafted <strong>${itemData.name}</strong> (cost: ${costStr})</p>`,
+    content: `
+      <div class="vagabond-chat-card-v2" data-card-type="craft">
+        <div class="card-body">
+          <header class="card-header">
+            <div class="header-icon">
+              <img src="${itemImg}" alt="${itemData.name}">
+            </div>
+            <div class="header-info">
+              <h3 class="header-title">${itemData.name}</h3>
+              <div class="metadata-tags-row">
+                <div class="meta-tag tag-skill"><i class="fas fa-hammer"></i><span>Craft</span></div>
+                <span class="tag-separator">//</span>
+                <div class="meta-tag tag-standard"><span>${alcType}</span></div>
+                <span class="tag-separator">//</span>
+                <div class="meta-tag tag-standard"><i class="fas fa-coins"></i><span>${costStr}</span></div>
+                ${potencyTag}
+              </div>
+            </div>
+          </header>
+          ${isFormula ? `<section class="content-body"><div class="card-description"><i class="fas fa-star" style="color:#facc15"></i> Known Formula</div></section>` : ""}
+        </div>
+      </div>`,
     speaker: ChatMessage.getSpeaker({ actor }),
   });
 
