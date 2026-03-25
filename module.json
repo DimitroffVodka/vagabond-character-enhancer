@@ -2,7 +2,7 @@
   "id": "vagabond-character-enhancer",
   "title": "Vagabond Character Enhancer",
   "description": "Automates ancestry traits, class features, and perks for the Vagabond RPG system. Detects class features from compendium data and applies managed Active Effects for gameplay automation.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "authors": [
     {
       "name": "DimitroffVodka"
@@ -34,6 +34,15 @@
       }
     ]
   },
+  "packs": [
+    {
+      "name": "vce-beasts",
+      "label": "VCE: Modified Beasts",
+      "path": "packs/vce-beasts",
+      "type": "Actor",
+      "system": "vagabond"
+    }
+  ],
   "esmodules": [
     "scripts/vagabond-character-enhancer.mjs"
   ],

@@ -602,7 +602,7 @@ export const BarbarianFeatures = {
       const rageDRSpan = document.createElement("span");
       rageDRSpan.className = "damage-component vce-rage-dr";
       rageDRSpan.title = `Rage DR: ${targetActor.system.incomingDamageReductionPerDie}/die`;
-      rageDRSpan.innerHTML = `<i class="fa-solid fa-fire" style="color:#c43c3c"></i> ${rageDR}`;
+      rageDRSpan.innerHTML = `<i class="fa-solid fa-fire" aria-hidden="true"></i> ${rageDR}`;
 
       const operator = document.createElement("span");
       operator.className = "damage-operator";

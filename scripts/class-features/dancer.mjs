@@ -290,23 +290,23 @@ export const DancerFeatures = {
     // Build checkbox HTML for ally selection
     const allyOptions = allyTokens.map(t => {
       const img = t.actor.img || "icons/svg/mystery-man.svg";
-      return `<label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
-        <input type="checkbox" name="ally" value="${t.actor.id}" style="margin:0;">
-        <img src="${img}" width="36" height="36" style="border:1px solid #999; border-radius:4px;">
+      return `<label class="vce-stepup-ally-label">
+        <input type="checkbox" name="ally" value="${t.actor.id}">
+        <img src="${img}" width="36" height="36" class="vce-stepup-ally-img" alt="${t.actor.name}">
         <span>${t.actor.name}</span>
       </label>`;
     }).join("");
 
     const content = `
-      <p style="margin-bottom:8px;">
+      <p class="vce-stepup-intro">
         <strong>${actor.name}</strong> performs an enlivening dance!
         Select ${maxTargets > 1 ? `up to ${maxTargets} allies` : "an ally"} to grant a bonus Action:
       </p>
-      <div style="max-height:200px; overflow-y:auto; padding:4px;">
+      <div class="vce-stepup-scroll">
         ${allyOptions}
       </div>
-      ${hasChoreographer ? `<p style="margin-top:8px; color:#7b5ea7; font-style:italic;">
-        <i class="fas fa-music"></i> Choreographer: Ally gets Favor on first Check. Both gain +10 Speed.
+      ${hasChoreographer ? `<p class="vce-choreographer-note">
+        <i class="fas fa-music" aria-hidden="true"></i> Choreographer: Ally gets Favor on first Check. Both gain +10 Speed.
       </p>` : ""}
     `;
 
@@ -394,7 +394,7 @@ export const DancerFeatures = {
               </div>
             </header>
             <section class="content-body">
-              <div class="card-description" style="text-align:center; padding:4px 0;">
+              <div class="card-description vce-card-desc-centered">
                 ${descriptionLines}
               </div>
             </section>
@@ -495,9 +495,9 @@ export const DancerFeatures = {
       const reminder = document.createElement("section");
       reminder.className = "vce-flash-of-beauty content-body";
       reminder.innerHTML = `
-        <div class="card-description" style="text-align:center; padding:6px 0;">
-          <div class="metadata-tags-row" style="justify-content:center; margin-bottom:4px;">
-            <div class="meta-tag" style="background:goldenrod; color:white;">
+        <div class="card-description vce-card-desc-centered-lg">
+          <div class="metadata-tags-row vce-flash-tag-row">
+            <div class="meta-tag vce-flash-tag">
               <i class="fas fa-star"></i>
               <span>Flash of Beauty</span>
             </div>

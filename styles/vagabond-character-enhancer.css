@@ -3,11 +3,106 @@
 /*  Module styles                                */
 /* ============================================= */
 
+/* -------------------------------------------- */
+/*  Design Tokens                               */
+/* -------------------------------------------- */
+
 :root {
+  /* Accent & brand */
   --vce-accent: #d4a843;
+  --vce-accent-dim: #a08030;
+
+  /* Beast form palette */
+  --vce-beast-primary: #4a7c3f;
+  --vce-beast-primary-light: #6abf5a;
+  --vce-beast-primary-bright: #8fef7f;
+  --vce-beast-text: #c0e0b0;
+  --vce-beast-text-bright: #e0ffcc;
+  --vce-beast-name: #8fce7f;
+  --vce-beast-bg: rgba(74, 124, 63, 0.12);
+  --vce-beast-bg-hover: rgba(74, 124, 63, 0.3);
+  --vce-beast-bg-active: rgba(74, 124, 63, 0.45);
+  --vce-beast-border: rgba(74, 124, 63, 0.4);
+
+  /* Danger / end */
+  --vce-danger: #8b0000;
+  --vce-danger-text: #ff8888;
+  --vce-danger-bg: rgba(139, 0, 0, 0.5);
+  --vce-danger-bg-hover: rgba(139, 0, 0, 0.85);
+
+  /* Rage */
   --vce-rage-red: #9d0000;
+
+  /* Neutral */
+  --vce-text: #e0e0e0;
+  --vce-text-dim: #aaa;
+  --vce-text-muted: #8a8a7a;
+  --vce-text-warm: #e0d8c0;
+  --vce-text-note: #a0b090;
+  --vce-text-resist: #c0b080;
   --vce-tag-bg: rgba(0, 0, 0, 0.6);
   --vce-tag-text: #e0e0e0;
+  --vce-surface: rgba(255, 255, 255, 0.05);
+  --vce-surface-faint: rgba(255, 255, 255, 0.02);
+  --vce-border-subtle: rgba(255, 255, 255, 0.1);
+
+  /* Condition */
+  --vce-condition-bg: rgba(180, 60, 60, 0.3);
+  --vce-condition-border: rgba(180, 60, 60, 0.6);
+  --vce-condition-text: #e0a0a0;
+  --vce-condition-card-border: #b43c3c;
+  --vce-condition-card-text: #e0c0c0;
+
+  /* Virtuoso buff colors */
+  --vce-valor: #4a7c4b;
+  --vce-resolve: #4a5c8c;
+  --vce-inspiration: #8c6a4a;
+  --vce-inspiration-accent: #7b5ea7;
+  --vce-inspiration-icon: #c9a0dc;
+
+  /* Alchemy highlights */
+  --vce-formula-green: #4ade80;
+  --vce-star-gold: #facc15;
+
+  /* Spacing scale */
+  --vce-space-xs: 4px;
+  --vce-space-sm: 6px;
+  --vce-space-md: 8px;
+  --vce-space-lg: 12px;
+  --vce-space-xl: 16px;
+  --vce-space-2xl: 24px;
+
+  /* Typography — inherit from Vagabond system */
+  --vce-font: var(--vcb-font, "Germania", serif);
+  --vce-font-body: var(--vcb-font, inherit);
+}
+
+/* -------------------------------------------- */
+/*  Tab Bar — Beast Form integration            */
+/* -------------------------------------------- */
+
+/* Prevent wrapping on Beast Form tab text */
+nav.sheet-tabs [data-tab="vce-beast-form"] {
+  white-space: nowrap;
+}
+
+/* Flexible centering with overflow protection */
+nav.sheet-tabs:has([data-tab="vce-beast-form"]) {
+  justify-content: center !important;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none; /* Firefox */
+}
+
+nav.sheet-tabs:has([data-tab="vce-beast-form"])::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+/* Tabs should not shrink at normal widths — only scroll if needed */
+nav.sheet-tabs:has([data-tab="vce-beast-form"]) [data-tab] {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* -------------------------------------------- */
@@ -17,7 +112,7 @@
 .vce-rage-tag {
   display: inline-block;
   background: var(--vce-rage-red);
-  color: #fff;
+  color: white;
   font-size: 0.65rem;
   font-weight: bold;
   text-transform: uppercase;
@@ -60,14 +155,15 @@
 
 .vce-virtuoso-btn {
   flex: 1;
-  padding: 6px 8px;
+  padding: var(--vce-space-sm) var(--vce-space-md);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 4px;
-  color: #fff;
+  color: white;
   font-size: 0.8rem;
   font-weight: bold;
   cursor: pointer;
-  transition: opacity 0.2s, border-color 0.2s;
+  min-height: 36px;
+  transition: opacity 0.15s, border-color 0.15s;
 }
 
 .vce-virtuoso-btn:hover:not(:disabled) {
@@ -80,15 +176,15 @@
 }
 
 .vce-virtuoso-btn[data-buff="valor"] {
-  background: #4a7c4b;
+  background: var(--vce-valor);
 }
 
 .vce-virtuoso-btn[data-buff="resolve"] {
-  background: #4a5c8c;
+  background: var(--vce-resolve);
 }
 
 .vce-virtuoso-btn[data-buff="inspiration"] {
-  background: #8c6a4a;
+  background: var(--vce-inspiration);
 }
 
 /* -------------------------------------------- */
@@ -135,11 +231,11 @@
 .vcb-cook-item-type { font-size: 10px; color: var(--vcb-text-muted); }
 .vcb-cook-item-value { font-size: 11px; color: var(--vcb-text-muted); min-width: 40px; text-align: right; }
 .vcb-cook-item-cost { font-size: 11px; color: var(--vcb-text-dim); min-width: 36px; text-align: right; font-weight: 600; }
-.vcb-cook-cost-formula { color: #4ade80; }
-.vcb-cook-star { color: #facc15; font-size: 10px; margin-right: 2px; }
+.vcb-cook-cost-formula { color: var(--vce-formula-green); }
+.vcb-cook-star { color: var(--vce-star-gold); font-size: 10px; margin-right: 2px; }
 
 .vcb-cook-craft-btn {
-  padding: 3px 8px; border: 1px solid var(--vcb-border); border-radius: 3px;
+  padding: 3px 8px; min-height: 32px; border: 1px solid var(--vcb-border); border-radius: 3px;
   background: var(--vcb-btn-1); color: var(--vcb-text);
   font-family: var(--vcb-font); font-size: 11px; cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
@@ -151,7 +247,7 @@
 .vcb-cook-empty { padding: 16px; text-align: center; color: var(--vcb-text-muted); font-size: 12px; }
 
 /* Formula row highlight */
-.vcb-cook-formula { border-left: 2px solid #facc15; }
+.vcb-cook-formula { border-left: 2px solid var(--vce-star-gold); }
 
 /* Context menu (right-click on Alchemy Tools) */
 .vcb-context-menu {
@@ -169,3 +265,739 @@
 /* Light theme overrides */
 body.theme-light .vagabond-crawler-cookbook .window-content { background: var(--vcb-bg); color: var(--vcb-text); }
 body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
+
+/* -------------------------------------------- */
+/*  Polymorph Beast Form (Left Panel Replace)   */
+/* -------------------------------------------- */
+
+.vce-beast-form {
+  padding: 8px;
+  overflow-y: auto;
+  color: var(--vagabond-c-text-primary);
+  font-family: "Paradigm", serif;
+}
+
+/* Header: portrait + name + end button */
+.vce-bf-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 8px;
+  background-image: url("/systems/vagabond/assets/images/sheets/headerNPCBanner.webp");
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  box-shadow: 2px 2px 2px var(--vagabond-c-bluey);
+}
+
+.vce-bf-portrait {
+  width: 64px;
+  height: 64px;
+  border-radius: 4px;
+  border: none;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 1px 1px 2px var(--vagabond-c-bluey);
+  background-color: black;
+}
+
+.vce-bf-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.vce-bf-name {
+  margin: 0;
+  padding: 0;
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--vagabond-c-black);
+  font-family: "Germania", serif;
+  border: none;
+  line-height: 1.2;
+}
+
+.vce-bf-tags {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.vce-bf-tag {
+  display: inline-block;
+  font-weight: 700;
+  font-size: 16px;
+  font-family: "Paradigm", serif;
+  text-transform: capitalize;
+  color: var(--vagabond-c-black);
+}
+
+.vce-bf-end {
+  padding: 4px 10px;
+  background: var(--vagabond-c-red);
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: bold;
+  font-family: "Germania", serif;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-height: 28px;
+  box-shadow: 1px 1px 2px var(--vagabond-c-bluey);
+}
+
+.vce-bf-end:hover {
+  opacity: 0.85;
+}
+
+/* Dark theme scrollbar for beast form */
+.vce-beast-form::-webkit-scrollbar {
+  width: 6px;
+}
+
+.vce-beast-form::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.vce-beast-form::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.vce-beast-form::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.vce-beast-form {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* Dialog scroll area scrollbar */
+.vce-bd-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.vce-bd-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.vce-bd-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.vce-bd-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Stats Row — armor overlay + speed group mirroring system layout */
+.vce-bf-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+/* Override armor-overlay positioning for beast form (not absolute) */
+.vce-bf-armor-overlay {
+  position: relative;
+  top: auto;
+  right: auto;
+  flex-shrink: 0;
+}
+
+/* Extra speeds and senses */
+.vce-bf-extras {
+  display: flex;
+  gap: 16px;
+  padding: 2px 4px;
+  margin-bottom: 4px;
+  font-family: "Paradigm", serif;
+  font-size: 14px;
+  color: var(--vagabond-c-text-primary);
+}
+
+/* Resistances */
+.vce-bf-resists {
+  margin-bottom: 4px;
+  padding: 2px 4px;
+  font-size: 14px;
+  font-family: "Paradigm", serif;
+}
+
+.vce-bf-resist {
+  color: var(--vagabond-c-text-primary);
+  margin-bottom: 2px;
+}
+
+/* Section titles — matches NPC section-title with horizontal rules */
+.vce-bf-section {
+  margin-bottom: 8px;
+}
+
+.vce-bf-section-title {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  font-size: 20px;
+  font-weight: 900;
+  font-family: "Germania", serif;
+  color: var(--vagabond-c-text-primary);
+  border: none;
+  background: transparent;
+  padding: 8px 0;
+  margin: 0;
+}
+
+.vce-bf-section-title::before,
+.vce-bf-section-title::after {
+  content: "";
+  flex: 1;
+  border-bottom: 2px solid var(--vagabond-c-text-primary);
+}
+
+.vce-bf-section-title::before {
+  margin-right: 8px;
+}
+
+.vce-bf-section-title::after {
+  margin-left: 8px;
+}
+
+/* Actions — matches NPC action-name-line pattern */
+.vce-bf-action {
+  padding: 4px 4px;
+  margin-bottom: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: color 0.2s ease;
+  min-height: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.1rem;
+  font-family: "Paradigm", serif;
+}
+
+.vce-bf-action:hover {
+  background: var(--vagabond-c-inset-2);
+}
+
+.vce-bf-action:active {
+  background: var(--vagabond-c-tan-lite);
+}
+
+.vce-bf-action-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  padding-left: 4px;
+}
+
+.vce-bf-roll-icon {
+  font-size: 12px;
+  color: var(--vagabond-c-green);
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.vce-bf-action:hover .vce-bf-roll-icon {
+  color: var(--vagabond-c-red);
+}
+
+.vce-bf-action-name {
+  font-weight: bold;
+  cursor: pointer;
+  font-family: "Manofa", serif;
+  text-transform: uppercase;
+  color: var(--vagabond-c-text-primary);
+  border-bottom: 1px dotted var(--vagabond-c-text-primary);
+  transition: color 0.2s ease;
+}
+
+.vce-bf-action:hover .vce-bf-action-name {
+  color: var(--vagabond-c-red);
+  text-decoration: none;
+}
+
+.vce-bf-action-note {
+  font-weight: normal;
+  color: var(--vagabond-c-text-primary);
+  font-family: "Paradigm", serif;
+}
+
+.vce-bf-action-damage {
+  font-weight: bold;
+  font-family: "Paradigm", serif;
+  color: var(--vagabond-c-text-primary);
+  margin-left: auto;
+  padding-left: 5px;
+}
+
+.vce-bf-recharge {
+  color: var(--vagabond-c-red);
+  font-style: normal;
+  font-family: "Paradigm", serif;
+}
+
+.vce-bf-action-extra {
+  font-weight: normal;
+  color: var(--vagabond-c-text-primary);
+  margin-top: 2px;
+  line-height: 1.4;
+  font-family: "Paradigm", serif;
+  padding-left: 4px;
+}
+
+/* Multi-attack label — matches NPC description style */
+.vce-bf-multi-attack-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  margin-bottom: 2px;
+  color: var(--vagabond-c-text-primary);
+  font-style: italic;
+  font-family: "Paradigm", serif;
+}
+
+.vce-bf-multi-icon {
+  color: var(--vagabond-c-muted);
+  flex-shrink: 0;
+}
+
+.vce-bf-multi-text {
+  font-style: italic;
+}
+
+/* Condition badges on action cards */
+.vce-bf-condition-badges {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  padding-left: 4px;
+}
+
+.vce-bf-condition-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: bold;
+  font-family: "Paradigm", serif;
+  text-transform: uppercase;
+  color: var(--vagabond-c-red);
+  cursor: help;
+}
+
+.vce-bf-condition-badge[title]:hover {
+  opacity: 0.85;
+}
+
+/* Condition applied chat notification */
+.vce-condition-applied {
+  display: flex;
+  align-items: center;
+  gap: var(--vce-space-sm);
+  padding: var(--vce-space-sm) var(--vce-space-md);
+  background: rgba(180, 60, 60, 0.15);
+  border-left: 3px solid var(--vce-condition-card-border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--vce-condition-card-text);
+}
+
+.vce-condition-applied i {
+  color: var(--vce-accent);
+}
+
+.vce-condition-source {
+  font-size: 11px;
+  color: var(--vce-text-muted);
+  font-style: italic;
+  margin-left: auto;
+}
+
+/* Abilities — matches NPC action-extra-info style */
+.vce-bf-ability {
+  padding: 4px 4px;
+  margin-bottom: 2px;
+  color: var(--vagabond-c-text-primary);
+  line-height: 1.2rem;
+  background: transparent;
+  border-radius: 0;
+  font-family: "Paradigm", serif;
+}
+
+.vce-bf-ability strong {
+  font-family: "Manofa", serif;
+  text-transform: uppercase;
+  color: var(--vagabond-c-text-primary);
+}
+
+/* -------------------------------------------- */
+/*  Beast Form Prompt (not polymorphed)         */
+/* -------------------------------------------- */
+
+.vce-bf-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.vce-bf-prompt-icon {
+  font-size: 48px;
+  color: var(--vagabond-c-green);
+  margin-bottom: 16px;
+}
+
+.vce-bf-prompt-title {
+  color: var(--vagabond-c-text-primary);
+  font-family: "Germania", serif;
+  font-weight: 900;
+  font-size: 20px;
+  margin: 0 0 8px 0;
+  border: none;
+}
+
+.vce-bf-prompt-desc {
+  color: var(--vagabond-c-muted);
+  font-family: "Paradigm", serif;
+  margin-bottom: 24px;
+}
+
+.vce-bf-transform-btn {
+  background: var(--vagabond-c-green);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 24px;
+  font-size: 16px;
+  cursor: pointer;
+  font-family: "Germania", serif;
+  letter-spacing: 1px;
+  min-height: 44px;
+  box-shadow: 2px 2px 2px var(--vagabond-c-bluey);
+  transition: opacity 0.15s;
+}
+
+.vce-bf-transform-btn:hover {
+  opacity: 0.85;
+}
+
+.vce-bf-transform-btn:focus-visible {
+  outline: 2px solid var(--vagabond-c-green);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------- */
+/*  Polymorph Beast Selection Dialog             */
+/* -------------------------------------------- */
+
+.vce-bd-scroll {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.vce-bd-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.vce-bd-header-row {
+  border-bottom: 2px solid var(--vagabond-c-text-primary);
+  font-size: 0.85em;
+  font-family: "Germania", serif;
+}
+
+.vce-bd-th {
+  padding: 4px;
+  text-align: left;
+}
+
+.vce-bd-th-center {
+  text-align: center;
+}
+
+.vce-bd-th-img {
+  width: 40px;
+}
+
+.vce-bd-cell {
+  padding: 4px;
+  font-family: "Paradigm", serif;
+}
+
+.vce-bd-cell-center {
+  text-align: center;
+}
+
+.vce-bd-cell-actions {
+  font-size: 0.85em;
+}
+
+.vce-bd-cell-img {
+  width: 40px;
+}
+
+.vce-bd-beast-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: 1px solid var(--vagabond-c-tan);
+}
+
+.vce-beast-row {
+  cursor: pointer;
+  transition: background 0.2s ease;
+  min-height: 36px;
+}
+
+.vce-beast-row:hover {
+  background: var(--vagabond-c-inset-2);
+}
+
+.vce-beast-row:focus-visible {
+  outline: 2px solid var(--vagabond-c-green);
+  outline-offset: -2px;
+  background: var(--vagabond-c-inset-2);
+}
+
+.vce-beast-row:active {
+  background: var(--vagabond-c-tan-lite);
+}
+
+/* Screen reader only utility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* -------------------------------------------- */
+/*  Focus-visible states for all VCE elements   */
+/* -------------------------------------------- */
+
+.vce-bf-action:focus-visible {
+  outline: 2px solid var(--vagabond-c-green);
+  outline-offset: 2px;
+  background: var(--vagabond-c-inset-2);
+}
+
+.vce-bf-end:focus-visible {
+  outline: 2px solid var(--vagabond-c-red);
+  outline-offset: 2px;
+}
+
+.vce-virtuoso-btn:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------- */
+/*  Text overflow handling                      */
+/* -------------------------------------------- */
+
+.vce-bf-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vce-bf-action-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.vce-bf-multi-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* -------------------------------------------- */
+/*  Reduced motion support                      */
+/* -------------------------------------------- */
+
+/* -------------------------------------------- */
+/*  Shared Chat Card Utility Classes            */
+/* -------------------------------------------- */
+
+/* Centered card description (used in bard, dancer, druid chat cards) */
+.vce-card-desc-centered {
+  text-align: center;
+  padding: 4px 0;
+}
+
+.vce-card-desc-padded {
+  padding: 8px;
+}
+
+.vce-card-desc-centered-lg {
+  text-align: center;
+  padding: 6px 0;
+}
+
+/* Dice container cursor */
+.vce-cursor-help {
+  cursor: help;
+}
+
+/* -------------------------------------------- */
+/*  Inspiration Chat Notification               */
+/* -------------------------------------------- */
+
+.vce-inspiration-notice {
+  text-align: center;
+  padding: var(--vce-space-xs);
+  border: 1px solid var(--vce-inspiration-accent);
+  border-radius: 4px;
+}
+
+.vce-inspiration-icon {
+  color: var(--vce-inspiration-icon);
+}
+
+/* -------------------------------------------- */
+/*  Barbarian Rage DR                           */
+/* -------------------------------------------- */
+
+.vce-rage-dr .fa-fire {
+  color: #c43c3c;
+}
+
+/* -------------------------------------------- */
+/*  Druid Force of Nature                       */
+/* -------------------------------------------- */
+
+.vce-force-of-nature {
+  text-align: center;
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.vce-force-of-nature.success {
+  border: 1px solid #4a7c3f;
+  background: rgba(74, 124, 63, 0.13);
+}
+
+.vce-force-of-nature.success .vce-fon-icon {
+  color: #4a7c3f;
+}
+
+.vce-force-of-nature.failure {
+  border: 1px solid #8b0000;
+  background: rgba(139, 0, 0, 0.13);
+}
+
+.vce-force-of-nature.failure .vce-fon-icon {
+  color: #8b0000;
+}
+
+/* -------------------------------------------- */
+/*  Dancer Step Up Dialog                       */
+/* -------------------------------------------- */
+
+.vce-stepup-ally-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.vce-stepup-ally-label input[type="checkbox"] {
+  margin: 0;
+}
+
+.vce-stepup-ally-img {
+  border: 1px solid #999;
+  border-radius: 4px;
+}
+
+.vce-stepup-intro {
+  margin-bottom: 8px;
+}
+
+.vce-stepup-scroll {
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.vce-choreographer-note {
+  margin-top: 8px;
+  color: #7b5ea7;
+  font-style: italic;
+}
+
+/* -------------------------------------------- */
+/*  Flash of Beauty Tag                         */
+/* -------------------------------------------- */
+
+.vce-flash-tag {
+  background: goldenrod;
+  color: white;
+}
+
+.vce-flash-tag-row {
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+/* -------------------------------------------- */
+/*  Polymorph Chat Card Description             */
+/* -------------------------------------------- */
+
+.vce-polymorph-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+}
+
+.vce-polymorph-list {
+  margin: 2px 0;
+  padding-left: 18px;
+}
+
+/* -------------------------------------------- */
+/*  Reduced Motion Support                      */
+/* -------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .vce-bf-action,
+  .vce-bf-end,
+  .vce-bf-roll-icon,
+  .vce-bf-transform-btn,
+  .vce-beast-row,
+  .vce-virtuoso-btn,
+  .vcb-cook-item,
+  .vcb-cook-craft-btn {
+    transition: none !important;
+  }
+
+  .vce-bf-action:hover .vce-bf-roll-icon {
+    transform: none;
+  }
+}

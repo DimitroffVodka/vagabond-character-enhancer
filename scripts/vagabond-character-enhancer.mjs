@@ -16,6 +16,11 @@ import { BarbarianFeatures } from "./class-features/barbarian.mjs";
 import { BardFeatures } from "./class-features/bard.mjs";
 import { DancerFeatures } from "./class-features/dancer.mjs";
 import { AlchemistFeatures } from "./class-features/alchemist.mjs";
+import { DruidFeatures } from "./class-features/druid.mjs";
+import { PolymorphManager } from "./polymorph/polymorph-manager.mjs";
+import { PolymorphSheet } from "./polymorph/polymorph-sheet.mjs";
+import { BeastCache } from "./polymorph/beast-cache.mjs";
+import { populateBeasts } from "./polymorph/populate-beasts.mjs";
 
 /* -------------------------------------------- */
 /*  Init                                        */
@@ -84,12 +89,16 @@ Hooks.once("ready", async () => {
     const origCalcFinal = VagabondDamageHelper.calculateFinalDamage;
 
     VagabondDamageHelper.calculateFinalDamage = function (actor, damage, damageType, attackingWeapon = null, sneakDice = 0) {
-      const result = origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice);
+      let result = origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice);
 
-      // Only intervene for berserk barbarians with light/no armor
-      const reductionPerDie = actor.system?.incomingDamageReductionPerDie || 0;
-      if (reductionPerDie <= 0 || !actor.statuses?.has("berserk")) return result;
-      if (!VagabondDamageHelper._isLightOrNoArmor(actor)) return result;
+      const features = actor?.getFlag?.(MODULE_ID, "features");
+      const needsRageDR = actor.system?.incomingDamageReductionPerDie > 0
+        && actor.statuses?.has("berserk")
+        && VagabondDamageHelper._isLightOrNoArmor(actor);
+      const needsTempest = features?.druid_tempestWithin
+        && ["cold", "fire", "shock"].includes(damageType?.toLowerCase());
+
+      if (!needsRageDR && !needsTempest) return result;
 
       // Count dice from currentDamage (the field the system forgot to check)
       let numDice = 0;
@@ -116,15 +125,33 @@ Hooks.once("ready", async () => {
 
       if (numDice <= 0) return result;
 
-      // The original applied 0 DR (damageAmount was empty). Apply the real DR now.
-      const rageDR = reductionPerDie * numDice;
-      if (game.settings.get(MODULE_ID, "debugMode")) {
-        console.log(`${MODULE_ID} | Rage DR: ${reductionPerDie} × ${numDice} dice = ${rageDR} reduction`);
+      // --- Rage DR: Barbarian berserk damage reduction ---
+      if (needsRageDR) {
+        const reductionPerDie = actor.system.incomingDamageReductionPerDie;
+        const rageDR = reductionPerDie * numDice;
+        if (game.settings.get(MODULE_ID, "debugMode")) {
+          console.log(`${MODULE_ID} | Rage DR: ${reductionPerDie} × ${numDice} dice = ${rageDR} reduction`);
+        }
+        result = Math.max(0, result - rageDR);
       }
-      return Math.max(0, result - rageDR);
+
+      // --- Tempest Within: Druid cold/fire/shock damage reduction ---
+      if (needsTempest) {
+        const classLevel = features._classLevel ?? 1;
+        const reductionPerDie = Math.floor(classLevel / 2);
+        if (reductionPerDie > 0) {
+          const tempestDR = reductionPerDie * numDice;
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Tempest Within: ${reductionPerDie} × ${numDice} dice = ${tempestDR} reduction (${damageType})`);
+          }
+          result = Math.max(0, result - tempestDR);
+        }
+      }
+
+      return result;
     };
 
-    console.log(`${MODULE_ID} | Patched calculateFinalDamage for Rage DR.`);
+    console.log(`${MODULE_ID} | Patched calculateFinalDamage for Rage DR + Tempest Within.`);
 
     // --- Bloodthirsty: Favor on attacks vs wounded targets ---
     // Wrap item.rollAttack to upgrade favorHinder when attacker has Bloodthirsty
@@ -484,8 +511,8 @@ Hooks.once("ready", async () => {
           // Post the bonus to chat
           await ChatMessage.create({
             speaker: ChatMessage.getSpeaker(),
-            content: `<div style="text-align:center; padding:4px; border:1px solid #7b5ea7; border-radius:4px;">
-              <i class="fas fa-music" style="color:#c9a0dc;"></i>
+            content: `<div class="vce-inspiration-notice">
+              <i class="fas fa-music vce-inspiration-icon" aria-hidden="true"></i>
               <strong>Inspiration:</strong> +${bonusAmount} healing (1d6 → ${bonusAmount})
             </div>`
           });
@@ -761,6 +788,8 @@ Hooks.once("ready", async () => {
     barbarian: BarbarianFeatures,
     bard: BardFeatures,
     dancer: DancerFeatures,
+    druid: DruidFeatures,
+    polymorph: PolymorphManager,
     alchemist: AlchemistFeatures,
     alchemy: AlchemistFeatures.api,
     rescan: (actor) => FeatureDetector.scan(actor),
@@ -787,7 +816,18 @@ Hooks.once("ready", async () => {
   BarbarianFeatures.registerHooks();
   BardFeatures.registerHooks();
   DancerFeatures.registerHooks();
+  DruidFeatures.registerHooks();
   AlchemistFeatures.registerHooks();
+
+  // Patch character sheet for Beast Form panel injection
+  PolymorphSheet.patchSheet();
+
+  // Initialize beast cache from compendiums
+  BeastCache.initialize();
+
+  // Expose populate function for GM use: game.modules.get("vagabond-character-enhancer").populateBeasts()
+  const mod = game.modules.get(MODULE_ID);
+  if (mod) mod.populateBeasts = populateBeasts;
 
   // Scan all existing characters on first load
   FeatureDetector.scanAll();

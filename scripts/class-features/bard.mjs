@@ -497,7 +497,7 @@ export const BardFeatures = {
         btn.dataset.vceInspiration = "true";
         // Update button text to show the bonus
         const label = btn.textContent.trim();
-        btn.innerHTML = `<i class="fas fa-heart"></i> ${label} + d6 <i class="fas fa-music" style="color:#c9a0dc;"></i>`;
+        btn.innerHTML = `<i class="fas fa-heart"></i> ${label} + d6 <i class="fas fa-music vce-inspiration-icon" aria-hidden="true"></i>`;
         this._log(`Inspiration: Added +1d6 to healing formula: ${formula} → ${btn.dataset.damageAmount}`);
       });
     });
@@ -621,15 +621,15 @@ export const BardFeatures = {
     let buttonsHtml = "";
     if (isSuccess) {
       buttonsHtml = `
-        <div class="vce-virtuoso-choices" style="display:flex; gap:6px; padding:8px;">
-          <button class="vce-virtuoso-btn" data-buff="valor" data-bard-id="${actor.id}">
-            <i class="fas fa-swords"></i> Valor
+        <div class="vce-virtuoso-choices">
+          <button class="vce-virtuoso-btn" data-buff="valor" data-bard-id="${actor.id}" aria-label="Apply Valor buff — Favor on attack rolls">
+            <i class="fas fa-swords" aria-hidden="true"></i> Valor
           </button>
-          <button class="vce-virtuoso-btn" data-buff="resolve" data-bard-id="${actor.id}">
-            <i class="fas fa-shield-alt"></i> Resolve
+          <button class="vce-virtuoso-btn" data-buff="resolve" data-bard-id="${actor.id}" aria-label="Apply Resolve buff — Favor on save rolls">
+            <i class="fas fa-shield-alt" aria-hidden="true"></i> Resolve
           </button>
-          <button class="vce-virtuoso-btn" data-buff="inspiration" data-bard-id="${actor.id}">
-            <i class="fas fa-heart"></i> Inspiration
+          <button class="vce-virtuoso-btn" data-buff="inspiration" data-bard-id="${actor.id}" aria-label="Apply Inspiration buff — bonus healing">
+            <i class="fas fa-heart" aria-hidden="true"></i> Inspiration
           </button>
         </div>
       `;
@@ -662,8 +662,8 @@ export const BardFeatures = {
                 <span class="roll-outcome-text">${resultText}</span>
               </div>
             </div>
-            <div class="roll-dice-container" title="${roll.formula} = ${roll.total}" style="cursor:help;">
-              <div class="vb-die-wrapper die-type-check" data-faces="20" title="1d20 → [${d20Value}]" style="cursor:help;">
+            <div class="roll-dice-container vce-cursor-help" title="${roll.formula} = ${roll.total}">
+              <div class="vb-die-wrapper die-type-check vce-cursor-help" data-faces="20" title="1d20 → [${d20Value}]">
                 <div class="vb-die-bg dmg-pool" style="background-image:url('systems/vagabond/assets/ui/dice/d20-bg.webp')"></div>
                 <span class="vb-die-val">${d20Value}</span>
               </div>
@@ -671,10 +671,10 @@ export const BardFeatures = {
           </section>
           <section class="content-body">
             ${isSuccess
-              ? `<div class="card-description" style="text-align:center; padding:4px 0;">
+              ? `<div class="card-description vce-card-desc-centered">
                   <p>Choose a buff for the party this Round:</p>
                 </div>${buttonsHtml}`
-              : '<div class="card-description" style="text-align:center; padding:4px 0;"><p>The performance fails to inspire.</p></div>'}
+              : '<div class="card-description vce-card-desc-centered"><p>The performance fails to inspire.</p></div>'}
           </section>
         </div>
       </div>
@@ -945,7 +945,7 @@ export const BardFeatures = {
               </div>
             </header>
             <section class="content-body">
-              <div class="card-description" style="padding:8px;">
+              <div class="card-description vce-card-desc-padded">
                 <p><strong>${affectedNames.join(", ")}</strong>
                   ${affectedNames.length === 1 ? "is" : "are"} now
                   <strong>${statusLabel}</strong>!</p>

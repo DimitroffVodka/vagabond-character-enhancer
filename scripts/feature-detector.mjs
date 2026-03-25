@@ -287,7 +287,7 @@ export const FeatureDetector = {
         origin: effectDef.origin,
         flags: effectDef.flags,
         changes: effectDef.changes,
-        disabled: false,
+        disabled: effectDef.disabled ?? false,
         transfer: true
       });
     }
