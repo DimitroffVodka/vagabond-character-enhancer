@@ -438,17 +438,282 @@ function _patchInventoryHandler() {
   });
 }
 
+// ── Inline Sheet Tab ─────────────────────────────────────────────────────────
+// Injects a "Cookbook" tab on alchemist character sheets (same pattern as Beast Form).
+
+let _sheetPatched = false;
+
+function _patchCookbookSheet() {
+  if (_sheetPatched) return;
+
+  Hooks.on("renderApplicationV2", (app) => {
+    if (app.document?.type === "character") {
+      _injectCookbookTab(app);
+    }
+  });
+
+  _sheetPatched = true;
+  console.log(`${MODULE_ID} | AlchemyCookbook | Registered render hook for inline Cookbook tab.`);
+}
+
+async function _injectCookbookTab(sheet) {
+  const actor = sheet.document;
+  if (actor?.type !== "character") return;
+
+  const sheetEl = sheet.element;
+  if (!sheetEl) return;
+
+  const windowContent = sheetEl.querySelector(".window-content");
+  if (!windowContent) return;
+
+  const tabNav = windowContent.querySelector("nav.sheet-tabs");
+  if (!tabNav) return;
+
+  // Check if this actor is an alchemist
+  const features = actor.getFlag(MODULE_ID, "features");
+  const isAlchemist = !!features?.alchemist_alchemy;
+
+  if (!isAlchemist) {
+    // Not an alchemist — clean up stale elements
+    windowContent.querySelector('section.tab[data-tab="vce-cookbook"]')?.remove();
+    tabNav.querySelector('[data-tab="vce-cookbook"]')?.remove();
+    return;
+  }
+
+  // Remove stale elements to avoid duplicates on re-render
+  windowContent.querySelector('section.tab[data-tab="vce-cookbook"]')?.remove();
+  tabNav.querySelector('[data-tab="vce-cookbook"]')?.remove();
+
+  // Create tab link
+  const cookbookTab = document.createElement("a");
+  cookbookTab.dataset.action = "tab";
+  cookbookTab.dataset.tab = "vce-cookbook";
+  cookbookTab.dataset.group = "primary";
+  cookbookTab.innerHTML = "<span>Cookbook</span>";
+  // Insert after the last existing tab
+  tabNav.appendChild(cookbookTab);
+
+  // Create tab section
+  const cookbookSection = document.createElement("section");
+  cookbookSection.className = "tab vce-cookbook-tab scrollable";
+  cookbookSection.dataset.tab = "vce-cookbook";
+  cookbookSection.dataset.group = "primary";
+
+  // Build the cookbook HTML
+  cookbookSection.innerHTML = await _buildInlineCookbookHTML(actor);
+
+  // Insert before the sliding panel
+  const slidingPanel = windowContent.querySelector("aside.sliding-panel");
+  if (slidingPanel) {
+    windowContent.insertBefore(cookbookSection, slidingPanel);
+  } else {
+    windowContent.appendChild(cookbookSection);
+  }
+
+  const actorSheet = actor.sheet;
+
+  // Click handler for Cookbook tab
+  cookbookTab.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    tabNav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
+    windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+    cookbookTab.classList.add("active");
+    cookbookSection.classList.add("active");
+    actorSheet._vceActiveTab = "vce-cookbook";
+    if (actorSheet.tabGroups) actorSheet.tabGroups.primary = "vce-cookbook";
+  });
+
+  // Maintain tab state across re-renders
+  const desiredTab = actorSheet._vceActiveTab;
+  if (desiredTab === "vce-cookbook") {
+    tabNav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
+    windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+    cookbookTab.classList.add("active");
+    cookbookSection.classList.add("active");
+    if (actorSheet.tabGroups) actorSheet.tabGroups.primary = "vce-cookbook";
+  }
+
+  // Track when user clicks other tabs
+  tabNav.querySelectorAll("[data-tab]:not([data-tab='vce-cookbook'])").forEach(t => {
+    t.addEventListener("click", () => {
+      actorSheet._vceActiveTab = t.dataset.tab;
+    });
+  });
+
+  // Bind cookbook events
+  _bindCookbookEvents(cookbookSection, actor, actorSheet);
+}
+
+async function _buildInlineCookbookHTML(actor) {
+  const alcData = getAlchemistData(actor);
+  if (!alcData) {
+    return `<div class="vce-bf-prompt">
+      <i class="fas fa-flask vce-bf-prompt-icon" aria-hidden="true"></i>
+      <h2 class="vce-bf-prompt-title">Cookbook</h2>
+      <p class="vce-bf-prompt-desc">No Alchemy Tools found</p>
+    </div>`;
+  }
+
+  const compendiumItems = await fetchCompendiumItems();
+  const formulaeSet = new Set(alcData.formulae.map(f => f.toLowerCase()));
+
+  let displayItems = compendiumItems.map(itemData => {
+    const silver = itemValueInSilver(itemData);
+    const isFormula = formulaeSet.has(itemData.name.toLowerCase());
+    const cost = getCraftCost(itemData, isFormula);
+    const aType = itemData.system?.alchemicalType ?? "unknown";
+
+    return {
+      name: itemData.name,
+      img: itemData.img ?? "icons/svg/item-bag.svg",
+      alchemicalType: aType.charAt(0).toUpperCase() + aType.slice(1),
+      silver,
+      valueLabel: formatCost(silver),
+      cost,
+      costLabel: formatCost(cost),
+      isFormula,
+      cantAfford: cost > alcData.totalSilver,
+      eligibleAsFormula: silver <= alcData.maxFormulaeValue,
+    };
+  });
+
+  // Sort: formulae first, then by silver value
+  displayItems.sort((a, b) => {
+    if (a.isFormula !== b.isFormula) return a.isFormula ? -1 : 1;
+    return a.silver - b.silver;
+  });
+
+  // Header
+  let html = `<div class="vcb-cookbook">
+    <div class="vcb-cook-header">
+      <div class="vcb-cook-stat">
+        <i class="fas fa-gem"></i>
+        <span>Materials: <strong>${alcData.totalSilver}s</strong> remaining</span>
+      </div>
+      <div class="vcb-cook-stat">
+        <i class="fas fa-star" style="color:#facc15"></i>
+        <span>Formulae: <strong>${alcData.formulae.length}/${alcData.maxFormulaeCount}</strong>
+          (Lv${alcData.level}, max ${formatCost(alcData.maxFormulaeValue)})</span>
+      </div>
+    </div>
+    <div class="vcb-cook-search">
+      <i class="fas fa-search"></i>
+      <input type="text" class="vcb-cook-search-input" placeholder="Search items..." value="" />
+    </div>
+    <div class="vcb-cook-list">`;
+
+  for (const item of displayItems) {
+    const disabledClass = item.cantAfford ? "vcb-cook-disabled" : "";
+    const formulaClass = item.isFormula ? "vcb-cook-formula" : "";
+    const costClass = item.isFormula ? "vcb-cook-cost-formula" : "";
+    const starHtml = item.isFormula ? `<i class="fas fa-star vcb-cook-star"></i>` : "";
+    const tooltip = item.isFormula ? "Right-click to remove formula" : "Right-click to add as formula";
+
+    html += `
+      <div class="vcb-cook-item ${disabledClass} ${formulaClass}"
+           data-item-name="${item.name}" data-eligible="${item.eligibleAsFormula}"
+           title="${tooltip}">
+        <img class="vcb-cook-item-img" src="${item.img}" width="28" height="28" />
+        <div class="vcb-cook-item-info">
+          <span class="vcb-cook-item-name">${starHtml} ${item.name}</span>
+          <span class="vcb-cook-item-type">${item.alchemicalType}</span>
+        </div>
+        <span class="vcb-cook-item-value">${item.valueLabel}</span>
+        <span class="vcb-cook-item-cost ${costClass}">${item.costLabel}</span>
+        <button class="vcb-cook-craft-btn" data-item-name="${item.name}"
+                data-is-formula="${item.isFormula}"
+                ${item.cantAfford ? "disabled" : ""}>
+          <i class="fas fa-hammer"></i> Craft
+        </button>
+      </div>`;
+  }
+
+  html += `</div></div>`;
+  return html;
+}
+
+function _bindCookbookEvents(container, actor, actorSheet) {
+  // Search
+  const searchInput = container.querySelector(".vcb-cook-search-input");
+  if (searchInput) {
+    searchInput.addEventListener("input", () => {
+      const search = searchInput.value.toLowerCase();
+      container.querySelectorAll(".vcb-cook-item").forEach(row => {
+        const name = row.dataset.itemName?.toLowerCase() || "";
+        const type = row.querySelector(".vcb-cook-item-type")?.textContent?.toLowerCase() || "";
+        const match = !search || name.includes(search) || type.includes(search);
+        row.style.display = match ? "" : "none";
+      });
+    });
+  }
+
+  // Craft buttons
+  container.querySelectorAll(".vcb-cook-craft-btn").forEach(btn => {
+    btn.addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const itemName = btn.dataset.itemName;
+      const isFormula = btn.dataset.isFormula === "true";
+      btn.disabled = true;
+      await craftItem(actor, itemName, isFormula);
+      // Re-render the sheet to update materials/formulae counts
+      actor.sheet?.render(false);
+    });
+  });
+
+  // Right-click on item row — toggle formula
+  container.querySelectorAll(".vcb-cook-item").forEach(row => {
+    row.addEventListener("contextmenu", async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const itemName = row.dataset.itemName;
+
+      const alcData = getAlchemistData(actor);
+      if (!alcData?.tools) return;
+
+      const isKnown = alcData.formulae.some(f => f.toLowerCase() === itemName.toLowerCase());
+
+      if (isKnown) {
+        const newFormulae = alcData.formulae.filter(
+          f => f.toLowerCase() !== itemName.toLowerCase()
+        );
+        await alcData.tools.setFlag(MODULE_ID, "knownFormulae", newFormulae);
+        ui.notifications.info(`Removed ${itemName} from formulae.`);
+      } else {
+        if (alcData.formulae.length >= alcData.maxFormulaeCount) {
+          ui.notifications.warn(`You already know ${alcData.maxFormulaeCount} formulae (max for your level).`);
+          return;
+        }
+        const itemSilver = itemValueInSilver(
+          (await fetchCompendiumItems()).find(i => i.name.toLowerCase() === itemName.toLowerCase())
+        );
+        if (itemSilver > alcData.maxFormulaeValue) {
+          ui.notifications.warn(`${itemName} (${formatCost(itemSilver)}) exceeds your max formula value (${formatCost(alcData.maxFormulaeValue)}).`);
+          return;
+        }
+        await alcData.tools.setFlag(MODULE_ID, "knownFormulae", [...alcData.formulae, itemName]);
+        ui.notifications.info(`Added ${itemName} as a known formula.`);
+      }
+      // Re-render to update the list
+      actor.sheet?.render(false);
+    });
+  });
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export const AlchemyCookbook = {
 
   /**
    * Initialize: patch InventoryHandler to add "Open Cookbook"
-   * to the Alchemy Tools right-click context menu.
+   * to the Alchemy Tools right-click context menu,
+   * and inject the Cookbook tab on alchemist character sheets.
    */
   init() {
     if (!game.settings.get(MODULE_ID, "alchemistCookbook")) return;
     _patchInventoryHandler();
+    _patchCookbookSheet();
   },
 
   /** Open the cookbook for a given actor (callable from console/macros). */
