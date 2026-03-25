@@ -868,9 +868,9 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
 }
 
 .vce-bf-multi-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
   min-width: 0;
 }
 
