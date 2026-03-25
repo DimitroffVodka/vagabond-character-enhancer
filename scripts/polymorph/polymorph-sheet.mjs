@@ -637,6 +637,12 @@ export const PolymorphSheet = {
       const d20Result = d20Term?.results?.[0]?.result || 0;
       const isCritical = d20Result >= critNumber;
 
+      // Crit stat bonus — the stat associated with the cast skill (e.g., Awareness for Mysticism)
+      let critStatBonus = 0;
+      if (isCritical && castSkill?.stat) {
+        critStatBonus = rollData.stats?.[castSkill.stat]?.value || 0;
+      }
+
       // --- 2. Prepare damage info ---
       const damageFormula = action.rollDamage || action.flatDamage || null;
       const hasDamage = !!damageFormula;
@@ -703,7 +709,7 @@ export const PolymorphSheet = {
         i.name?.toLowerCase().includes("polymorph") && i.type === "spell"
       );
 
-      await VagabondChatCard.createActionCard({
+      const result = await VagabondChatCard.createActionCard({
         actor: druidActor,
         item: polymorphSpell || null,
         title: `${polyData.beastName}: ${action.name}`,
@@ -713,7 +719,9 @@ export const PolymorphSheet = {
           difficulty,
           isHit,
           isCritical,
-          critNumber
+          critNumber,
+          critStatBonus,
+          weaponSkill: castSkill
         },
         tags,
         description,
@@ -725,6 +733,11 @@ export const PolymorphSheet = {
         targetsAtRollTime,
         actionIndex
       });
+
+      // Grant luck on crit (same as weapon attacks)
+      if (isCritical && critStatBonus) {
+        await VagabondChatCard._grantLuckOnCrit?.(druidActor, result, "Critical Hit");
+      }
 
       // --- 9. Auto-apply conditions to targets on hit ---
       if (isHit && action.causedStatuses?.length > 0 && targetsAtRollTime.length > 0) {
