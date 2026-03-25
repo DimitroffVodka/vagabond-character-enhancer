@@ -779,6 +779,44 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
   background: var(--vagabond-c-tan-lite);
 }
 
+.vce-beast-row-selected {
+  background: var(--vagabond-c-green) !important;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+/* Favorite star icon */
+.vce-bd-fav-star {
+  color: var(--vagabond-c-muted);
+  font-size: 0.85em;
+  margin-right: 4px;
+  cursor: pointer;
+}
+
+.vce-bd-fav-star.vce-bd-fav-active {
+  color: var(--vce-accent);
+}
+
+/* Favorited row — subtle highlight */
+.vce-beast-row-fav {
+  border-left: 3px solid var(--vce-accent);
+}
+
+/* Separator between favorites and non-favorites */
+.vce-beast-row-fav + .vce-beast-row:not(.vce-beast-row-fav) {
+  border-top: 2px solid var(--vce-accent-dim);
+}
+
+/* Inline beast list inside Beast Form tab */
+.vce-bf-beast-list {
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.vce-bf-beast-list .vce-bd-table {
+  width: 100%;
+}
+
 /* Screen reader only utility */
 .sr-only {
   position: absolute;

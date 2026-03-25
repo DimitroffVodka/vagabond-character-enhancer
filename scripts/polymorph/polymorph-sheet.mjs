@@ -10,6 +10,7 @@ import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
 export const PolymorphSheet = {
 
   _patched: false,
+  _cachedImports: null,
 
   /**
    * Register hooks to inject beast form content on character sheet render.
@@ -19,6 +20,14 @@ export const PolymorphSheet = {
   patchSheet() {
     if (this._patched) return;
     const self = this;
+
+    // Eagerly load and cache imports so _buildBeastListHTML can use them synchronously
+    import("./beast-cache.mjs").then(({ BeastCache }) => {
+      import("./polymorph-manager.mjs").then(({ PolymorphManager }) => {
+        self._cachedImports = { BeastCache, PolymorphManager };
+        if (!BeastCache._ready) BeastCache.initialize();
+      });
+    });
 
     // 1. Use render hook to inject beast form on every character sheet render.
     //    Foundry V2 ApplicationV2 fires "renderApplicationV2" and "renderActorSheetV2".
@@ -116,8 +125,8 @@ export const PolymorphSheet = {
       // POLYMORPHED — show beast form panel
       beastForm.innerHTML = this._buildBeastFormHTML(polyData);
     } else {
-      // NOT POLYMORPHED — show a prompt to transform
-      beastForm.innerHTML = this._buildBeastPromptHTML(actor);
+      // NOT POLYMORPHED — show inline beast selection list
+      beastForm.innerHTML = this._buildBeastListHTML(actor);
     }
 
     const firstTab = windowContent.querySelector("section.tab");
@@ -128,18 +137,11 @@ export const PolymorphSheet = {
       windowContent.insertBefore(beastForm, slidingPanel);
     }
 
-    // Click handler for Beast Form tab
+    // Click handler for Beast Form tab — always just switches to the tab
     beastTab.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
 
-      // If not polymorphed, clicking Beast Form tab opens the selection dialog
-      if (!actor.getFlag(MODULE_ID, "polymorphData")) {
-        this._openBeastDialog(actor);
-        return;
-      }
-
-      // Polymorphed — switch to beast form tab
       tabNav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
       windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
       beastTab.classList.add("active");
@@ -150,27 +152,26 @@ export const PolymorphSheet = {
 
     // Determine which tab should be active.
     // When polymorphed: default to Beast Form on first render.
-    // When not polymorphed: don't force Beast Form active.
-    if (polyData) {
-      if (!actorSheet._vceActiveTab) {
-        actorSheet._vceActiveTab = "vce-beast-form";
-      }
+    // When not polymorphed but was on Beast Form: stay on it (shows beast list).
+    if (polyData && !actorSheet._vceActiveTab) {
+      actorSheet._vceActiveTab = "vce-beast-form";
+    }
 
-      const desiredTab = actorSheet._vceActiveTab;
+    const desiredTab = actorSheet._vceActiveTab;
+    if (desiredTab === "vce-beast-form") {
       tabNav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
       windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
-
-      if (desiredTab === "vce-beast-form") {
-        beastTab.classList.add("active");
-        beastForm.classList.add("active");
-        if (actorSheet.tabGroups) actorSheet.tabGroups.primary = "vce-beast-form";
-      } else {
-        const targetTabLink = tabNav.querySelector(`[data-tab="${desiredTab}"]`);
-        const targetSection = windowContent.querySelector(`section.tab[data-tab="${desiredTab}"]`);
-        if (targetTabLink) targetTabLink.classList.add("active");
-        if (targetSection) targetSection.classList.add("active");
-        if (actorSheet.tabGroups) actorSheet.tabGroups.primary = desiredTab;
-      }
+      beastTab.classList.add("active");
+      beastForm.classList.add("active");
+      if (actorSheet.tabGroups) actorSheet.tabGroups.primary = "vce-beast-form";
+    } else if (polyData && desiredTab) {
+      tabNav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
+      windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+      const targetTabLink = tabNav.querySelector(`[data-tab="${desiredTab}"]`);
+      const targetSection = windowContent.querySelector(`section.tab[data-tab="${desiredTab}"]`);
+      if (targetTabLink) targetTabLink.classList.add("active");
+      if (targetSection) targetSection.classList.add("active");
+      if (actorSheet.tabGroups) actorSheet.tabGroups.primary = desiredTab;
     }
 
     // Track when user clicks other tabs
@@ -185,10 +186,9 @@ export const PolymorphSheet = {
       this._bindActions(beastForm, actor, polyData);
     }
 
-    // Bind the "Transform" button in the prompt (when not polymorphed)
-    const transformBtn = beastForm.querySelector(".vce-bf-transform-btn");
-    if (transformBtn) {
-      transformBtn.addEventListener("click", () => this._openBeastDialog(actor));
+    // Bind inline beast row clicks (when not polymorphed)
+    if (!polyData) {
+      this._bindBeastRowClicks(beastForm, actor);
     }
   },
 
@@ -237,19 +237,191 @@ export const PolymorphSheet = {
   },
 
   /**
-   * Build the "not polymorphed" prompt shown on the Beast Form tab.
+   * Bind click/keyboard handlers on inline beast selection rows.
    */
-  _buildBeastPromptHTML(actor) {
+  _bindBeastRowClicks(container, actor) {
+    const { BeastCache, PolymorphManager } = this._cachedImports || {};
+    if (!BeastCache || !PolymorphManager) return;
+
     const level = actor.system.attributes?.level?.value ?? 1;
+    const beasts = BeastCache.getAvailableBeasts(level);
+    const sorted = [...beasts].sort((a, b) =>
+      (a.hd ?? 1) - (b.hd ?? 1) || a.name.localeCompare(b.name)
+    );
+
+    let selecting = false;
+
+    const selectBeast = async (row) => {
+      if (selecting) return;
+      selecting = true;
+
+      const beastName = row.dataset.beastName;
+      const beast = sorted.find(b => b.name === beastName);
+      if (!beast) { selecting = false; return; }
+
+      // Visual feedback — highlight the row
+      row.classList.add("vce-beast-row-selected");
+
+      // Flag to prevent the updateActor hook from opening a second dialog
+      PolymorphManager._transformInProgress = true;
+
+      try {
+        // Auto-set Polymorph focus
+        const polymorphSpell = actor.items.find(i =>
+          i.name?.toLowerCase().includes("polymorph") && i.type === "spell"
+        );
+        if (polymorphSpell) {
+          const currentFocus = actor.system.focus?.spellIds ?? [];
+          if (!currentFocus.includes(polymorphSpell.id)) {
+            await actor.update({
+              "system.focus.spellIds": [...currentFocus, polymorphSpell.id]
+            });
+          }
+        }
+
+        // Apply beast form — this triggers a sheet re-render which swaps to the beast panel
+        await PolymorphManager.applyBeastFormFromCache(actor, beast);
+      } finally {
+        PolymorphManager._transformInProgress = false;
+        selecting = false;
+      }
+    };
+
+    container.querySelectorAll(".vce-beast-row").forEach(row => {
+      // Left-click to select
+      row.addEventListener("click", (e) => selectBeast(e.currentTarget));
+
+      // Right-click to toggle favorite
+      row.addEventListener("contextmenu", async (e) => {
+        e.preventDefault();
+        const beastName = row.dataset.beastName;
+        const currentFavs = actor.getFlag(MODULE_ID, "beastFavorites") || [];
+        let newFavs;
+        if (currentFavs.includes(beastName)) {
+          newFavs = currentFavs.filter(n => n !== beastName);
+        } else {
+          newFavs = [...currentFavs, beastName];
+        }
+        await actor.setFlag(MODULE_ID, "beastFavorites", newFavs);
+        // Sheet will re-render via updateActor hook, which rebuilds the list
+      });
+
+      // Keyboard navigation
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectBeast(e.currentTarget);
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          e.currentTarget.nextElementSibling?.focus();
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          e.currentTarget.previousElementSibling?.focus();
+        }
+      });
+    });
+  },
+
+  /**
+   * Build the inline beast selection list shown on the Beast Form tab when not polymorphed.
+   * Uses BeastCache data — must be initialized before calling.
+   */
+  _buildBeastListHTML(actor) {
+    const { BeastCache } = this._cachedImports || {};
+    const level = actor.system.attributes?.level?.value ?? 1;
+
+    // If cache not ready, show a loading message with a button fallback
+    if (!BeastCache || !BeastCache._ready) {
+      return `
+        <div class="vce-bf-prompt">
+          <i class="fas fa-paw vce-bf-prompt-icon" aria-hidden="true"></i>
+          <h2 class="vce-bf-prompt-title">Beast Form</h2>
+          <p class="vce-bf-prompt-desc">Loading beasts…</p>
+        </div>
+      `;
+    }
+
+    const beasts = BeastCache.getAvailableBeasts(level);
+    if (beasts.length === 0) {
+      return `
+        <div class="vce-bf-prompt">
+          <i class="fas fa-paw vce-bf-prompt-icon" aria-hidden="true"></i>
+          <h2 class="vce-bf-prompt-title">Beast Form</h2>
+          <p class="vce-bf-prompt-desc">No Beasts available at Level ${level}</p>
+        </div>
+      `;
+    }
+
+    // Get favorites from actor flag
+    const favorites = actor.getFlag(MODULE_ID, "beastFavorites") || [];
+
+    // Sort: favorites first (by name), then rest by HD ascending + name
+    const sorted = [...beasts].sort((a, b) => {
+      const aFav = favorites.includes(a.name);
+      const bFav = favorites.includes(b.name);
+      if (aFav && !bFav) return -1;
+      if (!aFav && bFav) return 1;
+      return (a.hd ?? 1) - (b.hd ?? 1) || a.name.localeCompare(b.name);
+    });
+
+    const rows = sorted.map((b) => {
+      const hd = b.hd ?? 1;
+      const size = b.size ?? "medium";
+      const armor = b.armor ?? 0;
+      const speed = b.speed ?? 30;
+      const speedExtras = [];
+      const sv = b.speedValues || {};
+      if (sv.fly) speedExtras.push(`Fly ${sv.fly}'`);
+      if (sv.swim) speedExtras.push(`Swim ${sv.swim}'`);
+      if (sv.climb) speedExtras.push(`Climb ${sv.climb}'`);
+      if (sv.cling) speedExtras.push(`Cling ${sv.cling}'`);
+      const speedStr = `${speed}'` + (speedExtras.length ? ` (${speedExtras.join(", ")})` : "");
+
+      const actions = (b.actions ?? []).map(a => {
+        const dmg = a.rollDamage || a.flatDamage || "—";
+        return `${a.name}: ${dmg}`;
+      }).join("; ");
+
+      const img = b.img || "icons/svg/mystery-man.svg";
+      const isFav = favorites.includes(b.name);
+      const starIcon = isFav
+        ? `<i class="fas fa-star vce-bd-fav-star vce-bd-fav-active" aria-label="Favorited"></i>`
+        : `<i class="far fa-star vce-bd-fav-star" aria-label="Not favorited"></i>`;
+      const favClass = isFav ? " vce-beast-row-fav" : "";
+
+      return `
+        <tr class="vce-beast-row${favClass}" data-beast-name="${b.name}"
+            role="button" tabindex="0" aria-label="${b.name}, HD ${hd}, ${size}">
+          <td class="vce-bd-cell vce-bd-cell-img">
+            <img src="${img}" class="vce-bd-beast-img" alt="" loading="lazy" />
+          </td>
+          <td class="vce-bd-cell"><strong>${starIcon} ${b.name}</strong></td>
+          <td class="vce-bd-cell vce-bd-cell-center">${hd}</td>
+          <td class="vce-bd-cell vce-bd-cell-center">${size}</td>
+          <td class="vce-bd-cell vce-bd-cell-center">${armor}</td>
+          <td class="vce-bd-cell">${speedStr}</td>
+          <td class="vce-bd-cell vce-bd-cell-actions">${actions || "—"}</td>
+        </tr>`;
+    }).join("");
+
     return `
-      <div class="vce-bf-prompt">
-        <i class="fas fa-paw vce-bf-prompt-icon" aria-hidden="true"></i>
-        <h2 class="vce-bf-prompt-title">Beast Form</h2>
-        <p class="vce-bf-prompt-desc">Choose a Beast to transform into (HD ≤ ${level})</p>
-        <button class="vce-bf-transform-btn" type="button"
-                aria-label="Open beast selection to transform">
-          <i class="fas fa-exchange-alt" aria-hidden="true"></i> Transform
-        </button>
+      <div class="vce-bf-beast-list">
+        <table class="vce-bd-table" role="grid" aria-label="Available beasts">
+          <thead>
+            <tr class="vce-bd-header-row">
+              <th class="vce-bd-th vce-bd-th-img" scope="col"></th>
+              <th class="vce-bd-th" scope="col">Beast</th>
+              <th class="vce-bd-th vce-bd-th-center" scope="col">HD</th>
+              <th class="vce-bd-th vce-bd-th-center" scope="col">Size</th>
+              <th class="vce-bd-th vce-bd-th-center" scope="col">Armor</th>
+              <th class="vce-bd-th" scope="col">Speed</th>
+              <th class="vce-bd-th" scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
       </div>
     `;
   },
