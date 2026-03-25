@@ -267,7 +267,7 @@ Hooks.once("ready", async () => {
 
           try {
             const { VagabondChatCard } = globalThis.vagabond.utils;
-            const { VagabondDamageHelper } = globalThis.vagabond.utils;
+            const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
 
             // Capture targets before the roll
             const targets = Array.from(game.user.targets).map(t => ({
@@ -286,7 +286,8 @@ Hooks.once("ready", async () => {
 
             // Damage roll (includes explosion check via _getExplodeValues)
             let damageRoll = null;
-            if (VagabondDamageHelper.shouldRollDamage(attackResult.isHit)) {
+            const isHit = attackResult.isHit ?? false;
+            if (isHit || attackResult.isCritical) {
               damageRoll = await this.rollDamage(actor, attackResult.isCritical, attackResult.weaponSkill?.stat ?? null);
             }
 

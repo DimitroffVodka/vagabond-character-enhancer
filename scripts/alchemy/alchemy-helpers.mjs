@@ -1616,6 +1616,13 @@ export function registerConsumableUseHook() {
     const effect = getConsumableEffect(itemName);
     if (!effect) return;
 
+    // Skip healing effects if the item has damageType: "healing" — the system
+    // handles healing natively via its damage card. Our hook would double-heal.
+    if (effect.type === "heal" && item?.system?.damageType === "healing") {
+      console.log(`${MODULE_ID} | Skipping custom heal for ${itemName} — system handles natively.`);
+      return;
+    }
+
     console.log(`${MODULE_ID} | Consumable use detected: ${itemName}`);
 
     try {
