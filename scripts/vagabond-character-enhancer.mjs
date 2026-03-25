@@ -166,15 +166,43 @@ Hooks.once("ready", async () => {
 
     console.log(`${MODULE_ID} | Patched calculateFinalDamage for Rage DR + Tempest Within.`);
 
-    // --- Consumable weapons: force auto-roll damage ---
-    // When "roll damage with check" is off, the system shows a "Roll Damage" button.
-    // But consumable weapons get deleted after the attack, so the button can't read
-    // canExplode/explodeValues from the now-deleted item. We patch shouldRollDamage
-    // to return true when a consumable weapon attack is in progress.
+    // ── Consumable Weapon Damage Auto-Roll ──────────────────────────────────
+    //
+    // PROBLEM:
+    //   The system has a "roll damage with check" setting. When OFF, the attack
+    //   card shows a "Roll Damage" button instead of auto-rolling. But consumable
+    //   weapons (e.g. Alchemist's Fire) are DELETED by handleConsumption() after
+    //   the attack card is posted. When the player later clicks "Roll Damage",
+    //   the item no longer exists — so canExplode/explodeValues can't be read
+    //   from it, and explosions silently fail.
+    //
+    // FAILED APPROACHES:
+    //   1. Patching item.roll() only — doesn't help because right-click "Use"
+    //      on the Equipped panel calls _onRollWeapon → rollHandler.rollWeapon(),
+    //      which is a completely different code path that never calls item.roll().
+    //   2. Modifying the system's roll-handler.mjs directly — works but violates
+    //      the constraint of module-only changes. System updates would overwrite.
+    //   3. Patching handleConsumption to delay — too fragile, other code expects
+    //      immediate consumption.
+    //
+    // SOLUTION:
+    //   Two-part monkey-patch using a one-shot flag:
+    //   (A) Wrap rollAttack: when the item being attacked with is a consumable
+    //       weapon, set _vceForceRollDamage = true on VagabondDamageHelper.
+    //   (B) Wrap shouldRollDamage: if the flag is set, return true (forcing
+    //       auto-roll) and clear the flag. The flag is "one-shot" — consumed
+    //       on first read so it doesn't affect subsequent non-consumable attacks.
+    //
+    //   This works because the system's rollWeapon() flow is:
+    //     1. item.rollAttack()     ← our wrapper sets the flag
+    //     2. shouldRollDamage()    ← our wrapper reads & clears the flag, returns true
+    //     3. item.rollDamage()     ← runs with item still alive, checks canExplode ✅
+    //     4. weaponAttack()        ← posts card with damage inline
+    //     5. handleConsumption()   ← item deleted (but damage already rolled)
+    //
     const origShouldRoll = VagabondDamageHelper.shouldRollDamage;
     VagabondDamageHelper.shouldRollDamage = function (isHit) {
       if (VagabondDamageHelper._vceForceRollDamage) {
-        // Clear the flag after it's consumed — one-shot override
         VagabondDamageHelper._vceForceRollDamage = false;
         return true;
       }
@@ -249,8 +277,12 @@ Hooks.once("ready", async () => {
             }
           }
         }
-        // Consumable weapons: force auto-roll damage so explosions work
-        // (the item is consumed after the attack, so "Roll Damage" button won't work)
+        // ── Consumable weapon flag (Part A of the two-part patch) ──
+        // See "Consumable Weapon Damage Auto-Roll" comment block above for
+        // the full explanation. We set the flag HERE so that when the system's
+        // rollWeapon() calls shouldRollDamage() AFTER this returns, the flag
+        // is still set. shouldRollDamage (Part B) consumes and clears it.
+        // On error, we clear the flag to avoid leaking into the next attack.
         const isConsumableWeapon = this.system?.isConsumable
           && this.system?.equipmentType === "weapon";
         if (isConsumableWeapon) {
@@ -262,8 +294,6 @@ Hooks.once("ready", async () => {
         try {
           const result = await origRollAttack.call(this, actor, favorHinder);
           _currentRollActor = null;
-          // Don't clear _vceForceRollDamage here — shouldRollDamage() will
-          // consume it when the system calls it after rollAttack returns.
           return result;
         } catch (e) {
           _currentRollActor = null;
@@ -283,10 +313,26 @@ Hooks.once("ready", async () => {
     if (VagabondItem?.prototype?.roll) {
       const origItemRoll = VagabondItem.prototype.roll;
       VagabondItem.prototype.roll = async function (event, targetsAtRollTime = []) {
-        // --- Alchemical weapons: redirect "Use" to proper attack flow ---
-        // When a player right-clicks an alchemical weapon and presses "Use",
-        // the default item.roll() path skips rollDamage() (and thus explosions).
-        // Redirect to the full attack flow so canExplode/explodeValues work.
+        // ── Alchemical weapon redirect ─────────────────────────────────────
+        //
+        // PROBLEM:
+        //   item.roll() is called when a player clicks an item directly (e.g.
+        //   from the inventory grid). For non-weapon items, this posts a generic
+        //   "item use" card via VagabondChatCard.itemUse() — no attack roll, no
+        //   damage roll, no explosion check. It then calls handleConsumption()
+        //   which deletes the item. Alchemical weapons need the full attack flow.
+        //
+        // NOTE: This is a SEPARATE path from the Equipped panel's right-click
+        //   "Use" button, which calls _onRollWeapon → rollHandler.rollWeapon().
+        //   That path IS correct (attack → damage → consumption) and is handled
+        //   by the shouldRollDamage force-flag patch above.
+        //
+        // WHY CHECK SPECIFIC TYPES:
+        //   The system defaults alchemicalType to "concoction" for ALL equipment
+        //   items (Backpack, Bedroll, Torch, etc.). A naive `this.system.alchemicalType`
+        //   check would match everything. We explicitly check for real alchemical
+        //   weapon types: acid, explosive, poison, and Holy Water (a weapon override).
+        //
         const ALCHEMICAL_WEAPON_TYPES = new Set(["acid", "explosive", "poison"]);
         const alcType = (this.system.alchemicalType ?? "").toLowerCase();
         const isAlchemicalWeapon = this.type === "equipment"
@@ -298,25 +344,23 @@ Hooks.once("ready", async () => {
 
           try {
             const { VagabondChatCard } = globalThis.vagabond.utils;
-            const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
 
-            // Capture targets before the roll
             const targets = Array.from(game.user.targets).map(t => ({
               tokenId: t.id, sceneId: t.scene.id,
               actorId: t.actor?.id, actorName: t.name, actorImg: t.document.texture.src,
             }));
 
             const favorHinder = actor.system?.favorHinder || "none";
+            // rollAttack goes through our wrapper which sets _vceForceRollDamage
             const attackResult = await this.rollAttack(actor, favorHinder);
             if (!attackResult) return;
 
-            // Crit stat bonus
             if (attackResult.isCritical && attackResult.weaponSkill?.stat) {
               attackResult.critStatBonus = actor.getRollData().stats?.[attackResult.weaponSkill.stat]?.value || 0;
             }
 
-            // Always roll damage on hit for consumable alchemical weapons —
-            // the item is consumed after, so the "Roll Damage" button won't work.
+            // Always roll damage on hit — item will be consumed after this.
+            // rollDamage() checks canExplode/explodeValues while item still exists.
             let damageRoll = null;
             const isHit = attackResult.isHit ?? false;
             if (isHit || attackResult.isCritical) {
