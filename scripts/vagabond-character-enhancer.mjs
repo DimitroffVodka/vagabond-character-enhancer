@@ -113,30 +113,21 @@ Hooks.once("ready", async () => {
 
       if (!needsRageDR && !needsTempest) return result;
 
-      // Count dice from currentDamage (the field the system forgot to check)
+      // Count dice from attackingWeapon formula (NPC action or player weapon)
       let numDice = 0;
       const formula = attackingWeapon?.system?.currentDamage
         || attackingWeapon?.system?.damageAmount || "";
       numDice = VagabondDamageHelper._countDiceInFormula(formula);
 
-      // Fallback for NPC attacks (no weapon item): scan recent chat for dice count
-      if (numDice === 0) {
-        const recent = game.messages.contents.slice(-5);
-        for (let i = recent.length - 1; i >= 0; i--) {
-          const rolls = recent[i].rolls;
-          if (!rolls?.length) continue;
-          for (const roll of rolls) {
-            for (const term of (roll.terms || [])) {
-              if (term.constructor?.name === "Die") {
-                numDice += term.results?.length || term.number || 0;
-              }
-            }
-          }
-          if (numDice > 0) break;
-        }
+      // Fallback for NPC actions passed as plain objects (not items)
+      if (numDice === 0 && attackingWeapon?.rollDamage) {
+        numDice = VagabondDamageHelper._countDiceInFormula(attackingWeapon.rollDamage);
       }
 
-      if (numDice <= 0) return result;
+      // If we still can't determine dice count, default to 1 die.
+      // This avoids the unreliable chat-scanning approach that could
+      // pick up unrelated rolls and over-reduce damage.
+      if (numDice <= 0) numDice = 1;
 
       // --- Rage DR: Barbarian berserk damage reduction ---
       if (needsRageDR) {
