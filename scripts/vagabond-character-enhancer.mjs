@@ -930,6 +930,24 @@ Hooks.once("ready", async () => {
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
     virtuoso: (actor) => BardFeatures.useVirtuoso(actor),
+    /** API for Vagabond Crawler: get Virtuoso menu data for a bard actor */
+    getVirtuosoData: (actor) => {
+      if (!actor) return null;
+      const features = actor.getFlag(MODULE_ID, "features");
+      if (!features?.bard_virtuoso) return null;
+      return {
+        hasBard: true,
+        hasStarstruck: !!features.bard_starstruck,
+        hasClimax: !!features.bard_climax,
+        buffs: [
+          { key: "valor", label: "Valor", desc: "Favor on Attacks & Casts" },
+          { key: "resolve", label: "Resolve", desc: "Favor on Saves" },
+          { key: "inspiration", label: "Inspiration", desc: "+d6 Healing" },
+        ],
+        /** Call this to trigger a Virtuoso buff from the crawler */
+        useVirtuoso: (buffKey) => BardFeatures._useVirtuosoFromTab(actor, buffKey),
+      };
+    },
     debug: (actor) => {
       if (!actor) {
         console.warn(`${MODULE_ID} | debug: No actor provided. Usage: game.vagabondCharacterEnhancer.debug(game.actors.get("id"))`);
