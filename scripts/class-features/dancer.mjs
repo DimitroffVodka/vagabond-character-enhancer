@@ -168,6 +168,7 @@ export const DancerFeatures = {
     this._registerStepUpHooks();
     this._registerFlashOfBeautyHooks();
     this._registerCombatExpiryHooks();
+    this._patchStepUpSheet();
     this._log("Dancer hooks registered.");
   },
 
@@ -598,5 +599,286 @@ export const DancerFeatures = {
       if (speedAE) await speedAE.delete();
     }
     this._log("Step Up: All buffs cleared (combat ended).");
+  },
+
+  /* -------------------------------------------- */
+  /*  Step Up Sheet Tab                            */
+  /* -------------------------------------------- */
+
+  /**
+   * Inject a "Step Up" tab on dancer character sheets.
+   * Shows ally selection inline (like Virtuoso/Beast Form tabs).
+   * Clicking "Step Up!" executes the full flow without a popup dialog.
+   */
+  _patchStepUpSheet() {
+    const self = this;
+
+    Hooks.on("renderApplicationV2", (app) => {
+      if (app.document?.type === "character") {
+        self._injectStepUpTab(app);
+      }
+    });
+
+    console.log(`${MODULE_ID} | Dancer | Registered render hook for Step Up tab.`);
+  },
+
+  _injectStepUpTab(sheet) {
+    const actor = sheet.document;
+    if (actor?.type !== "character") return;
+
+    const sheetEl = sheet.element;
+    if (!sheetEl) return;
+
+    const windowContent = sheetEl.querySelector(".window-content");
+    if (!windowContent) return;
+
+    const tabNav = windowContent.querySelector("nav.sheet-tabs");
+    if (!tabNav) return;
+
+    // Check if this actor is a dancer with Step Up
+    const features = actor.getFlag(MODULE_ID, "features");
+    const isDancer = !!features?.dancer_stepUp;
+
+    if (!isDancer) {
+      windowContent.querySelector('section.tab[data-tab="vce-stepup"]')?.remove();
+      tabNav.querySelector('[data-tab="vce-stepup"]')?.remove();
+      return;
+    }
+
+    // Remove stale elements
+    windowContent.querySelector('section.tab[data-tab="vce-stepup"]')?.remove();
+    tabNav.querySelector('[data-tab="vce-stepup"]')?.remove();
+
+    // Create tab link
+    const stepUpTab = document.createElement("a");
+    stepUpTab.dataset.action = "tab";
+    stepUpTab.dataset.tab = "vce-stepup";
+    stepUpTab.dataset.group = "primary";
+    stepUpTab.innerHTML = "<span>Step Up</span>";
+    tabNav.appendChild(stepUpTab);
+
+    // Create tab section
+    const stepUpSection = document.createElement("section");
+    stepUpSection.className = "tab vce-stepup-tab scrollable";
+    stepUpSection.dataset.tab = "vce-stepup";
+    stepUpSection.dataset.group = "primary";
+    stepUpSection.innerHTML = this._buildStepUpHTML(actor, features);
+
+    // Insert before sliding panel
+    const slidingPanel = windowContent.querySelector("aside.sliding-panel");
+    if (slidingPanel) {
+      windowContent.insertBefore(stepUpSection, slidingPanel);
+    } else {
+      windowContent.appendChild(stepUpSection);
+    }
+
+    const actorSheet = actor.sheet;
+
+    // Click handler for Step Up tab
+    stepUpTab.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      tabNav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
+      windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+      stepUpTab.classList.add("active");
+      stepUpSection.classList.add("active");
+      actorSheet._vceActiveTab = "vce-stepup";
+      if (actorSheet.tabGroups) actorSheet.tabGroups.primary = "vce-stepup";
+      // Refresh ally list each time tab is clicked (targets may have changed)
+      stepUpSection.innerHTML = this._buildStepUpHTML(actor, features);
+      this._bindStepUpEvents(stepUpSection, actor, features);
+    });
+
+    // Maintain tab state across re-renders
+    if (actorSheet._vceActiveTab === "vce-stepup") {
+      tabNav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
+      windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+      stepUpTab.classList.add("active");
+      stepUpSection.classList.add("active");
+      if (actorSheet.tabGroups) actorSheet.tabGroups.primary = "vce-stepup";
+    }
+
+    // Track other tab clicks
+    tabNav.querySelectorAll("[data-tab]:not([data-tab='vce-stepup'])").forEach(t => {
+      t.addEventListener("click", () => { actorSheet._vceActiveTab = t.dataset.tab; });
+    });
+
+    // Bind events
+    this._bindStepUpEvents(stepUpSection, actor, features);
+  },
+
+  _buildStepUpHTML(actor, features) {
+    const hasChoreographer = !!features?.dancer_choreographer;
+    const hasDoubleTime = !!features?.dancer_doubleTime;
+    const maxTargets = hasDoubleTime ? 2 : 1;
+    const isActive = !!actor.getFlag(MODULE_ID, "stepUpActive");
+
+    // Get ally tokens on canvas
+    const allyTokens = canvas.tokens?.placeables?.filter(t => {
+      if (!t.actor || t.actor.id === actor.id) return false;
+      return t.actor.type === "character";
+    }) ?? [];
+
+    // Ally checkboxes
+    let allyHTML = "";
+    if (allyTokens.length > 0) {
+      allyHTML = allyTokens.map(t => {
+        const img = t.actor.img || "icons/svg/mystery-man.svg";
+        return `
+          <label class="vce-su-ally">
+            <input type="checkbox" name="ally" value="${t.actor.id}" />
+            <img src="${img}" class="vce-su-ally-img" alt="${t.actor.name}" />
+            <span class="vce-su-ally-name">${t.actor.name}</span>
+          </label>`;
+      }).join("");
+    } else {
+      allyHTML = `<p class="vce-su-hint">No allies on the scene</p>`;
+    }
+
+    // Enhancement notes
+    let notesHTML = "";
+    if (hasChoreographer) {
+      notesHTML += `<p class="vce-su-note"><i class="fas fa-music"></i> Choreographer: Favor on first Check + both gain +10 Speed</p>`;
+    }
+    if (hasDoubleTime) {
+      notesHTML += `<p class="vce-su-note"><i class="fas fa-forward"></i> Double Time: Select up to 2 allies</p>`;
+    }
+
+    return `
+      <div class="vce-stepup-panel">
+        <div class="vce-su-header">
+          <i class="fas fa-shoe-prints vce-su-icon" aria-hidden="true"></i>
+          <div>
+            <h2 class="vce-su-title">Step Up</h2>
+            <p class="vce-su-subtitle">Select ${maxTargets > 1 ? "up to " + maxTargets + " allies" : "an ally"} to grant a bonus Action</p>
+          </div>
+        </div>
+
+        ${isActive ? `<div class="vce-su-active-banner">
+          <i class="fas fa-check-circle"></i> Step Up active — 2d20kh on Reflex Saves
+        </div>` : ""}
+
+        <div class="vce-su-allies">
+          ${allyHTML}
+        </div>
+
+        ${notesHTML}
+
+        <button class="vce-su-execute-btn" type="button" ${allyTokens.length === 0 ? "disabled" : ""}>
+          <i class="fas fa-shoe-prints"></i> Step Up!
+        </button>
+      </div>
+    `;
+  },
+
+  _bindStepUpEvents(container, actor, features) {
+    const maxTargets = this._hasFeature(actor, "dancer_doubleTime") ? 2 : 1;
+
+    // Enforce max checkbox selection
+    const checkboxes = container.querySelectorAll('input[name="ally"]');
+    checkboxes.forEach(cb => {
+      cb.addEventListener("change", () => {
+        const checked = container.querySelectorAll('input[name="ally"]:checked');
+        if (checked.length > maxTargets) {
+          cb.checked = false;
+          ui.notifications.warn(`Step Up: You can select at most ${maxTargets} ${maxTargets > 1 ? "allies" : "ally"}.`);
+        }
+      });
+    });
+
+    // Execute button
+    const executeBtn = container.querySelector(".vce-su-execute-btn");
+    if (executeBtn) {
+      executeBtn.addEventListener("click", async () => {
+        const checked = container.querySelectorAll('input[name="ally"]:checked');
+        const selectedIds = Array.from(checked).map(cb => cb.value);
+
+        if (selectedIds.length === 0) {
+          ui.notifications.warn("Step Up: Select at least one ally.");
+          return;
+        }
+
+        executeBtn.disabled = true;
+
+        // Execute Step Up directly (bypass the dialog flow)
+        await this._executeStepUpFromTab(actor, selectedIds, features);
+
+        // Re-render sheet to show active state
+        actor.sheet?.render(false);
+      });
+    }
+  },
+
+  /**
+   * Execute Step Up from the sheet tab — applies buffs to dancer + allies,
+   * posts chat card. Same logic as performStepUp() but without the dialog.
+   */
+  async _executeStepUpFromTab(actor, selectedIds, features) {
+    const hasChoreographer = !!features?.dancer_choreographer;
+    const currentRound = game.combat?.round ?? 0;
+
+    // Activate Step Up on the dancer (2d20kh on Reflex Saves)
+    await actor.setFlag(MODULE_ID, "stepUpActive", true);
+    await actor.setFlag(MODULE_ID, "stepUpExpireRound", currentRound + 1);
+
+    const tags = ["Step Up"];
+
+    // Apply buffs to each selected ally
+    for (const allyId of selectedIds) {
+      const ally = game.actors.get(allyId);
+      if (!ally) continue;
+
+      await ally.setFlag(MODULE_ID, "stepUpBonusAction", true);
+      await ally.setFlag(MODULE_ID, "stepUpBonusActionExpireRound", currentRound + 1);
+
+      if (hasChoreographer) {
+        await ally.setFlag(MODULE_ID, "choreographerFavor", true);
+        await ally.setFlag(MODULE_ID, "choreographerFavorExpireRound", currentRound + 1);
+        await this._createSpeedBonusAE(ally, currentRound);
+        if (!tags.includes("Choreographer")) tags.push("Choreographer");
+      }
+    }
+
+    if (hasChoreographer) {
+      await this._createSpeedBonusAE(actor, currentRound);
+    }
+
+    if (this._hasFeature(actor, "dancer_doubleTime") && selectedIds.length > 1) {
+      tags.push("Double Time");
+    }
+
+    // Post chat card
+    const allyNames = selectedIds.map(id => game.actors.get(id)?.name).filter(Boolean).join(", ");
+    const metaTags = tags.map(t => `<div class="meta-tag"><span>${t}</span></div>`).join("");
+
+    let descriptionLines = `<p>${allyNames} ${selectedIds.length > 1 ? "gain" : "gains"} a bonus Action this Turn.</p>`;
+    if (hasChoreographer) {
+      descriptionLines += `<p><i class="fas fa-music"></i> +10 Speed &amp; Favor on first Check</p>`;
+    }
+
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content: `
+        <div class="vagabond-chat-card-v2" data-card-type="generic">
+          <div class="card-body">
+            <header class="card-header">
+              <div class="header-icon">
+                <img src="icons/magic/life/heart-pink.webp" alt="Step Up">
+              </div>
+              <div class="header-info">
+                <h3 class="header-title">Step Up</h3>
+                <div class="metadata-tags-row">${metaTags}</div>
+              </div>
+            </header>
+            <section class="content-body">
+              <div class="card-description vce-card-desc-centered">
+                ${descriptionLines}
+              </div>
+            </section>
+          </div>
+        </div>`
+    });
+
+    this._log(`Step Up (tab): Activated for ${actor.name}, allies: ${allyNames}`);
   }
 };

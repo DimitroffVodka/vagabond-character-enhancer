@@ -89,7 +89,8 @@ nav.sheet-tabs [data-tab="vce-beast-form"] {
 /* Flexible centering with overflow protection — any VCE-injected tab */
 nav.sheet-tabs:has([data-tab="vce-beast-form"]),
 nav.sheet-tabs:has([data-tab="vce-cookbook"]),
-nav.sheet-tabs:has([data-tab="vce-virtuoso"]) {
+nav.sheet-tabs:has([data-tab="vce-virtuoso"]),
+nav.sheet-tabs:has([data-tab="vce-stepup"]) {
   justify-content: center !important;
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -99,14 +100,16 @@ nav.sheet-tabs:has([data-tab="vce-virtuoso"]) {
 
 nav.sheet-tabs:has([data-tab="vce-beast-form"])::-webkit-scrollbar,
 nav.sheet-tabs:has([data-tab="vce-cookbook"])::-webkit-scrollbar,
-nav.sheet-tabs:has([data-tab="vce-virtuoso"])::-webkit-scrollbar {
+nav.sheet-tabs:has([data-tab="vce-virtuoso"])::-webkit-scrollbar,
+nav.sheet-tabs:has([data-tab="vce-stepup"])::-webkit-scrollbar {
   display: none; /* Chrome/Safari */
 }
 
 /* Tabs should not shrink at normal widths — only scroll if needed */
 nav.sheet-tabs:has([data-tab="vce-beast-form"]) [data-tab],
 nav.sheet-tabs:has([data-tab="vce-cookbook"]) [data-tab],
-nav.sheet-tabs:has([data-tab="vce-virtuoso"]) [data-tab] {
+nav.sheet-tabs:has([data-tab="vce-virtuoso"]) [data-tab],
+nav.sheet-tabs:has([data-tab="vce-stepup"]) [data-tab] {
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -1192,6 +1195,157 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
 
 .vce-virt-no-target {
   opacity: 0.6;
+}
+
+/* -------------------------------------------- */
+/*  Step Up Tab (Dancer)                        */
+/* -------------------------------------------- */
+
+.vce-stepup-panel {
+  padding: 12px;
+}
+
+.vce-su-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.vce-su-icon {
+  font-size: 28px;
+  color: var(--vce-accent);
+}
+
+.vce-su-title {
+  font-family: "Germania", serif;
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--vagabond-c-text-primary);
+  margin: 0;
+  border: none;
+}
+
+.vce-su-subtitle {
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  color: var(--vagabond-c-muted);
+  margin: 0;
+}
+
+/* Active banner */
+.vce-su-active-banner {
+  background: rgba(74, 124, 63, 0.2);
+  border: 1px solid rgba(74, 124, 63, 0.5);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  color: #8fef7f;
+}
+
+.vce-su-active-banner i {
+  margin-right: 4px;
+}
+
+/* Ally selection */
+.vce-su-allies {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.vce-su-ally {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--vagabond-c-inset-2);
+  border: 1px solid var(--vagabond-c-tan);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.vce-su-ally:hover {
+  background: var(--vagabond-c-tan-lite);
+  border-color: var(--vce-accent);
+}
+
+.vce-su-ally:has(input:checked) {
+  border-color: var(--vce-accent);
+  background: rgba(212, 168, 67, 0.15);
+}
+
+.vce-su-ally input[type="checkbox"] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.vce-su-ally-img {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  border: none;
+  flex-shrink: 0;
+}
+
+.vce-su-ally-name {
+  font-family: "Paradigm", serif;
+  font-size: 13px;
+}
+
+/* Enhancement notes */
+.vce-su-note {
+  font-family: "Paradigm", serif;
+  font-size: 11px;
+  color: var(--vagabond-c-muted);
+  margin: 4px 0;
+  font-style: italic;
+}
+
+.vce-su-note i {
+  color: var(--vce-accent);
+  margin-right: 4px;
+}
+
+/* Execute button */
+.vce-su-execute-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  margin-top: 8px;
+  background: var(--vagabond-c-tan);
+  border: 1px solid var(--vce-accent);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: "Germania", serif;
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--vagabond-c-text-primary);
+  transition: background 0.15s;
+}
+
+.vce-su-execute-btn:hover {
+  background: var(--vce-accent);
+  color: #000;
+}
+
+.vce-su-execute-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.vce-su-hint {
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  color: var(--vagabond-c-muted);
+  font-style: italic;
 }
 
 .vce-virt-hint {
