@@ -43,30 +43,19 @@ export const FIGHTER_REGISTRY = {
   // Dodge or Block Attacks is reduced by 1, and is reduced by 1 more when you
   // reach 4th and 8th Levels in this Class.
   //
-  // STATUS: module
+  // STATUS: system — The base system already includes a "Valor (lvl. 1|4|8)" AE
+  // on the Fighter class item with formula-based level scaling:
+  //   attackCritBonus: -1 (always), plus (@lvl >= 4) ? -1 : 0, plus (@lvl >= 8) ? -1 : 0
+  //   reflexCritBonus: same pattern
+  //   endureCritBonus: same pattern
   //
-  // MODULE HANDLES:
-  //   - Managed AE: Reduces crit threshold on attack checks and defensive saves.
-  //     Uses attackCritBonus (covers all attack types) and reflexCritBonus +
-  //     endureCritBonus (for Dodge/Block saves).
-  //     Scaling: L1=-1, L4=-2, L8=-3. Since AEs can't scale with level, we
-  //     create the AE with the current bonus and re-sync when level changes.
-  //
-  // NOTE: The feature detector rescans on level change, so the AE will be
-  // recreated with the correct value when the character levels up.
+  // DO NOT add a managed AE here — it would double-stack with the system's AE.
   "valor": {
     class: "fighter",
     level: 1,
     flag: "fighter_valor",
-    status: "module",
-    description: "Crit on Attack Checks and Dodge/Block Saves reduced by 1. Increases to -2 at L4, -3 at L8.",
-    effects: [
-      {
-        label: "Valor",
-        icon: "icons/skills/melee/strike-sword-slashing-red.webp",
-        changes: []  // Populated dynamically in _getValorChanges()
-      }
-    ]
+    status: "system",
+    description: "Crit on Attack Checks and Dodge/Block Saves reduced by 1. Increases to -2 at L4, -3 at L8."
   },
 
   // ──────────────────────────────────────────────
@@ -75,14 +64,20 @@ export const FIGHTER_REGISTRY = {
   // RULES: If you pass a Save against an attack, the next attack you make
   // before the end of your next Turn is Favored.
   //
-  // STATUS: todo — Needs hook on save result to grant favor on next attack.
-  // Complex: requires tracking "passed save against attack" and applying
-  // favor to the next attack roll within a time window.
+  // STATUS: module
+  //
+  // MODULE HANDLES:
+  //   - Hook on createChatMessage detects successful save cards from fighters.
+  //   - Grants a temporary "Momentum" AE (flag carrier, no AE changes).
+  //   - Monkey-patch on rollAttack checks for Momentum AE, applies favor,
+  //     and consumes (deletes) the AE after the attack.
+  //   - Cleanup hook on updateCombat removes expired Momentum at end of
+  //     the fighter's next turn.
   "momentum": {
     class: "fighter",
     level: 2,
     flag: "fighter_momentum",
-    status: "todo",
+    status: "module",
     description: "Pass a Save against an attack → next attack before end of next Turn is Favored."
   },
 
@@ -134,55 +129,176 @@ export const FighterFeatures = {
   },
 
   registerHooks() {
-    // Valor: Dynamic AE changes based on level
-    // The feature detector creates the AE, but we need to update its changes
-    // when the actor is scanned (level-dependent values).
-    Hooks.on("updateActor", (actor, changes) => {
-      if (actor.type !== "character") return;
-      if (!changes.system?.attributes?.level) return;
-      // Level changed — rescan will handle re-creating the AE with correct values
-      // via the feature detector's _syncManagedEffects
-    });
+    // Valor: Handled entirely by the base system's AE on the Fighter class item.
+    // No module hooks needed.
 
-    // Override the Valor AE changes at scan time
-    Hooks.on(`${MODULE_ID}.preSyncEffects`, (actor, desiredEffects) => {
-      this._applyValorScaling(actor, desiredEffects);
-    });
+    // Momentum: Pass save → next attack favored
+    this._registerMomentumHooks();
 
     this._log("Hooks registered.");
   },
 
+  /* -------------------------------------------- */
+  /*  Momentum (L2)                                */
+  /* -------------------------------------------- */
+
   /**
-   * Calculate Valor crit bonus based on fighter level.
-   * L1: -1, L4: -2, L8: -3
+   * Momentum: If you pass a Save against an attack, the next attack you make
+   * before the end of your next Turn is Favored.
+   *
+   * Implementation approach:
+   *   1. Hook `createChatMessage` to detect successful save cards from fighters.
+   *      The system posts save results via VagabondChatCard with type "save-roll"
+   *      and outcome "PASS"/"FAIL" in the HTML.
+   *   2. On a passed save, create a temporary "Momentum" AE on the fighter that
+   *      grants favor. The AE is purely a flag carrier — actual favor application
+   *      is done via monkey-patch on the attack roll (same pattern as Virtuoso Valor).
+   *   3. After the fighter's next attack roll, remove the Momentum AE (consumed).
+   *   4. Clean up at end of the fighter's next turn if not consumed.
+   *
+   * Why not use AE changes for favor:
+   *   AE overrides on system.favorHinder would bulldoze other favor/hinder sources
+   *   (flanking, conditions). The monkey-patch approach combines favor correctly.
    */
-  _getValorBonus(level) {
-    if (level >= 8) return -3;
-    if (level >= 4) return -2;
-    return -1;
+  _registerMomentumHooks() {
+    // Detect successful saves from fighters
+    Hooks.on("createChatMessage", (message) => {
+      if (!game.user.isGM) return;
+      this._checkMomentumTrigger(message);
+    });
+
+    // Consume Momentum on next attack
+    // This is handled via the monkey-patch in vagabond-character-enhancer.mjs
+    // which checks for the Momentum AE before attack rolls.
+
+    // Clean up Momentum at end of fighter's next turn
+    Hooks.on("updateCombat", (combat, changes) => {
+      if (!game.user.isGM) return;
+      if (!("turn" in changes) && !("round" in changes)) return;
+      this._cleanupExpiredMomentum(combat);
+    });
   },
 
   /**
-   * Update the Valor AE's changes array with level-appropriate values.
-   * Called during effect sync to inject the correct crit bonuses.
+   * Check if a chat message is a successful save from a fighter with Momentum.
+   * If so, grant the Momentum buff AE.
    */
-  _applyValorScaling(actor, desiredEffects) {
-    const valorKey = "fighter_valor_Valor";
-    const effectDef = desiredEffects.get(valorKey);
-    if (!effectDef) return;
+  async _checkMomentumTrigger(message) {
+    const content = message.content || "";
 
-    const level = actor.system.attributes?.level?.value ?? 1;
-    const bonus = this._getValorBonus(level);
+    // Look for save-roll cards with PASS outcome
+    if (!content.includes('save-roll') || !content.includes('PASS')) return;
 
-    effectDef.changes = [
-      // Attack crit bonus (covers melee, ranged, brawl, finesse attacks)
-      { key: "system.attackCritBonus", mode: 2, value: `${bonus}` },
-      // Dodge saves (Reflex)
-      { key: "system.reflexCritBonus", mode: 2, value: `${bonus}` },
-      // Block saves (Endure)
-      { key: "system.endureCritBonus", mode: 2, value: `${bonus}` }
-    ];
+    // Get the actor who made the save
+    const speakerActorId = message.speaker?.actor;
+    if (!speakerActorId) return;
 
-    this._log(`Valor scaling: Level ${level} → crit bonus ${bonus}`);
+    const actor = game.actors.get(speakerActorId);
+    if (!actor || actor.type !== "character") return;
+
+    // Check if this actor has Momentum
+    if (!this._hasFeature(actor, "fighter_momentum")) return;
+
+    // Check if they already have Momentum active (don't stack)
+    const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "momentumBuff"));
+    if (existing) return;
+
+    // Grant Momentum AE
+    const aeData = {
+      name: "Momentum",
+      icon: "icons/skills/movement/arrow-upward-yellow.webp",
+      origin: `Actor.${actor.id}`,
+      disabled: false,
+      flags: {
+        [MODULE_ID]: {
+          managed: true,
+          momentumBuff: true,
+          // Track when it was granted for cleanup (expires end of next turn)
+          grantedRound: game.combat?.round ?? 0,
+          grantedTurn: game.combat?.turn ?? 0
+        }
+      },
+      changes: []  // Favor applied via monkey-patch, not AE changes
+    };
+
+    await actor.createEmbeddedDocuments("ActiveEffect", [aeData]);
+    this._log(`Momentum granted to ${actor.name} after passing save.`);
+
+    // Post a subtle notification
+    ChatMessage.create({
+      content: `<div class="vagabond-chat-card-v2" data-card-type="momentum">
+        <div class="card-body">
+          <section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <i class="fas fa-bolt"></i> <strong>Momentum!</strong>
+              ${actor.name}'s next attack is Favored.
+            </div>
+          </section>
+        </div>
+      </div>`,
+      speaker: ChatMessage.getSpeaker({ actor }),
+    });
+  },
+
+  /**
+   * Remove expired Momentum AEs when the fighter's own turn ends.
+   *
+   * Momentum lasts "before the end of your next Turn" — meaning:
+   *   1. Fighter passes a save on the enemy's turn (e.g. round 3)
+   *   2. Round 4 starts — fighter still has Momentum
+   *   3. Fighter's turn begins in round 4 — can use Momentum on their attack
+   *   4. Fighter's turn ENDS — Momentum expires if not consumed
+   *
+   * We detect "fighter's turn just ended" by checking if the PREVIOUS combatant
+   * (the one whose turn just finished) is the fighter with Momentum.
+   * The `hasActed` flag is set to true when Momentum has survived through
+   * at least one of the fighter's own turns.
+   */
+  async _cleanupExpiredMomentum(combat) {
+    // The combatant whose turn just ENDED is the previous turn's combatant.
+    // When updateCombat fires with a new turn, the previous combatant's turn is over.
+    const prevTurnIndex = combat.turn === 0
+      ? combat.combatants.size - 1
+      : combat.turn - 1;
+    const turnOrder = combat.turns;
+    const prevCombatant = turnOrder?.[prevTurnIndex];
+    if (!prevCombatant) return;
+
+    const actor = prevCombatant.actor;
+    if (!actor || actor.type !== "character") return;
+
+    const momentumAE = actor.effects.find(e => e.getFlag(MODULE_ID, "momentumBuff"));
+    if (!momentumAE) return;
+
+    const hasActed = momentumAE.getFlag(MODULE_ID, "hasActed");
+    if (hasActed) {
+      // Fighter already had a turn with Momentum and didn't use it — expire it
+      await momentumAE.delete();
+      this._log(`Momentum expired for ${actor.name} (turn ended without using it).`);
+    } else {
+      // This is the fighter's first turn since Momentum was granted.
+      // Mark it as "has acted" — it will expire at end of their NEXT turn
+      // (but per the rules, "before the end of your next Turn" means this turn).
+      // So actually, this IS the turn it should expire on. Mark and expire.
+      //
+      // Wait — re-reading: "the next attack you make before the end of your
+      // next Turn is Favored." The fighter gets ONE turn to use it. If their
+      // turn just ended and they didn't attack, it's gone.
+      await momentumAE.delete();
+      this._log(`Momentum expired for ${actor.name} (their turn ended).`);
+    }
+  },
+
+  /**
+   * Called from the monkey-patch on attack rolls.
+   * If the actor has Momentum, returns true and deletes the AE (consumed).
+   */
+  async consumeMomentum(actor) {
+    const momentumAE = actor.effects.find(e => e.getFlag(MODULE_ID, "momentumBuff"));
+    if (!momentumAE) return false;
+
+    await momentumAE.delete();
+    this._log(`Momentum consumed by ${actor.name} on attack.`);
+    return true;
   }
 };

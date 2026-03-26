@@ -255,6 +255,20 @@ Hooks.once("ready", async () => {
           }
         }
 
+        // Momentum: Fighter passed a save → next attack is favored.
+        // Consume the Momentum AE after applying favor.
+        const momentumBuff = actor.effects?.find(e => e.getFlag(MODULE_ID, "momentumBuff"));
+        if (momentumBuff && favorHinder !== "favor") {
+          if (favorHinder === "hinder") favorHinder = "none";
+          else favorHinder = "favor";
+          // Delete the AE (consumed) — fire-and-forget, don't await to avoid
+          // blocking the attack roll.
+          momentumBuff.delete().catch(e => console.warn(`${MODULE_ID} | Momentum cleanup failed:`, e));
+          if (game.settings.get(MODULE_ID, "debugMode")) {
+            console.log(`${MODULE_ID} | Momentum: consumed — attack favored for ${actor.name}`);
+          }
+        }
+
         // Bloodthirsty: Favor on attacks against wounded targets
         if (features?.barbarian_bloodthirsty && favorHinder !== "favor") {
           // Check if any current target is missing HP
