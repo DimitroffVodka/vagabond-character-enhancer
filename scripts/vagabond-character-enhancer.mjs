@@ -303,11 +303,60 @@ Hooks.once("ready", async () => {
           VagabondDamageHelper._vceForceRollDamage = true;
         }
 
+        // ── Deadeye: Apply crit bonus from stacks before roll ──
+        // Deadeye stacks are tracked via actor flag. We apply them as a
+        // temporary modification to rangedCritBonus by creating/updating
+        // a managed AE. This ensures the system's calculateCritThreshold
+        // picks up the bonus during the roll.
+        const isRangedWeapon = this.system?.weaponSkill === "ranged";
+        let deadeyeStacks = 0;
+        if (isRangedWeapon && features?.gunslinger_deadeye) {
+          const { GunslingerFeatures } = await import("./class-features/gunslinger.mjs");
+          deadeyeStacks = GunslingerFeatures.getDeadeyeStacks(actor);
+
+          // Track this as a ranged attacker for Devastator
+          GunslingerFeatures._lastRangedAttacker = actor.id;
+
+          // Ensure Deadeye AE exists with current stacks
+          if (deadeyeStacks > 0) {
+            await this._ensureDeadeyeAE(actor, deadeyeStacks);
+          }
+        }
+
         // Stash actor for Climax d6 explosion in buildAndEvaluateD20WithRollData
         _currentRollActor = actor;
         try {
           const result = await origRollAttack.call(this, actor, favorHinder);
           _currentRollActor = null;
+
+          // ── Post-roll Gunslinger processing ──
+          if (isRangedWeapon && result && features?.gunslinger_deadeye) {
+            const { GunslingerFeatures } = await import("./class-features/gunslinger.mjs");
+
+            if (result.isHit) {
+              // Passed ranged check → increment Deadeye stacks
+              await GunslingerFeatures.incrementDeadeye(actor);
+              const newStacks = GunslingerFeatures.getDeadeyeStacks(actor);
+              // Update the AE with new stacks for next attack
+              await this._ensureDeadeyeAE(actor, newStacks);
+            }
+
+            if (result.isCritical) {
+              // Ranged crit → trigger Grit, Bad Medicine, High Noon
+              // Grit: handled in rollDamage wrapper (exploding dice)
+              // Bad Medicine: handled in rollDamage wrapper (extra die)
+              // Store crit context for rollDamage to read
+              this._vceRangedCrit = true;
+
+              // High Noon: extra attack notification
+              if (features?.gunslinger_highNoon) {
+                await GunslingerFeatures.notifyHighNoon(actor);
+              }
+            } else {
+              this._vceRangedCrit = false;
+            }
+          }
+
           return result;
         } catch (e) {
           _currentRollActor = null;
@@ -315,7 +364,103 @@ Hooks.once("ready", async () => {
           throw e;
         }
       };
-      console.log(`${MODULE_ID} | Patched rollAttack for Bloodthirsty.`);
+      /**
+       * Ensure a Deadeye AE exists on the actor with the correct rangedCritBonus.
+       * Creates the AE if missing, updates it if stacks changed, removes if stacks=0.
+       *
+       * WHY AN AE INSTEAD OF DIRECT MODIFICATION:
+       *   The system reads rangedCritBonus from actor.getRollData() inside
+       *   rollAttack → calculateCritThreshold. We can't intercept that call
+       *   from inside our wrapper (it happens deep in origRollAttack). An AE
+       *   with mode ADD modifies the underlying field BEFORE getRollData runs.
+       */
+      VagabondItem.prototype._ensureDeadeyeAE = async function (actor, stacks) {
+        const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "deadeyeAE"));
+
+        if (stacks <= 0) {
+          // Remove the AE if it exists
+          if (existing) await existing.delete();
+          return;
+        }
+
+        const bonus = -stacks; // Negative = lower threshold = easier crits
+
+        if (existing) {
+          // Update existing AE if value changed
+          const currentVal = existing.changes?.[0]?.value;
+          if (currentVal !== `${bonus}`) {
+            await existing.update({
+              changes: [{ key: "system.rangedCritBonus", mode: 2, value: `${bonus}` }]
+            });
+          }
+        } else {
+          // Create new AE
+          await actor.createEmbeddedDocuments("ActiveEffect", [{
+            name: `Deadeye (${stacks})`,
+            icon: "icons/skills/targeting/crosshair-pointed-orange.webp",
+            origin: `Actor.${actor.id}`,
+            disabled: false,
+            flags: { [MODULE_ID]: { managed: true, deadeyeAE: true } },
+            changes: [{ key: "system.rangedCritBonus", mode: 2, value: `${bonus}` }]
+          }]);
+        }
+      };
+
+      console.log(`${MODULE_ID} | Patched rollAttack for Bloodthirsty + Deadeye.`);
+    }
+
+    // --- Grit + Bad Medicine: Modify rollDamage for ranged crits ---
+    // Grit (L4): damage dice explode on ranged crit
+    // Bad Medicine (L8): extra die of damage on ranged crit
+    if (VagabondItem?.prototype?.rollDamage) {
+      const origRollDamage = VagabondItem.prototype.rollDamage;
+      VagabondItem.prototype.rollDamage = async function (actor, isCritical = false, statKey = null) {
+        const features = actor.getFlag?.(MODULE_ID, "features");
+        const isRangedCrit = isCritical && this._vceRangedCrit && this.system?.weaponSkill === "ranged";
+
+        // Grit: temporarily enable exploding on the weapon for this roll
+        let origCanExplode, origExplodeValues;
+        if (isRangedCrit && features?.gunslinger_grit) {
+          origCanExplode = this.system.canExplode;
+          origExplodeValues = this.system.explodeValues;
+          // Temporarily set exploding — the system's _getExplodeValues reads
+          // these from item.system during rollDamage.
+          this.system.canExplode = true;
+          // Explode on max value of each die
+          if (!this.system.explodeValues) {
+            this.system.explodeValues = "max";
+          }
+        }
+
+        // Bad Medicine: add extra die to damage formula
+        let origDamage;
+        if (isRangedCrit && features?.gunslinger_badMedicine) {
+          origDamage = this.system.currentDamage;
+          // Parse the die size from the formula (e.g. "1d8" → add "1d8")
+          const dieMatch = this.system.currentDamage?.match(/(\d*)d(\d+)/);
+          if (dieMatch) {
+            const dieSize = dieMatch[2];
+            this.system.currentDamage = `${this.system.currentDamage} + 1d${dieSize}[Bad Medicine]`;
+          }
+        }
+
+        try {
+          const result = await origRollDamage.call(this, actor, isCritical, statKey);
+          return result;
+        } finally {
+          // Restore original values
+          if (origCanExplode !== undefined) {
+            this.system.canExplode = origCanExplode;
+            this.system.explodeValues = origExplodeValues;
+          }
+          if (origDamage !== undefined) {
+            this.system.currentDamage = origDamage;
+          }
+          // Clear the ranged crit flag
+          this._vceRangedCrit = false;
+        }
+      };
+      console.log(`${MODULE_ID} | Patched rollDamage for Grit + Bad Medicine.`);
     }
 
     // --- Inspiration: Add d6 to healing item formulas (potions, etc.) ---
