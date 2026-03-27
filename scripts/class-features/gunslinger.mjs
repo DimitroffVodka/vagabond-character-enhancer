@@ -13,7 +13,7 @@
  *   Devastator (L6) → kill enemy → set Deadeye to max stacks (3)
  *   Bad Medicine (L8) → ranged crit → extra damage die
  *   High Noon (L10) → ranged crit → extra attack notification
- *   Quick Draw (L1) → combat start → free ranged attack (hindered if 2H)
+ *   Quick Draw (L1) → combat start → free ranged attack (auto-hindered if 2H)
  *
  * The monkey-patch on rollAttack (in vagabond-character-enhancer.mjs) handles:
  *   - Reading Deadeye stacks → applying rangedCritBonus
@@ -24,8 +24,53 @@
  * The hooks in this file handle:
  *   - Turn-end reset of Deadeye stacks (updateCombat hook)
  *   - Devastator kill detection (updateActor hook on HP→0)
- *   - Quick Draw pre-combat attack (createCombat hook)
+ *   - Quick Draw pre-combat attack + 2H hinder flag (combatStart hook)
  *   - High Noon extra attack notification (chat card)
+ *
+ * BUGS FOUND & FIXED
+ * ──────────────────
+ * Quick Draw 2H hinder:
+ *   The rollAttack patch originally referenced `isRangedWeapon` (a const
+ *   declared later in the function for Deadeye). Because it was a const,
+ *   accessing it before declaration hit the temporal dead zone and silently
+ *   failed — 2H weapons were never hindered. Fixed by inlining the check:
+ *   `this.system?.weaponSkill === "ranged"` directly at the Quick Draw block.
+ *
+ * Quick Draw flag expiry on combat start:
+ *   Foundry's startCombat() triggers an updateCombat hook when setting
+ *   round=1, turn=0. Our updateCombat handler was clearing the Quick Draw
+ *   flag immediately on that first turn change, before the player could
+ *   attack. A skipSet approach failed due to async timing between
+ *   combatStart and updateCombat hooks. Fixed by removing updateCombat
+ *   cleanup entirely — the flag is consumed by rollAttack on first attack
+ *   and cleaned up by deleteCombat if unused.
+ *
+ * Deadeye hitThisTurn not set at max stacks:
+ *   incrementDeadeye() had an early return (`if (current >= 3) return`)
+ *   BEFORE setting `hitThisTurn = true`. At max stacks, hits didn't mark
+ *   the turn, so the turn-end hook always saw hitThisTurn=false and reset
+ *   stacks. Fixed by moving the hitThisTurn flag set before the max check.
+ *
+ * Deadeye turn-end detection (Popcorn Initiative):
+ *   Vagabond uses Popcorn Initiative where activateCombatant() sets a turn
+ *   index and deactivateCombatant() sets turn to null. The initial approach
+ *   of using `combat.turn - 1` to find the previous combatant was wrong —
+ *   turns aren't sequential. Fixed by tracking `_lastActiveTurn[combat.id]`
+ *   and comparing against the new turn value to detect whose turn just ended.
+ *
+ * Grit exploding dice with Marksmanship:
+ *   The Grit wrapper set `explodeValues = "max"` on the weapon item, but
+ *   the system's _getExplodeValues() parses comma-separated numbers and
+ *   filters out non-numeric values — "max" was silently dropped, so
+ *   explosions never fired through this path. Additionally, even with a
+ *   numeric value, the base weapon die size was used (e.g. d4 for handgun)
+ *   instead of the Marksmanship-upsized size (d6). Fixed by computing the
+ *   actual max face value: base die + rangedDamageDieSizeBonus.
+ *
+ * Bad Medicine extra die with Marksmanship:
+ *   Same issue as Grit — the extra damage die used the base weapon die size
+ *   instead of accounting for Marksmanship's die size bonus. Fixed by adding
+ *   the weaponSkill's dieSizeBonus to the extra die size.
  */
 
 import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
@@ -42,9 +87,15 @@ export const GUNSLINGER_REGISTRY = {
   // one Ranged attack before the first Turn, Hindered if 2H Weapon.
   //
   // STATUS: module
-  // MODULE HANDLES: createCombat hook posts a reminder chat card with
-  // the gunslinger's ranged weapons listed. The actual attack is made by
-  // the player clicking the weapon — we just remind them and note hinder.
+  // MODULE HANDLES: combatStart hook posts a reminder chat card and sets
+  // quickDrawActive flag. The rollAttack patch checks this flag — if the
+  // weapon is ranged + 2H grip, it applies hinder. Flag is consumed after
+  // one attack. deleteCombat cleans up unused flags.
+  // NOTE: Cannot use updateCombat for flag cleanup — Foundry's startCombat()
+  // fires updateCombat immediately (round=1, turn=0) before the player can
+  // act, which would clear the flag prematurely. The 2H check inlines
+  // `this.system?.weaponSkill === "ranged"` instead of referencing the
+  // `isRangedWeapon` const declared later in the function (temporal dead zone).
   "quick draw": {
     class: "gunslinger", level: 1, flag: "gunslinger_quickDraw", status: "module",
     description: "Gain Marksmanship Perk. Make one Ranged attack before first Turn (Hindered if 2H)."
@@ -62,7 +113,11 @@ export const GUNSLINGER_REGISTRY = {
   //   - Actor flag: deadeye.stacks (0-3), deadeye.hitThisTurn (boolean)
   //   - Monkey-patch on rollAttack reads stacks, applies as rangedCritBonus
   //   - After passing ranged check, increments stacks (max 3 = crit on 17)
-  //   - updateCombat hook resets stacks if hitThisTurn is false
+  //   - incrementDeadeye() ALWAYS sets hitThisTurn=true before the max check
+  //     (prevents false resets at max stacks)
+  //   - updateCombat hook tracks _lastActiveTurn to detect whose turn ended
+  //     (required for Popcorn Initiative where turns aren't sequential)
+  //   - Resets stacks if hitThisTurn is false when the gunslinger's turn ends
   "deadeye": {
     class: "gunslinger", level: 1, flag: "gunslinger_deadeye", status: "module",
     description: "Each passed Ranged Check lowers crit by 1 (min 17). Resets end of Turn if no hit."
@@ -87,6 +142,11 @@ export const GUNSLINGER_REGISTRY = {
   // MODULE HANDLES: Monkey-patch on rollDamage checks for ranged crit +
   // gunslinger_grit → temporarily enables exploding on the weapon item
   // before the damage roll, then restores the original state.
+  // NOTE: The explode value must be a numeric string (e.g. "6"), not "max",
+  // because _getExplodeValues() parses comma-separated numbers and filters
+  // out non-numeric values. The value must also account for die size bonuses
+  // (e.g. Marksmanship's rangedDamageDieSizeBonus) so a d4 handgun upsized
+  // to d6 correctly explodes on 6, not 4.
   "grit": {
     class: "gunslinger", level: 4, flag: "gunslinger_grit", status: "module",
     description: "When you Crit on Ranged attack, damage dice can explode."
@@ -114,7 +174,8 @@ export const GUNSLINGER_REGISTRY = {
   // STATUS: module
   // MODULE HANDLES: Monkey-patch on rollDamage detects ranged crit +
   // gunslinger_badMedicine → adds an extra die matching the weapon's
-  // base die size to the damage formula before rolling.
+  // effective die size (base + dieSizeBonus from Marksmanship etc.)
+  // to the damage formula before rolling.
   "bad medicine": {
     class: "gunslinger", level: 8, flag: "gunslinger_badMedicine", status: "module",
     description: "Extra die of damage when you Crit with a Ranged Check."
@@ -178,11 +239,14 @@ export const GunslingerFeatures = {
    */
   async incrementDeadeye(actor) {
     const current = this.getDeadeyeStacks(actor);
-    if (current >= 3) return; // Already at max
+
+    // Always mark that we hit this turn (prevents reset at turn end)
+    await actor.setFlag(MODULE_ID, "deadeye.hitThisTurn", true);
+
+    if (current >= 3) return; // Already at max stacks, but hitThisTurn is set
 
     const newStacks = current + 1;
     await actor.setFlag(MODULE_ID, "deadeye.stacks", newStacks);
-    await actor.setFlag(MODULE_ID, "deadeye.hitThisTurn", true);
 
     this._log(`Deadeye: ${actor.name} stacks ${current} → ${newStacks} (crit on ${20 - newStacks})`);
 
@@ -233,29 +297,70 @@ export const GunslingerFeatures = {
    * Reset Deadeye stacks at end of turn if no hit was made.
    */
   _registerDeadeyeHooks() {
-    // Reset Deadeye at end of gunslinger's turn
+    // Vagabond uses Popcorn Initiative — turns are not sequential.
+    // activateCombatant() sets turn to a combatant index,
+    // deactivateCombatant() sets turn to null,
+    // nextTurn() goes directly from one index to another.
+    //
+    // We detect "turn ended" by tracking the last active turn index.
+    // When turn changes to a DIFFERENT value (another index or null),
+    // the previous combatant's turn has ended.
+    if (!this._lastActiveTurn) this._lastActiveTurn = {};
+
     Hooks.on("updateCombat", async (combat, changes) => {
       if (!game.user.isGM) return;
-      if (!("turn" in changes) && !("round" in changes)) return;
+      if (!("turn" in changes)) return;
 
-      // The combatant whose turn just ENDED is the previous one
-      const turnOrder = combat.turns;
-      const prevTurnIndex = combat.turn === 0
-        ? turnOrder.length - 1
-        : combat.turn - 1;
-      const prevCombatant = turnOrder?.[prevTurnIndex];
-      if (!prevCombatant?.actor) return;
+      // Who was active before this update?
+      const prevTurnIndex = this._lastActiveTurn[combat.id];
 
-      const actor = prevCombatant.actor;
+      this._log(`Deadeye hook: turn changed. prev=${prevTurnIndex}, new=${combat.turn}, round=${combat.round}`);
+
+      // Update tracking to the new value BEFORE any async work
+      if (combat.turn !== null && combat.turn !== undefined) {
+        this._lastActiveTurn[combat.id] = combat.turn;
+      } else {
+        delete this._lastActiveTurn[combat.id];
+      }
+
+      // If nobody was active before, or the same person is still active, nothing to do
+      if (prevTurnIndex === undefined || prevTurnIndex === null) {
+        this._log(`Deadeye hook: no previous turn tracked, skipping.`);
+        return;
+      }
+      if (combat.turn === prevTurnIndex) {
+        this._log(`Deadeye hook: same combatant re-activated, skipping.`);
+        return;
+      }
+
+      // The combatant at prevTurnIndex just ended their turn
+      const combatant = combat.turns?.[prevTurnIndex];
+      if (!combatant?.actor) return;
+
+      const actor = combatant.actor;
+      this._log(`Deadeye hook: turn ended for ${actor.name} (type=${actor.type})`);
       if (actor.type !== "character") return;
+
+      // Reset High Noon used flag for any gunslinger
+      if (this._hasFeature(actor, "gunslinger_highNoon")) {
+        await actor.unsetFlag(MODULE_ID, "highNoonUsed");
+      }
+
       if (!this._hasFeature(actor, "gunslinger_deadeye")) return;
 
       const hitThisTurn = actor.getFlag(MODULE_ID, "deadeye.hitThisTurn");
       const currentStacks = this.getDeadeyeStacks(actor);
 
+      this._log(`Deadeye hook: ${actor.name} — hitThisTurn=${hitThisTurn}, stacks=${currentStacks}`);
+
       if (!hitThisTurn && currentStacks > 0) {
         // No ranged hit this turn — reset Deadeye
         await actor.setFlag(MODULE_ID, "deadeye.stacks", 0);
+
+        // Remove the Deadeye AE so the crit bonus doesn't linger
+        const deadeyeAE = actor.effects.find(e => e.getFlag(MODULE_ID, "deadeyeAE"));
+        if (deadeyeAE) await deadeyeAE.delete();
+
         this._log(`Deadeye reset for ${actor.name} (no ranged hit this turn).`);
 
         ChatMessage.create({
@@ -272,10 +377,8 @@ export const GunslingerFeatures = {
         });
       }
 
-      // Always reset hitThisTurn flag for the new turn
+      // Always reset hitThisTurn flag for next activation
       await actor.setFlag(MODULE_ID, "deadeye.hitThisTurn", false);
-      // Reset High Noon used flag
-      await actor.unsetFlag(MODULE_ID, "highNoonUsed");
     });
   },
 
@@ -316,7 +419,10 @@ export const GunslingerFeatures = {
   /* -------------------------------------------- */
 
   _registerQuickDrawHooks() {
-    Hooks.on("createCombat", async (combat) => {
+    // combatStart fires when combat.startCombat() is called (clicking "Begin Combat").
+    // createCombat fires when the Combat document is first created (clicking "Begin Encounter"),
+    // but the combatants may not be populated yet. combatStart is the reliable hook.
+    Hooks.on("combatStart", async (combat) => {
       if (!game.user.isGM) return;
 
       // Find gunslingers in combat
@@ -335,19 +441,28 @@ export const GunslingerFeatures = {
 
         if (rangedWeapons.length === 0) continue;
 
-        // Post Quick Draw reminder with weapon info
+        // Post Quick Draw reminder with weapon info — clearly label each weapon
         const weaponList = rangedWeapons.map(w => {
           const is2H = w.system.grip === "2H";
-          const hinderNote = is2H ? ' <span style="color:#c44;">(Hindered — 2H)</span>' : "";
-          return `<strong>${w.name}</strong>${hinderNote}`;
-        }).join(", ");
+          const grip = w.system.grip || "1H";
+          if (is2H) {
+            return `<div style="margin:2px 0;"><strong>${w.name}</strong> (${grip}) — <span style="color:#c44;">Hindered</span></div>`;
+          }
+          return `<div style="margin:2px 0;"><strong>${w.name}</strong> (${grip}) — <span style="color:#4a4;">No penalty</span></div>`;
+        }).join("");
+
+        // Set Quick Draw flag so the rollAttack patch can hinder 2H weapons.
+        // The flag is consumed by the rollAttack patch on the first attack
+        // (regardless of weapon type). No updateCombat cleanup needed — the
+        // rollAttack consumption is the single source of truth.
+        await actor.setFlag(MODULE_ID, "quickDrawActive", true);
 
         ChatMessage.create({
           content: `<div class="vagabond-chat-card-v2" data-card-type="quick-draw">
             <div class="card-body">
               <header class="card-header">
                 <div class="header-icon">
-                  <img src="icons/weapons/guns/gun-pistol-flintlock-black.webp" alt="Quick Draw">
+                  <img src="icons/weapons/guns/gun-pistol-flintlock.webp" alt="Quick Draw">
                 </div>
                 <div class="header-info">
                   <h3 class="header-title">Quick Draw!</h3>
@@ -358,14 +473,35 @@ export const GunslingerFeatures = {
               </header>
               <section class="content-body">
                 <div class="card-description">
-                  ${actor.name} can make a free Ranged attack before the first Turn!<br>
-                  Available: ${weaponList}
+                  ${actor.name} can make a free Ranged attack before the first Turn!
+                  ${weaponList}
                 </div>
               </section>
             </div>
           </div>`,
           speaker: ChatMessage.getSpeaker({ actor }),
         });
+      }
+    });
+
+    // Clean up any leftover Quick Draw flags and Deadeye AEs when combat ends
+    Hooks.on("deleteCombat", async (combat) => {
+      if (!game.user.isGM) return;
+      for (const combatant of combat.combatants) {
+        const actor = combatant.actor;
+        if (!actor || actor.type !== "character") continue;
+        if (actor.getFlag(MODULE_ID, "quickDrawActive")) {
+          await actor.unsetFlag(MODULE_ID, "quickDrawActive");
+          this._log(`Quick Draw cleaned up for ${actor.name} (combat ended).`);
+        }
+        // Clean up Deadeye stacks and AE
+        const deadeyeAE = actor.effects.find(e => e.getFlag(MODULE_ID, "deadeyeAE"));
+        if (deadeyeAE) {
+          await deadeyeAE.delete();
+          await actor.setFlag(MODULE_ID, "deadeye.stacks", 0);
+          await actor.setFlag(MODULE_ID, "deadeye.hitThisTurn", false);
+          this._log(`Deadeye cleaned up for ${actor.name} (combat ended).`);
+        }
       }
     });
   },

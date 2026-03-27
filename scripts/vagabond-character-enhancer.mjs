@@ -269,6 +269,23 @@ Hooks.once("ready", async () => {
           }
         }
 
+        // Quick Draw: Hinder on 2H weapons for the first attack of combat
+        // The flag is set by GunslingerFeatures._registerQuickDrawHooks on combatStart.
+        // Consumed after one attack regardless of weapon type.
+        const quickDrawActive = actor.getFlag?.(MODULE_ID, "quickDrawActive");
+        if (quickDrawActive) {
+          // Consume immediately — one free attack only
+          actor.unsetFlag(MODULE_ID, "quickDrawActive").catch(e =>
+            console.warn(`${MODULE_ID} | Quick Draw flag cleanup failed:`, e));
+          if (this.system?.weaponSkill === "ranged" && this.system?.grip === "2H") {
+            if (favorHinder === "favor") favorHinder = "none";
+            else favorHinder = "hinder";
+            if (game.settings.get(MODULE_ID, "debugMode")) {
+              console.log(`${MODULE_ID} | Quick Draw: 2H weapon hindered for ${actor.name}`);
+            }
+          }
+        }
+
         // Bloodthirsty: Favor on attacks against wounded targets
         if (features?.barbarian_bloodthirsty && favorHinder !== "favor") {
           // Check if any current target is missing HP
@@ -426,20 +443,30 @@ Hooks.once("ready", async () => {
           // Temporarily set exploding — the system's _getExplodeValues reads
           // these from item.system during rollDamage.
           this.system.canExplode = true;
-          // Explode on max value of each die
+          // Compute the actual max face value, accounting for die size bonuses
+          // (e.g. Marksmanship upsizes d4 → d6, so explode on 6 not 4)
           if (!this.system.explodeValues) {
-            this.system.explodeValues = "max";
+            const dieMatch = this.system.currentDamage?.match(/d(\d+)/);
+            let maxFace = dieMatch ? parseInt(dieMatch[1]) : 6;
+            const weaponSkillKey = this.system.weaponSkill;
+            const dieSizeBonus = actor.system[`${weaponSkillKey}DamageDieSizeBonus`] || 0;
+            maxFace += dieSizeBonus;
+            this.system.explodeValues = String(maxFace);
           }
         }
 
         // Bad Medicine: add extra die to damage formula
+        // Account for die size bonuses (e.g. Marksmanship) so the extra die
+        // matches the upsized damage die, not the base weapon die.
         let origDamage;
         if (isRangedCrit && features?.gunslinger_badMedicine) {
           origDamage = this.system.currentDamage;
-          // Parse the die size from the formula (e.g. "1d8" → add "1d8")
           const dieMatch = this.system.currentDamage?.match(/(\d*)d(\d+)/);
           if (dieMatch) {
-            const dieSize = dieMatch[2];
+            let dieSize = parseInt(dieMatch[2]);
+            const weaponSkillKey = this.system.weaponSkill;
+            const dieSizeBonus = actor.system[`${weaponSkillKey}DamageDieSizeBonus`] || 0;
+            dieSize += dieSizeBonus;
             this.system.currentDamage = `${this.system.currentDamage} + 1d${dieSize}[Bad Medicine]`;
           }
         }
