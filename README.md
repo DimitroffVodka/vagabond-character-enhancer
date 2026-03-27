@@ -2,6 +2,16 @@
 
 A Foundry VTT module that automates ancestry traits, class features, and perks for the [Vagabond](https://vagabond.game/) RPG system. Detects class features from compendium data and applies managed Active Effects for gameplay automation.
 
+## Screenshots
+
+| Alchemist Cookbook | Bard Virtuoso |
+|:-:|:-:|
+| ![Alchemist Cookbook](images/alchemist-cookbook.png) | ![Bard Virtuoso](images/bard-virtuoso.png) |
+
+| Dancer Step Up | Druid Beast Form |
+|:-:|:-:|
+| ![Dancer Step Up](images/dancer-stepup.png) | ![Druid Beast Form](images/druid-beastform.png) |
+
 ## Installation
 
 ### Method 1: Manifest URL (Recommended)
