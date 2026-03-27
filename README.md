@@ -68,7 +68,15 @@ This method will allow Foundry to automatically detect future updates.
 
 | Feature | Level | Status | What It Does |
 |---------|-------|--------|--------------|
-| Cookbook | 1 | ✅ Module | Full crafting UI window with search, cost calculation, craft buttons |
+| Alchemy | 1 | ✅ Module | Full crafting UI window with search, cost calculation, craft buttons |
+
+Catalyze
+Eureka 
+Potency
+Mix
+Big Bang
+Prima Materia
+
 
 ---
 
