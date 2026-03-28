@@ -1264,7 +1264,7 @@ export const BardFeatures = {
           <div class="card-body">
             <header class="card-header">
               <div class="header-icon">
-                <img src="icons/tools/instruments/lute-brown.webp" alt="Virtuoso">
+                <img src="icons/tools/instruments/lute-gold-brown.webp" alt="Virtuoso"> 
               </div>
               <div class="header-info">
                 <h3 class="header-title">Virtuoso: ${buff.name}</h3>
