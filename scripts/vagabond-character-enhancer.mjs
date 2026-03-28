@@ -25,6 +25,10 @@ export let _saveSourceActorId = null;
 // so that calculateFinalDamage handlers (Apex Predator) know who dealt the damage.
 export let _damageSourceActorId = null;
 
+// Save source attack type. Set by handleSaveRoll patch so Spell Surge can check
+// if the save was provoked by a Cast (vs melee/ranged).
+export let _saveSourceAttackType = null;
+
 import { FeatureDetector } from "./feature-detector.mjs";
 import { BarbarianFeatures } from "./class-features/barbarian.mjs";
 import { BardFeatures } from "./class-features/bard.mjs";
@@ -407,15 +411,17 @@ Hooks.once("ready", async () => {
     VagabondDamageHelper.handleSaveRoll = async function (button, event = null) {
       _saveSourceActorId = button.dataset.actorId || null;
       _damageSourceActorId = button.dataset.actorId || null;
+      _saveSourceAttackType = button.dataset.attackType || null;
       try { return await origHandleSaveRoll.call(this, button, event); }
-      finally { _saveSourceActorId = null; _damageSourceActorId = null; }
+      finally { _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null; }
     };
     const origHandleSaveReminderRoll = VagabondDamageHelper.handleSaveReminderRoll;
     VagabondDamageHelper.handleSaveReminderRoll = async function (button, event = null) {
       _saveSourceActorId = button.dataset.actorId || null;
       _damageSourceActorId = button.dataset.actorId || null;
+      _saveSourceAttackType = button.dataset.attackType || null;
       try { return await origHandleSaveReminderRoll.call(this, button, event); }
-      finally { _saveSourceActorId = null; _damageSourceActorId = null; }
+      finally { _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null; }
     };
     console.log(`${MODULE_ID} | Patched handleSaveRoll + handleSaveReminderRoll.`);
 
@@ -434,6 +440,7 @@ Hooks.once("ready", async () => {
       const ctx = {
         actor, saveType, isHindered, ctrlKey, attackerModifier,
         saveSourceActorId: _saveSourceActorId,
+        saveSourceAttackType: _saveSourceAttackType,
         features: getFeatures(actor),
         needRestore: false, origFH: null, rollBuilderPatched: false
       };
