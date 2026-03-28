@@ -17,6 +17,14 @@ let _currentRollActor = null;
 // 0 = normal roll, 2 = 2d20kh, 3 = 3d20kh (Lethal Precision).
 import { _hunterMarkDice, resetHunterMarkDice } from "./class-features/hunter.mjs";
 
+// Save source actor ID. Set by the handleSaveRoll patch so that onPreRollSave
+// can check whether the save was provoked by a specific actor (e.g., for Overwatch).
+export let _saveSourceActorId = null;
+
+// Damage source actor ID. Set by handleSaveRoll / handleApplyDirectDamage patches
+// so that calculateFinalDamage handlers (Apex Predator) know who dealt the damage.
+export let _damageSourceActorId = null;
+
 import { FeatureDetector } from "./feature-detector.mjs";
 import { BarbarianFeatures } from "./class-features/barbarian.mjs";
 import { BardFeatures } from "./class-features/bard.mjs";
@@ -129,8 +137,8 @@ Hooks.once("ready", async () => {
       let result = origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice);
       const features = getFeatures(actor);
 
-      // Apex Predator: check if this target is marked by a hunter (independent of DR checks)
-      const apexCtx = { actor, result, damage, damageType };
+      // Apex Predator: check if this target is marked by the hunter dealing the damage
+      const apexCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
       HunterFeatures.onCalculateFinalDamage(apexCtx);
       result = apexCtx.result;
 
@@ -340,11 +348,41 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched handleApplyRestorative.`);
 
+    // --- handleSaveRoll / handleSaveReminderRoll: Track save + damage source actor ---
+    // Wraps the system's save-roll entry points to capture the attacker's actor ID
+    // before _rollSave and calculateFinalDamage fire, so Overwatch and Apex Predator
+    // can check whether the effect was provoked by / damage dealt by a specific actor.
+    const origHandleSaveRoll = VagabondDamageHelper.handleSaveRoll;
+    VagabondDamageHelper.handleSaveRoll = async function (button, event = null) {
+      _saveSourceActorId = button.dataset.actorId || null;
+      _damageSourceActorId = button.dataset.actorId || null;
+      try { return await origHandleSaveRoll.call(this, button, event); }
+      finally { _saveSourceActorId = null; _damageSourceActorId = null; }
+    };
+    const origHandleSaveReminderRoll = VagabondDamageHelper.handleSaveReminderRoll;
+    VagabondDamageHelper.handleSaveReminderRoll = async function (button, event = null) {
+      _saveSourceActorId = button.dataset.actorId || null;
+      _damageSourceActorId = button.dataset.actorId || null;
+      try { return await origHandleSaveReminderRoll.call(this, button, event); }
+      finally { _saveSourceActorId = null; _damageSourceActorId = null; }
+    };
+    console.log(`${MODULE_ID} | Patched handleSaveRoll + handleSaveReminderRoll.`);
+
+    // --- handleApplyDirect: Track damage source actor for Apex Predator ---
+    const origHandleApplyDirect = VagabondDamageHelper.handleApplyDirect;
+    VagabondDamageHelper.handleApplyDirect = async function (button) {
+      _damageSourceActorId = button.dataset.actorId || null;
+      try { return await origHandleApplyDirect.call(this, button); }
+      finally { _damageSourceActorId = null; }
+    };
+    console.log(`${MODULE_ID} | Patched handleApplyDirect.`);
+
     // --- _rollSave: Dispatch to Bard + Dancer ---
     const origRollSave = VagabondDamageHelper._rollSave;
     VagabondDamageHelper._rollSave = async function (actor, saveType, isHindered, shiftKey = false, ctrlKey = false, attackerModifier = 'none') {
       const ctx = {
         actor, saveType, isHindered, ctrlKey, attackerModifier,
+        saveSourceActorId: _saveSourceActorId,
         features: getFeatures(actor),
         needRestore: false, origFH: null, rollBuilderPatched: false
       };

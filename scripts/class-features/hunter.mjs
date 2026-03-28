@@ -16,7 +16,7 @@
  * that the buildAndEvaluateD20WithRollData patch reads as a custom baseFormula.
  *
  * Marking triggers:
- *   1. Auto-mark on attack: if the hunter attacks a target, it's auto-marked
+ *   1. On attack: if the target isn't already marked, prompt the player to mark
  *   2. Manual mark: chat button for "skip Move to mark" (no attack needed)
  *
  * The mark persists until:
@@ -56,7 +56,7 @@ export const HUNTER_REGISTRY = {
   // STATUS: module
   //
   // MODULE HANDLES:
-  //   - Auto-mark on attack (onPreRollAttack sets flag + _hunterMarkDice)
+  //   - Prompt-to-mark on attack (onPreRollAttack asks player, then sets flag + _hunterMarkDice)
   //   - Manual mark via chat button (skip Move)
   //   - 2d20kh injected via buildAndEvaluateD20WithRollData baseFormula override
   //   - Mark persists across rounds while Focus is maintained
@@ -102,6 +102,7 @@ export const HUNTER_REGISTRY = {
   //
   // MODULE HANDLES:
   //   - onPreRollSave checks for active mark + Overwatch feature
+  //   - Only applies when ctx.saveSourceActorId matches the marked target
   //   - Sets _hunterMarkDice for the save's d20 roll
   //   - Uses same 2d20kh (or 3d20kh with Lethal Precision)
   "overwatch": {
@@ -145,8 +146,10 @@ export const HUNTER_REGISTRY = {
   // MODULE HANDLES:
   //   - When hunter attacks a marked target with Apex Predator, posts a
   //     chat reminder and sets a flag on the attack chat card.
-  //   - Hooks into calculateFinalDamage to bypass armor when the defender
-  //     is marked by a hunter with Apex Predator.
+  //   - Hooks into calculateFinalDamage to bypass armor when the damage
+  //     source is a hunter with Apex Predator who has this target marked.
+  //   - Uses ctx.damageSourceActorId (set by handleSaveRoll/handleApplyDirect
+  //     patches) to verify the hunter is the one dealing the damage.
   "apex predator": {
     class: "hunter", level: 10, flag: "hunter_apexPredator", status: "module",
     description: "Damage to Hunter's Mark Target ignores Immune and Armor."
@@ -205,10 +208,12 @@ export const HunterFeatures = {
 
     const targetId = targetActor.id;
     const currentMark = ctx.actor.getFlag(MODULE_ID, "hunterMark");
+    const alreadyMarked = currentMark?.targetId === targetId;
 
-    // Auto-mark the target if not already marked
-    if (!currentMark || currentMark.targetId !== targetId) {
-      await this._markTarget(ctx.actor, targetActor);
+    // If attacking an unmarked target, ask the player whether to mark it
+    if (!alreadyMarked) {
+      const wantsMark = await this._promptMarkTarget(ctx.actor, targetActor, currentMark);
+      if (!wantsMark) return; // Player declined — proceed with normal attack (no multi-d20)
     }
 
     // Set multi-d20 count for the roll builder patch
@@ -247,9 +252,9 @@ export const HunterFeatures = {
 
   /**
    * Pre-roll save handler (Overwatch).
-   * If the hunter has Overwatch and an active mark, apply multi-d20 to saves.
-   * Per the rules, this applies to "Saves provoked by the marked Target."
-   * We apply it to all saves while a mark is active (trust the player).
+   * If the hunter has Overwatch and an active mark, apply multi-d20 to saves
+   * provoked by the marked target. ctx.saveSourceActorId is set by the
+   * handleSaveRoll patch in vagabond-character-enhancer.mjs.
    */
   onPreRollSave(ctx) {
     if (!ctx.features?.hunter_overwatch) return;
@@ -257,42 +262,73 @@ export const HunterFeatures = {
     const mark = ctx.actor.getFlag(MODULE_ID, "hunterMark");
     if (!mark?.targetId) return;
 
+    // Only apply if the save was provoked by the marked target
+    if (ctx.saveSourceActorId !== mark.targetId) {
+      log("Hunter", `Overwatch: save source ${ctx.saveSourceActorId ?? "unknown"} is not marked target ${mark.targetName} — skipping`);
+      return;
+    }
+
     const diceCount = ctx.features.hunter_lethalPrecision ? 3 : 2;
     _hunterMarkDice = diceCount;
 
-    log("Hunter", `Overwatch: ${diceCount}d20kh on save for ${ctx.actor.name} (mark active on ${mark.targetName})`);
+    log("Hunter", `Overwatch: ${diceCount}d20kh on save for ${ctx.actor.name} (provoked by marked target ${mark.targetName})`);
   },
 
   /**
    * Apex Predator damage bypass.
-   * Called from calculateFinalDamage dispatcher. Checks if the defender
-   * is marked by a hunter with Apex Predator and bypasses armor.
+   * Called from calculateFinalDamage dispatcher. Checks if the damage source
+   * is a hunter with Apex Predator who has this target marked, and bypasses
+   * armor/immune if so. ctx.damageSourceActorId identifies who dealt the damage.
    */
   onCalculateFinalDamage(ctx) {
-    const targetId = ctx.actor.id;
+    if (!ctx.damageSourceActorId) return;
 
-    // Find any hunter with Apex Predator who has this target marked
-    for (const actor of game.actors) {
-      if (actor.type !== "character") continue;
-      const features = actor.getFlag(MODULE_ID, "features");
-      if (!features?.hunter_apexPredator) continue;
-      const mark = actor.getFlag(MODULE_ID, "hunterMark");
-      if (mark?.targetId !== targetId) continue;
+    const hunter = game.actors.get(ctx.damageSourceActorId);
+    if (!hunter || hunter.type !== "character") return;
 
-      // This target is marked by a hunter with Apex Predator — bypass Armor and Immune
-      // The system already applied immunity (result=0) and/or armor reduction,
-      // so we replace the result with the raw damage to bypass both.
-      if (ctx.result !== ctx.damage) {
-        log("Hunter", `Apex Predator: bypassed Armor/Immune on ${ctx.actor.name} — raw ${ctx.damage} replaces ${ctx.result} (marked by ${actor.name})`);
-        ctx.result = ctx.damage;
-      }
-      break;
+    const features = hunter.getFlag(MODULE_ID, "features");
+    if (!features?.hunter_apexPredator) return;
+
+    const mark = hunter.getFlag(MODULE_ID, "hunterMark");
+    if (mark?.targetId !== ctx.actor.id) return;
+
+    // This hunter has Apex Predator and the target is marked — bypass Armor and Immune
+    if (ctx.result !== ctx.damage) {
+      log("Hunter", `Apex Predator: bypassed Armor/Immune on ${ctx.actor.name} — raw ${ctx.damage} replaces ${ctx.result} (${hunter.name}'s mark)`);
+      ctx.result = ctx.damage;
     }
   },
 
   /* -------------------------------------------- */
   /*  Mark Management                              */
   /* -------------------------------------------- */
+
+  /**
+   * Prompt the player to apply Hunter's Mark to a new target.
+   * Returns true if the player chooses to mark, false otherwise.
+   */
+  async _promptMarkTarget(hunter, targetActor, currentMark) {
+    const switchWarning = currentMark?.targetId
+      ? `<p style="color:#c87830; margin-top:0.25rem;"><i class="fas fa-exchange-alt"></i> This will switch your mark from <strong>${currentMark.targetName}</strong>.</p>`
+      : "";
+
+    const result = await foundry.applications.api.DialogV2.wait({
+      window: { title: "Hunter's Mark" },
+      content: `<p>Apply <strong>Hunter's Mark</strong> to <strong>${targetActor.name}</strong>?</p>
+        <p style="font-size:0.85em; opacity:0.8;">This requires Focus. Attack rolls will use extra d20 (keep highest).</p>
+        ${switchWarning}`,
+      buttons: [
+        { action: "mark", label: "Mark Target", icon: "fas fa-crosshairs" },
+        { action: "skip", label: "Attack Without Mark", icon: "fas fa-times" }
+      ],
+      close: () => "skip"
+    });
+
+    if (result !== "mark") return false;
+
+    await this._markTarget(hunter, targetActor);
+    return true;
+  },
 
   /**
    * Mark a target actor. Sets flag on the hunter, posts chat notification.
