@@ -53,6 +53,39 @@ import { BeastCache } from "./polymorph/beast-cache.mjs";
 import { populateBeasts } from "./polymorph/populate-beasts.mjs";
 
 /* -------------------------------------------- */
+/*  Chat Context Menu (must register at top      */
+/*  level before ChatLog renders)                */
+/* -------------------------------------------- */
+
+Hooks.on("getChatMessageContextOptions", (app, options) => {
+  const hasRolls = (li) => {
+    const msg = game.messages.get(li.dataset.messageId);
+    return msg?.rolls?.length > 0;
+  };
+
+  options.push(
+    {
+      name: "Apply Damage",
+      icon: '<i class="fas fa-heart-crack"></i>',
+      condition: (li) => game.user.isGM && hasRolls(li),
+      callback: (li) => _applyRollToTargets(li, "damage")
+    },
+    {
+      name: "Apply Half Damage",
+      icon: '<i class="fas fa-shield-halved"></i>',
+      condition: (li) => game.user.isGM && hasRolls(li),
+      callback: (li) => _applyRollToTargets(li, "half")
+    },
+    {
+      name: "Apply Healing",
+      icon: '<i class="fas fa-heart-pulse"></i>',
+      condition: (li) => game.user.isGM && hasRolls(li),
+      callback: (li) => _applyRollToTargets(li, "healing")
+    }
+  );
+});
+
+/* -------------------------------------------- */
 /*  Init                                        */
 /* -------------------------------------------- */
 
@@ -253,7 +286,7 @@ Hooks.once("ready", async () => {
       console.log(`${MODULE_ID} | Patched rollDamage.`);
     }
 
-    // --- item.roll: Dispatch to Alchemist + Bard + Luminary ---
+    // --- item.roll: Dispatch to Alchemist + Bard ---
     if (VagabondItem?.prototype?.roll) {
       const origItemRoll = VagabondItem.prototype.roll;
       VagabondItem.prototype.roll = async function (event, targetsAtRollTime = []) {
@@ -265,9 +298,6 @@ Hooks.once("ready", async () => {
 
         // Inspiration healing
         await BardFeatures.onPreItemRoll(ctx);
-
-        // Radiant Healer explosion tracking
-        await LuminaryFeatures.onPreItemRoll(ctx);
 
         try {
           const result = await origItemRoll.call(this, event, targetsAtRollTime);
@@ -343,8 +373,29 @@ Hooks.once("ready", async () => {
         itemId: button.dataset.itemId
       };
       await BardFeatures.onPreHandleRestorative(ctx);
-      await LuminaryFeatures.onPreHandleRestorative(ctx);
-      return origHandleRestorative.call(this, button);
+
+      // Snapshot target HP before healing for Overheal/Ever-Cure detection
+      const preHealHP = new Map();
+      const targetActors = [];
+      if (ctx.damageType === "healing") {
+        const storedTargets = VagabondDamageHelper._getTargetsFromButton(button);
+        const tokens = VagabondDamageHelper._resolveStoredTargets(storedTargets);
+        for (const token of tokens) {
+          if (token.actor) {
+            preHealHP.set(token.actor.id, token.actor.system?.health?.value ?? 0);
+            targetActors.push(token.actor);
+          }
+        }
+      }
+
+      const result = await origHandleRestorative.call(this, button);
+
+      // Post-heal: trigger Overheal + Ever-Cure
+      if (targetActors.length > 0) {
+        await LuminaryFeatures.onPostHandleRestorative(ctx, preHealHP, targetActors);
+      }
+
+      return result;
     };
     console.log(`${MODULE_ID} | Patched handleApplyRestorative.`);
 
@@ -623,3 +674,55 @@ Hooks.once("ready", async () => {
 
   console.log(`${MODULE_ID} | Ready.`);
 });
+
+/* -------------------------------------------- */
+/*  Apply Roll to Targets (GM Context Menu)     */
+/* -------------------------------------------- */
+
+/**
+ * Apply a chat message's roll total as damage or healing to all targeted tokens.
+ * @param {HTMLElement} li - The chat message list item element
+ * @param {"damage"|"half"|"healing"} mode
+ */
+async function _applyRollToTargets(li, mode) {
+  const message = game.messages.get(li.dataset.messageId);
+  if (!message?.rolls?.length) return;
+
+  if (game.user.targets.size === 0) {
+    ui.notifications.warn("Select a target token first.");
+    return;
+  }
+
+  const total = message.rolls.reduce((sum, r) => sum + r.total, 0);
+  const amount = mode === "half" ? Math.floor(total / 2) : total;
+
+  for (const target of game.user.targets) {
+    const actor = target.actor;
+    if (!actor) continue;
+
+    const currentHP = actor.system.health?.value ?? 0;
+    const maxHP = actor.system.health?.max ?? currentHP;
+    let newHP;
+
+    if (mode === "healing") {
+      newHP = Math.min(maxHP, currentHP + amount);
+    } else {
+      newHP = Math.max(0, currentHP - amount);
+    }
+
+    await actor.update({ "system.health.value": newHP });
+
+    const verb = mode === "healing" ? "healed" : "damaged";
+    const diff = Math.abs(newHP - currentHP);
+    ChatMessage.create({
+      content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+        <div class="card-body"><section class="content-body">
+          <div class="card-description" style="text-align:center;">
+            <strong>${actor.name}</strong> ${verb} for <strong>${diff}</strong> HP
+            (${currentHP} → ${newHP})
+          </div>
+        </section></div></div>`,
+      speaker: ChatMessage.getSpeaker()
+    });
+  }
+}

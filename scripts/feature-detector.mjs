@@ -227,6 +227,9 @@ export const FeatureDetector = {
       await this._syncManagedEffects(actor, features, oldFeatures);
     }
 
+    // Always fire postScan so modules can sync item-level data (e.g., spell explosion)
+    Hooks.callAll(`${MODULE_ID}.postScan`, actor, features);
+
     log("FeatureDetector",`Scan complete for ${actor.name}:`, features);
   },
 
