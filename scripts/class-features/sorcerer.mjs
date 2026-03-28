@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Sorcerer features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -81,13 +81,8 @@ export const SORCERER_REGISTRY = {
 /* -------------------------------------------- */
 
 export const SorcererFeatures = {
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | SorcererFeatures |`, ...args);
-    }
-  },
 
   registerHooks() {
-    this._log("Hooks registered.");
+    log("Sorcerer","Hooks registered.");
   }
 };

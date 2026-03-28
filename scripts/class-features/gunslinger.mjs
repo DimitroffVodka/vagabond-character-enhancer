@@ -15,11 +15,10 @@
  *   High Noon (L10) → ranged crit → extra attack notification
  *   Quick Draw (L1) → combat start → free ranged attack (auto-hindered if 2H)
  *
- * The monkey-patch on rollAttack (in vagabond-character-enhancer.mjs) handles:
- *   - Reading Deadeye stacks → applying rangedCritBonus
- *   - After a hit → incrementing stacks
- *   - After a miss → NOT resetting (resets at end of turn only)
- *   - On crit → signaling for Grit/Bad Medicine/High Noon
+ * The handler methods below (dispatched from vagabond-character-enhancer.mjs) handle:
+ *   - onPreRollAttack: Reading Deadeye stacks → applying rangedCritBonus, Quick Draw hinder
+ *   - onPostRollAttack: After a hit → incrementing stacks; on crit → Grit/Bad Medicine/High Noon
+ *   - onPreRollDamage: Grit exploding dice + Bad Medicine extra die on ranged crits
  *
  * The hooks in this file handle:
  *   - Turn-end reset of Deadeye stacks (updateCombat hook)
@@ -73,7 +72,7 @@
  *   the weaponSkill's dieSizeBonus to the extra die size.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -111,7 +110,7 @@ export const GUNSLINGER_REGISTRY = {
   // STATUS: module
   // MODULE HANDLES:
   //   - Actor flag: deadeye.stacks (0-3), deadeye.hitThisTurn (boolean)
-  //   - Monkey-patch on rollAttack reads stacks, applies as rangedCritBonus
+  //   - onPreRollAttack handler reads stacks, applies as rangedCritBonus
   //   - After passing ranged check, increments stacks (max 3 = crit on 17)
   //   - incrementDeadeye() ALWAYS sets hitThisTurn=true before the max check
   //     (prevents false resets at max stacks)
@@ -139,7 +138,7 @@ export const GUNSLINGER_REGISTRY = {
   // RULES: When you Crit on a Ranged attack, the damage dice can explode.
   //
   // STATUS: module
-  // MODULE HANDLES: Monkey-patch on rollDamage checks for ranged crit +
+  // MODULE HANDLES: onPreRollDamage handler checks for ranged crit +
   // gunslinger_grit → temporarily enables exploding on the weapon item
   // before the damage roll, then restores the original state.
   // NOTE: The explode value must be a numeric string (e.g. "6"), not "max",
@@ -172,7 +171,7 @@ export const GUNSLINGER_REGISTRY = {
   // RULES: You deal an extra die of damage when you Crit with a Ranged Check.
   //
   // STATUS: module
-  // MODULE HANDLES: Monkey-patch on rollDamage detects ranged crit +
+  // MODULE HANDLES: onPreRollDamage handler detects ranged crit +
   // gunslinger_badMedicine → adds an extra die matching the weapon's
   // effective die size (base + dieSizeBonus from Marksmanship etc.)
   // to the damage formula before rolling.
@@ -203,21 +202,134 @@ export const GUNSLINGER_REGISTRY = {
 /* -------------------------------------------- */
 
 export const GunslingerFeatures = {
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | Gunslinger |`, ...args);
-    }
-  },
-
-  _hasFeature(actor, flag) {
-    return actor.getFlag(MODULE_ID, `features.${flag}`);
-  },
 
   registerHooks() {
     this._registerDeadeyeHooks();
     this._registerDevastatorHooks();
     this._registerQuickDrawHooks();
-    this._log("Hooks registered.");
+    log("Gunslinger","Hooks registered.");
+  },
+
+  /* -------------------------------------------- */
+  /*  Handler Methods (called from main dispatcher) */
+  /* -------------------------------------------- */
+
+  /**
+   * Quick Draw + Deadeye setup before attack roll.
+   * Called from rollAttack dispatcher.
+   */
+  async onPreRollAttack(ctx) {
+    // Quick Draw: Hinder on 2H weapons for first attack of combat
+    const quickDrawActive = ctx.actor.getFlag?.(MODULE_ID, "quickDrawActive");
+    if (quickDrawActive) {
+      ctx.actor.unsetFlag(MODULE_ID, "quickDrawActive").catch(e =>
+        console.warn(`${MODULE_ID} | Quick Draw flag cleanup failed:`, e));
+      if (ctx.item.system?.weaponSkill === "ranged" && ctx.item.system?.grip === "2H") {
+        ctx.favorHinder = combineFavor(ctx.favorHinder, "hinder");
+        log("Gunslinger", `Quick Draw: 2H weapon hindered for ${ctx.actor.name}`);
+      }
+    }
+
+    // Deadeye: Apply crit bonus from stacks before roll
+    ctx._isRangedWeapon = ctx.item.system?.weaponSkill === "ranged";
+    ctx._deadeyeStacks = 0;
+    if (ctx._isRangedWeapon && ctx.features?.gunslinger_deadeye) {
+      ctx._deadeyeStacks = GunslingerFeatures.getDeadeyeStacks(ctx.actor);
+      GunslingerFeatures._lastRangedAttacker = ctx.actor.id;
+      if (ctx._deadeyeStacks > 0) {
+        await GunslingerFeatures._ensureDeadeyeAE(ctx.actor, ctx._deadeyeStacks);
+      }
+    }
+  },
+
+  /**
+   * Deadeye increment + crit handling after attack roll.
+   * Called from rollAttack dispatcher.
+   */
+  async onPostRollAttack(ctx) {
+    if (!ctx._isRangedWeapon || !ctx.rollResult || !ctx.features?.gunslinger_deadeye) return;
+
+    if (ctx.rollResult.isHit) {
+      await GunslingerFeatures.incrementDeadeye(ctx.actor);
+      const newStacks = GunslingerFeatures.getDeadeyeStacks(ctx.actor);
+      await GunslingerFeatures._ensureDeadeyeAE(ctx.actor, newStacks);
+    }
+
+    if (ctx.rollResult.isCritical) {
+      ctx.item._vceRangedCrit = true;
+      if (ctx.features?.gunslinger_highNoon) {
+        await GunslingerFeatures.notifyHighNoon(ctx.actor);
+      }
+    } else {
+      ctx.item._vceRangedCrit = false;
+    }
+  },
+
+  /**
+   * Ensure a Deadeye AE exists on the actor with the correct rangedCritBonus.
+   * Creates the AE if missing, updates if stacks changed, removes if stacks=0.
+   */
+  async _ensureDeadeyeAE(actor, stacks) {
+    const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "deadeyeAE"));
+    if (stacks <= 0) {
+      if (existing) await existing.delete();
+      return;
+    }
+    const bonus = -stacks;
+    if (existing) {
+      const currentVal = existing.changes?.[0]?.value;
+      if (currentVal !== `${bonus}`) {
+        await existing.update({
+          changes: [{ key: "system.rangedCritBonus", mode: 2, value: `${bonus}` }]
+        });
+      }
+    } else {
+      await actor.createEmbeddedDocuments("ActiveEffect", [{
+        name: `Deadeye (${stacks})`,
+        icon: "icons/skills/targeting/crosshair-pointed-orange.webp",
+        origin: `Actor.${actor.id}`,
+        disabled: false,
+        flags: { [MODULE_ID]: { managed: true, deadeyeAE: true } },
+        changes: [{ key: "system.rangedCritBonus", mode: 2, value: `${bonus}` }]
+      }]);
+    }
+  },
+
+  /**
+   * Grit + Bad Medicine: Modify weapon before damage roll on ranged crits.
+   * Called from rollDamage dispatcher.
+   */
+  onPreRollDamage(ctx) {
+    const isRangedCrit = ctx.isCritical && ctx.item._vceRangedCrit && ctx.item.system?.weaponSkill === "ranged";
+    if (!isRangedCrit) return;
+
+    // Grit: temporarily enable exploding
+    if (ctx.features?.gunslinger_grit) {
+      ctx.origCanExplode = ctx.item.system.canExplode;
+      ctx.origExplodeValues = ctx.item.system.explodeValues;
+      ctx.item.system.canExplode = true;
+      if (!ctx.item.system.explodeValues) {
+        const dieMatch = ctx.item.system.currentDamage?.match(/d(\d+)/);
+        let maxFace = dieMatch ? parseInt(dieMatch[1]) : 6;
+        const weaponSkillKey = ctx.item.system.weaponSkill;
+        const dieSizeBonus = ctx.actor.system[`${weaponSkillKey}DamageDieSizeBonus`] || 0;
+        maxFace += dieSizeBonus;
+        ctx.item.system.explodeValues = String(maxFace);
+      }
+    }
+
+    // Bad Medicine: add extra die
+    if (ctx.features?.gunslinger_badMedicine) {
+      ctx.origDamage = ctx.item.system.currentDamage;
+      const dieMatch = ctx.item.system.currentDamage?.match(/(\d*)d(\d+)/);
+      if (dieMatch) {
+        let dieSize = parseInt(dieMatch[2]);
+        const weaponSkillKey = ctx.item.system.weaponSkill;
+        const dieSizeBonus = ctx.actor.system[`${weaponSkillKey}DamageDieSizeBonus`] || 0;
+        dieSize += dieSizeBonus;
+        ctx.item.system.currentDamage = `${ctx.item.system.currentDamage} + 1d${dieSize}[Bad Medicine]`;
+      }
+    }
   },
 
   /* -------------------------------------------- */
@@ -234,7 +346,7 @@ export const GunslingerFeatures = {
 
   /**
    * Increment Deadeye stacks after a passed Ranged Check.
-   * Called from the rollAttack monkey-patch after a hit.
+   * Called from onPostRollAttack handler after a hit.
    * Max 3 stacks (crit threshold 17 = base 20 - 3).
    */
   async incrementDeadeye(actor) {
@@ -248,7 +360,7 @@ export const GunslingerFeatures = {
     const newStacks = current + 1;
     await actor.setFlag(MODULE_ID, "deadeye.stacks", newStacks);
 
-    this._log(`Deadeye: ${actor.name} stacks ${current} → ${newStacks} (crit on ${20 - newStacks})`);
+    log("Gunslinger",`Deadeye: ${actor.name} stacks ${current} → ${newStacks} (crit on ${20 - newStacks})`);
 
     // Post subtle notification
     if (newStacks > 0) {
@@ -276,7 +388,7 @@ export const GunslingerFeatures = {
     await actor.setFlag(MODULE_ID, "deadeye.stacks", 3);
     await actor.setFlag(MODULE_ID, "deadeye.hitThisTurn", true);
 
-    this._log(`Devastator: ${actor.name} Deadeye set to max (crit on 17)`);
+    log("Gunslinger",`Devastator: ${actor.name} Deadeye set to max (crit on 17)`);
 
     ChatMessage.create({
       content: `<div class="vagabond-chat-card-v2" data-card-type="devastator">
@@ -314,7 +426,7 @@ export const GunslingerFeatures = {
       // Who was active before this update?
       const prevTurnIndex = this._lastActiveTurn[combat.id];
 
-      this._log(`Deadeye hook: turn changed. prev=${prevTurnIndex}, new=${combat.turn}, round=${combat.round}`);
+      log("Gunslinger",`Deadeye hook: turn changed. prev=${prevTurnIndex}, new=${combat.turn}, round=${combat.round}`);
 
       // Update tracking to the new value BEFORE any async work
       if (combat.turn !== null && combat.turn !== undefined) {
@@ -325,11 +437,11 @@ export const GunslingerFeatures = {
 
       // If nobody was active before, or the same person is still active, nothing to do
       if (prevTurnIndex === undefined || prevTurnIndex === null) {
-        this._log(`Deadeye hook: no previous turn tracked, skipping.`);
+        log("Gunslinger",`Deadeye hook: no previous turn tracked, skipping.`);
         return;
       }
       if (combat.turn === prevTurnIndex) {
-        this._log(`Deadeye hook: same combatant re-activated, skipping.`);
+        log("Gunslinger",`Deadeye hook: same combatant re-activated, skipping.`);
         return;
       }
 
@@ -338,20 +450,20 @@ export const GunslingerFeatures = {
       if (!combatant?.actor) return;
 
       const actor = combatant.actor;
-      this._log(`Deadeye hook: turn ended for ${actor.name} (type=${actor.type})`);
+      log("Gunslinger",`Deadeye hook: turn ended for ${actor.name} (type=${actor.type})`);
       if (actor.type !== "character") return;
 
       // Reset High Noon used flag for any gunslinger
-      if (this._hasFeature(actor, "gunslinger_highNoon")) {
+      if (hasFeature(actor, "gunslinger_highNoon")) {
         await actor.unsetFlag(MODULE_ID, "highNoonUsed");
       }
 
-      if (!this._hasFeature(actor, "gunslinger_deadeye")) return;
+      if (!hasFeature(actor, "gunslinger_deadeye")) return;
 
       const hitThisTurn = actor.getFlag(MODULE_ID, "deadeye.hitThisTurn");
       const currentStacks = this.getDeadeyeStacks(actor);
 
-      this._log(`Deadeye hook: ${actor.name} — hitThisTurn=${hitThisTurn}, stacks=${currentStacks}`);
+      log("Gunslinger",`Deadeye hook: ${actor.name} — hitThisTurn=${hitThisTurn}, stacks=${currentStacks}`);
 
       if (!hitThisTurn && currentStacks > 0) {
         // No ranged hit this turn — reset Deadeye
@@ -361,7 +473,7 @@ export const GunslingerFeatures = {
         const deadeyeAE = actor.effects.find(e => e.getFlag(MODULE_ID, "deadeyeAE"));
         if (deadeyeAE) await deadeyeAE.delete();
 
-        this._log(`Deadeye reset for ${actor.name} (no ranged hit this turn).`);
+        log("Gunslinger",`Deadeye reset for ${actor.name} (no ranged hit this turn).`);
 
         ChatMessage.create({
           content: `<div class="vagabond-chat-card-v2" data-card-type="deadeye-reset">
@@ -391,7 +503,7 @@ export const GunslingerFeatures = {
    * was a gunslinger with Devastator.
    *
    * We track "last ranged attacker" via a module-level variable set in the
-   * rollAttack monkey-patch. This is simpler than parsing chat history.
+   * onPreRollAttack handler. This is simpler than parsing chat history.
    */
   _registerDevastatorHooks() {
     Hooks.on("updateActor", async (actor, changes) => {
@@ -402,13 +514,13 @@ export const GunslingerFeatures = {
       const newHP = changes.system?.health?.value;
       if (newHP === undefined || newHP > 0) return;
 
-      // Check the last ranged attacker (set by rollAttack monkey-patch)
+      // Check the last ranged attacker (set by onPreRollAttack handler)
       const lastAttacker = GunslingerFeatures._lastRangedAttacker;
       if (!lastAttacker) return;
 
       const attackerActor = game.actors.get(lastAttacker);
       if (!attackerActor) return;
-      if (!this._hasFeature(attackerActor, "gunslinger_devastator")) return;
+      if (!hasFeature(attackerActor, "gunslinger_devastator")) return;
 
       await this.setDeadeyeMax(attackerActor);
     });
@@ -429,7 +541,7 @@ export const GunslingerFeatures = {
       for (const combatant of combat.combatants) {
         const actor = combatant.actor;
         if (!actor || actor.type !== "character") continue;
-        if (!this._hasFeature(actor, "gunslinger_quickDraw")) continue;
+        if (!hasFeature(actor, "gunslinger_quickDraw")) continue;
 
         // Find ranged weapons
         const rangedWeapons = actor.items.filter(i => {
@@ -492,7 +604,7 @@ export const GunslingerFeatures = {
         if (!actor || actor.type !== "character") continue;
         if (actor.getFlag(MODULE_ID, "quickDrawActive")) {
           await actor.unsetFlag(MODULE_ID, "quickDrawActive");
-          this._log(`Quick Draw cleaned up for ${actor.name} (combat ended).`);
+          log("Gunslinger",`Quick Draw cleaned up for ${actor.name} (combat ended).`);
         }
         // Clean up Deadeye stacks and AE
         const deadeyeAE = actor.effects.find(e => e.getFlag(MODULE_ID, "deadeyeAE"));
@@ -500,7 +612,7 @@ export const GunslingerFeatures = {
           await deadeyeAE.delete();
           await actor.setFlag(MODULE_ID, "deadeye.stacks", 0);
           await actor.setFlag(MODULE_ID, "deadeye.hitThisTurn", false);
-          this._log(`Deadeye cleaned up for ${actor.name} (combat ended).`);
+          log("Gunslinger",`Deadeye cleaned up for ${actor.name} (combat ended).`);
         }
       }
     });
@@ -512,7 +624,7 @@ export const GunslingerFeatures = {
 
   /**
    * Post a High Noon notification after a ranged crit.
-   * Called from the rollAttack monkey-patch.
+   * Called from the onPostRollAttack handler.
    */
   async notifyHighNoon(actor) {
     // Check if already used this turn
@@ -535,15 +647,15 @@ export const GunslingerFeatures = {
       speaker: ChatMessage.getSpeaker({ actor }),
     });
 
-    this._log(`High Noon triggered for ${actor.name}`);
+    log("Gunslinger",`High Noon triggered for ${actor.name}`);
   },
 
   /* -------------------------------------------- */
-  /*  Statics for monkey-patch communication       */
+  /*  Statics for handler communication             */
   /* -------------------------------------------- */
 
   /**
-   * Set by the rollAttack monkey-patch when a ranged attack is made.
+   * Set by the onPreRollAttack handler when a ranged attack is made.
    * Read by the Devastator hook to identify who killed an NPC.
    * @type {string|null} Actor ID of the last ranged attacker
    */

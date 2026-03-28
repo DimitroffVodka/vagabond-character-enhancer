@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Fighter features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -69,7 +69,7 @@ export const FIGHTER_REGISTRY = {
   // MODULE HANDLES:
   //   - Hook on createChatMessage detects successful save cards from fighters.
   //   - Grants a temporary "Momentum" AE (flag carrier, no AE changes).
-  //   - Monkey-patch on rollAttack checks for Momentum AE, applies favor,
+  //   - onPreRollAttack handler below checks for Momentum AE, applies favor,
   //     and consumes (deletes) the AE after the attack.
   //   - Cleanup hook on updateCombat removes expired Momentum at end of
   //     the fighter's next turn.
@@ -118,15 +118,6 @@ export const FIGHTER_REGISTRY = {
 /* -------------------------------------------- */
 
 export const FighterFeatures = {
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | FighterFeatures |`, ...args);
-    }
-  },
-
-  _hasFeature(actor, flag) {
-    return actor.getFlag(MODULE_ID, `features.${flag}`);
-  },
 
   registerHooks() {
     // Valor: Handled entirely by the base system's AE on the Fighter class item.
@@ -135,7 +126,24 @@ export const FighterFeatures = {
     // Momentum: Pass save → next attack favored
     this._registerMomentumHooks();
 
-    this._log("Hooks registered.");
+    log("Fighter","Hooks registered.");
+  },
+
+  /* -------------------------------------------- */
+  /*  Handler Methods (called from main dispatcher) */
+  /* -------------------------------------------- */
+
+  /**
+   * Momentum: Consume Momentum AE for attack favor.
+   * Called from rollAttack dispatcher.
+   */
+  onPreRollAttack(ctx) {
+    const momentumBuff = ctx.actor.effects?.find(e => e.getFlag(MODULE_ID, "momentumBuff"));
+    if (!momentumBuff || ctx.favorHinder === "favor") return;
+    ctx.favorHinder = combineFavor(ctx.favorHinder, "favor");
+    // Delete the AE (consumed) — fire-and-forget
+    momentumBuff.delete().catch(e => console.warn(`${MODULE_ID} | Momentum cleanup failed:`, e));
+    log("Fighter", `Momentum: consumed — attack favored for ${ctx.actor.name}`);
   },
 
   /* -------------------------------------------- */
@@ -152,13 +160,13 @@ export const FighterFeatures = {
    *      and outcome "PASS"/"FAIL" in the HTML.
    *   2. On a passed save, create a temporary "Momentum" AE on the fighter that
    *      grants favor. The AE is purely a flag carrier — actual favor application
-   *      is done via monkey-patch on the attack roll (same pattern as Virtuoso Valor).
+   *      is done via onPreRollAttack handler (same pattern as Virtuoso Valor).
    *   3. After the fighter's next attack roll, remove the Momentum AE (consumed).
    *   4. Clean up at end of the fighter's next turn if not consumed.
    *
    * Why not use AE changes for favor:
    *   AE overrides on system.favorHinder would bulldoze other favor/hinder sources
-   *   (flanking, conditions). The monkey-patch approach combines favor correctly.
+   *   (flanking, conditions). The handler approach combines favor correctly.
    */
   _registerMomentumHooks() {
     // Detect successful saves from fighters
@@ -168,8 +176,8 @@ export const FighterFeatures = {
     });
 
     // Consume Momentum on next attack
-    // This is handled via the monkey-patch in vagabond-character-enhancer.mjs
-    // which checks for the Momentum AE before attack rolls.
+    // This is handled via the onPreRollAttack handler above
+    // (dispatched from vagabond-character-enhancer.mjs).
 
     // Clean up Momentum at end of fighter's next turn
     Hooks.on("updateCombat", (combat, changes) => {
@@ -197,7 +205,7 @@ export const FighterFeatures = {
     if (!actor || actor.type !== "character") return;
 
     // Check if this actor has Momentum
-    if (!this._hasFeature(actor, "fighter_momentum")) return;
+    if (!hasFeature(actor, "fighter_momentum")) return;
 
     // Check if they already have Momentum active (don't stack)
     const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "momentumBuff"));
@@ -218,11 +226,11 @@ export const FighterFeatures = {
           grantedTurn: game.combat?.turn ?? 0
         }
       },
-      changes: []  // Favor applied via monkey-patch, not AE changes
+      changes: []  // Favor applied via onPreRollAttack handler, not AE changes
     };
 
     await actor.createEmbeddedDocuments("ActiveEffect", [aeData]);
-    this._log(`Momentum granted to ${actor.name} after passing save.`);
+    log("Fighter",`Momentum granted to ${actor.name} after passing save.`);
 
     // Post a subtle notification
     ChatMessage.create({
@@ -274,7 +282,7 @@ export const FighterFeatures = {
     if (hasActed) {
       // Fighter already had a turn with Momentum and didn't use it — expire it
       await momentumAE.delete();
-      this._log(`Momentum expired for ${actor.name} (turn ended without using it).`);
+      log("Fighter",`Momentum expired for ${actor.name} (turn ended without using it).`);
     } else {
       // This is the fighter's first turn since Momentum was granted.
       // Mark it as "has acted" — it will expire at end of their NEXT turn
@@ -285,12 +293,12 @@ export const FighterFeatures = {
       // next Turn is Favored." The fighter gets ONE turn to use it. If their
       // turn just ended and they didn't attack, it's gone.
       await momentumAE.delete();
-      this._log(`Momentum expired for ${actor.name} (their turn ended).`);
+      log("Fighter",`Momentum expired for ${actor.name} (their turn ended).`);
     }
   },
 
   /**
-   * Called from the monkey-patch on attack rolls.
+   * Called from onPreRollAttack handler.
    * If the actor has Momentum, returns true and deletes the AE (consumed).
    */
   async consumeMomentum(actor) {
@@ -298,7 +306,7 @@ export const FighterFeatures = {
     if (!momentumAE) return false;
 
     await momentumAE.delete();
-    this._log(`Momentum consumed by ${actor.name} on attack.`);
+    log("Fighter",`Momentum consumed by ${actor.name} on attack.`);
     return true;
   }
 };

@@ -3,7 +3,8 @@
  * Registry entries + runtime hooks for all Bard features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration } from "../utils.mjs";
+import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -54,13 +55,13 @@ export const BARD_REGISTRY = {
   //   - Button choice persisted via message.setFlag() — survives page reloads
   //     and shows correctly for all connected clients.
   //   - Buff AEs: creates flag-only AEs (no system.favorHinder changes) on all
-  //     PC combatants. The AE's virtuosoBuff flag is read by monkey-patches.
-  //   - Favor application via TWO monkey-patches (see vagabond-character-enhancer.mjs):
-  //     * buildAndEvaluateD20 patch — covers skill, save, and stat checks.
+  //     PC combatants. The AE's virtuosoBuff flag is read by handler methods.
+  //   - Favor application via handler methods (dispatched from vagabond-character-enhancer.mjs):
+  //     * onPreRollAttack — covers weapon attack rolls (Valor only).
   //       Checks actor.effects for virtuosoBuff flag, combines with existing
   //       favorHinder state (hinder + favor = "none", none + favor = "favor").
-  //     * rollAttack patch — covers weapon attack rolls (Valor only).
-  //       Same combination logic. MUST be separate from buildAndEvaluateD20 because
+  //     * onPreBuildAndEvaluateD20 — covers skill, save, and stat checks.
+  //       Same combination logic. MUST be separate from rollAttack because
   //       rollAttack internally uses buildAndEvaluateD20WithRollData, a different
   //       code path that doesn't go through buildAndEvaluateD20.
   //   - Auto-expires: updateCombat hook removes all Virtuoso AEs on round change.
@@ -77,12 +78,12 @@ export const BARD_REGISTRY = {
   //     Favor should CANCEL hinder (to "none"), not replace it. The system's
   //     roll handler reads actor.system.favorHinder BEFORE calling the roll method,
   //     so an AE override made it always read "favor" regardless of flanking or
-  //     other conditions. Solution: flag-only AEs + monkey-patches that combine
+  //     other conditions. Solution: flag-only AEs + handler methods that combine
   //     favor with the already-resolved favorHinder state.
-  //   - Single monkey-patch on buildAndEvaluateD20 for ALL rolls — weapon attacks
+  //   - Single handler on buildAndEvaluateD20 for ALL rolls — weapon attacks
   //     go through buildAndEvaluateD20WithRollData (called inside item.rollAttack),
   //     a completely separate code path. The two methods never call each other.
-  //     Solution: patch BOTH rollAttack (for attacks) AND buildAndEvaluateD20
+  //     Solution: handle BOTH rollAttack (for attacks) AND buildAndEvaluateD20
   //     (for skills/saves/stats) independently.
   //   - Applying Virtuoso in BOTH rollAttack AND buildAndEvaluateD20 — caused
   //     double-application because rollAttack modifies favorHinder then passes it
@@ -187,11 +188,9 @@ export const BARD_REGISTRY = {
   //   is narrative/flavor and not automated (no system mechanic to hook).
   //
   // MODULE HANDLES:
-  //   - Two monkey-patches in vagabond-character-enhancer.mjs:
-  //     * _rollSave (damage-helper.mjs): Strips ALL hinder sources on Will saves
-  //       for actors with bard_bravado (covers chat-card save buttons).
-  //     * RollHandler.roll: Strips hinder from sheet-initiated Will save clicks
-  //       (covers character sheet save buttons).
+  //   - onPreRollSave handler below (dispatched from vagabond-character-enhancer.mjs):
+  //     Strips ALL hinder sources on Will saves for actors with bard_bravado.
+  //     Covers both chat-card save buttons and character sheet save buttons.
   //   - Both patches check !incapacitated before intervening.
   //   - Hinder sources stripped: global favorHinder, conditional isHindered,
   //     keyboard Ctrl override, attacker outgoingSavesModifier.
@@ -214,11 +213,9 @@ export const BARD_REGISTRY = {
   // MODULE HANDLES:
   //   - When Virtuoso buff is applied (_applyVirtuosoBuff), if the Bard has
   //     bard_climax, the AE flag includes climaxExplode=true.
-  //   - Monkey-patches in vagabond-character-enhancer.mjs:
-  //     * evaluateRoll: after favored d20 rolls, if actor has climaxExplode AE,
-  //       explodes the d6 favor die on max (6). Covers sheet rolls, saves, skills.
-  //     * buildAndEvaluateD20WithRollData: same logic for weapon attack rolls,
-  //       using _currentRollActor context variable set by rollAttack wrapper.
+  //   - onPostEvaluateRoll handler below (dispatched from vagabond-character-enhancer.mjs):
+  //     After favored d20 rolls, if actor has climaxExplode AE, explodes the d6
+  //     favor die on max (6). Covers sheet rolls, saves, skills, and attack rolls.
   //   - Uses VagabondDamageHelper._manuallyExplodeDice for recursive explosion.
   //
   "climax": {
@@ -268,22 +265,175 @@ export const BardFeatures = {
     this._registerVirtuosoHooks();
     this._registerSongOfRestHooks();
     this._patchVirtuosoSheet();
-    this._log("Bard hooks registered.");
+    log("Bard","Bard hooks registered.");
   },
 
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | Bard |`, ...args);
+  /* -------------------------------------------- */
+  /*  Handler Methods (called from main dispatcher) */
+  /* -------------------------------------------- */
+
+  /**
+   * Virtuoso Valor: Favor on attacks.
+   * Called from rollAttack dispatcher.
+   */
+  onPreRollAttack(ctx) {
+    const virtuosoBuff = ctx.actor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
+    if (!virtuosoBuff) return;
+    const buffType = virtuosoBuff.getFlag(MODULE_ID, "virtuosoBuff");
+    if (buffType === "valor" && ctx.favorHinder !== "favor") {
+      ctx.favorHinder = combineFavor(ctx.favorHinder, "favor");
+      log("Bard", `Virtuoso Valor: attack favor — effective: ${ctx.favorHinder}`);
     }
   },
 
   /**
-   * Check if an actor has a specific feature flag.
+   * Virtuoso: Favor on skill/stat checks (buildAndEvaluateD20 path).
+   * Called from buildAndEvaluateD20 dispatcher.
    */
-  _hasFeature(actor, flag) {
-    const features = actor?.getFlag(MODULE_ID, "features");
-    return features?.[flag] ?? false;
+  onPreBuildD20(ctx) {
+    const virtuosoBuff = ctx.actor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
+    if (!virtuosoBuff) return;
+    const buffType = virtuosoBuff.getFlag(MODULE_ID, "virtuosoBuff");
+    if (buffType === "valor" || buffType === "resolve") {
+      ctx.favorHinder = combineFavor(ctx.favorHinder, "favor");
+      log("Bard", `Virtuoso: ${buffType} applied — effective favorHinder: ${ctx.favorHinder}`);
+    }
   },
+
+  /**
+   * Virtuoso: Favor on chat-card saves (conditional hinder path).
+   * Called from buildAndEvaluateD20WithConditionalHinder dispatcher.
+   */
+  onPreBuildD20Conditional(ctx) {
+    const virtuosoBuff = ctx.actor?.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
+    if (!virtuosoBuff) return;
+    const buffType = virtuosoBuff.getFlag(MODULE_ID, "virtuosoBuff");
+    if (buffType === "valor" || buffType === "resolve") {
+      ctx.effectiveFavorHinder = combineFavor(ctx.effectiveFavorHinder, "favor");
+      log("Bard", `Virtuoso: ${buffType} applied on save (conditional path) — effective: ${ctx.effectiveFavorHinder}`);
+    }
+  },
+
+  /**
+   * Climax: Explode the favor d6 after evaluateRoll.
+   * Called from evaluateRoll dispatcher.
+   */
+  async onPostEvaluateRoll(ctx) {
+    if (ctx.favorHinder !== "favor") return;
+    const virtuosoAE = ctx.actor?.effects?.find(e => e.getFlag(MODULE_ID, "climaxExplode"));
+    if (!virtuosoAE) return;
+    const d6Term = ctx.roll.terms.find(t => t.constructor?.name === "Die" && t.faces === 6);
+    if (!d6Term) return;
+    const maxFace = d6Term.faces;
+    const hasMaxResult = d6Term.results?.some(r => r.result === maxFace && r.active);
+    if (!hasMaxResult) return;
+    await ctx.VagabondDamageHelper._manuallyExplodeDice(ctx.roll, [maxFace]);
+    log("Bard", `Climax: Exploded favor d6 for ${ctx.actor.name} — new total: ${ctx.roll.total}`);
+  },
+
+  /**
+   * Virtuoso Valor: Favor on attacks/spells (buildAndEvaluateD20WithRollData path).
+   * Called from buildAndEvaluateD20WithRollData dispatcher.
+   */
+  onPreBuildD20WithRollData(ctx) {
+    if (!ctx.currentRollActor) return;
+    const virtuosoBuff = ctx.currentRollActor.effects?.find(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
+    if (virtuosoBuff) {
+      const buffType = virtuosoBuff.getFlag(MODULE_ID, "virtuosoBuff");
+      if (buffType === "valor" && ctx.favorHinder !== "favor") {
+        ctx.favorHinder = combineFavor(ctx.favorHinder, "favor");
+        log("Bard", `Virtuoso Valor: applied on attack/spell for ${ctx.currentRollActor.name} — effective: ${ctx.favorHinder}`);
+      }
+    }
+  },
+
+  /**
+   * Climax: Explode favor d6 on attacks/spells (buildAndEvaluateD20WithRollData path).
+   * Called from buildAndEvaluateD20WithRollData dispatcher after roll.
+   */
+  async onPostBuildD20WithRollData(ctx) {
+    if (ctx.favorHinder !== "favor" || !ctx.currentRollActor) return;
+    const climaxAE = ctx.currentRollActor.effects?.find(e => e.getFlag(MODULE_ID, "climaxExplode"));
+    if (!climaxAE) return;
+    const d6Term = ctx.roll.terms.find(t => t.constructor?.name === "Die" && t.faces === 6);
+    if (!d6Term) return;
+    const maxFace = d6Term.faces;
+    const hasMaxResult = d6Term.results?.some(r => r.result === maxFace && r.active);
+    if (!hasMaxResult) return;
+    await ctx.VagabondDamageHelper._manuallyExplodeDice(ctx.roll, [maxFace]);
+    log("Bard", `Climax: Exploded favor d6 on attack/spell for ${ctx.currentRollActor.name} — new total: ${ctx.roll.total}`);
+  },
+
+  /**
+   * Inspiration: Add d6 to healing item formulas (potions).
+   * Called from item.roll dispatcher.
+   */
+  async onPreItemRoll(ctx) {
+    if (ctx.item.type !== "equipment" || ctx.item.system.damageType !== "healing") return;
+    if (!hasActiveInspiration()) return;
+    const origFormula = ctx.item.system.formula;
+    if (!origFormula) return;
+    ctx.item.system.formula = `${origFormula} + 1d6[Inspiration]`;
+    log("Bard", `Inspiration: Modified healing formula: ${origFormula} → ${ctx.item.system.formula}`);
+    ctx._bardOrigFormula = origFormula;
+  },
+
+  /**
+   * Inspiration: Add d6 to healing button (spell path).
+   * Called from handleApplyRestorative dispatcher.
+   */
+  async onPreHandleRestorative(ctx) {
+    if (ctx.damageType !== "healing") return;
+    // Skip equipment items (potions) — already handled by onPreItemRoll
+    if (ctx.actorId && ctx.itemId) {
+      const sourceActor = game.actors.get(ctx.actorId);
+      const sourceItem = sourceActor?.items.get(ctx.itemId);
+      if (sourceItem?.type === "equipment") return;
+    }
+    if (!hasActiveInspiration()) return;
+    const bonusRoll = new Roll("1d6");
+    await bonusRoll.evaluate();
+    const bonusAmount = bonusRoll.total;
+    const originalAmount = parseInt(ctx.button.dataset.damageAmount) || 0;
+    ctx.button.dataset.damageAmount = String(originalAmount + bonusAmount);
+    log("Bard", `Inspiration: +${bonusAmount} healing (d6 rolled ${bonusAmount}), total: ${ctx.button.dataset.damageAmount}`);
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker(),
+      content: `<div class="vce-inspiration-notice">
+        <i class="fas fa-music vce-inspiration-icon" aria-hidden="true"></i>
+        <strong>Inspiration:</strong> +${bonusAmount} healing (1d6 → ${bonusAmount})
+      </div>`
+    });
+  },
+
+  /**
+   * Bravado: Will saves can't be hindered.
+   * Called from _rollSave dispatcher.
+   */
+  onPreRollSave(ctx) {
+    if (ctx.saveType !== "will" || !ctx.features?.bard_bravado) return;
+    if (ctx.actor.statuses?.has("incapacitated")) return;
+    ctx.isHindered = false;
+    ctx.ctrlKey = false;
+    if (ctx.attackerModifier === "hinder") ctx.attackerModifier = "none";
+    if (!ctx.needRestore) ctx.origFH = ctx.actor.system.favorHinder;
+    if (ctx.actor.system.favorHinder === "hinder") {
+      ctx.actor.system.favorHinder = "none";
+      ctx.needRestore = true;
+    }
+    log("Bard", `Bravado: Will save can't be Hindered for ${ctx.actor.name}`);
+  },
+
+  /**
+   * Bravado: Strip hinder from sheet-initiated Will saves.
+   * Called from RollHandler.roll dispatcher.
+   */
+  onPreSheetRoll(ctx) {
+    if (ctx.saveKey !== "will" || !ctx.features?.bard_bravado) return;
+    if (ctx.actor.statuses?.has("incapacitated")) return;
+    ctx.stripHinder("Bravado");
+  },
+
 
   /* -------------------------------------------- */
   /*  Song of Rest: Bonus HP + Studied Die        */
@@ -316,7 +466,7 @@ export const BardFeatures = {
       // Find a bard with Song of Rest who isn't incapacitated
       const bard = game.actors.find(a => {
         if (a.type !== "character") return false;
-        if (!this._hasFeature(a, "bard_songOfRest")) return false;
+        if (!hasFeature(a, "bard_songOfRest")) return false;
         if (a.statuses?.has("incapacitated")) return false;
         return true;
       });
@@ -328,7 +478,7 @@ export const BardFeatures = {
       const songBonus = bardPresence + bardLevel;
 
       if (songBonus <= 0) {
-        this._log("Song of Rest: bonus is 0, skipping.");
+        log("Bard","Song of Rest: bonus is 0, skipping.");
         return;
       }
 
@@ -347,7 +497,7 @@ export const BardFeatures = {
       }
       await actor.update(updates);
 
-      this._log(`Song of Rest: ${bard.name} grants ${actor.name} +${actualBonus} HP (Presence ${bardPresence} + Level ${bardLevel} = ${songBonus}, capped at max) and +1 Studied Die`);
+      log("Bard",`Song of Rest: ${bard.name} grants ${actor.name} +${actualBonus} HP (Presence ${bardPresence} + Level ${bardLevel} = ${songBonus}, capped at max) and +1 Studied Die`);
 
       // Post a follow-up chat card showing the Song of Rest bonus
       const { VagabondChatCard } = await import("/systems/vagabond/module/helpers/chat-card.mjs");
@@ -386,8 +536,8 @@ export const BardFeatures = {
    * 3. updateCombat: auto-expires Virtuoso buffs on round change (all PCs)
    * 4. deleteCombat: cleans up Virtuoso buffs when combat ends (all PCs)
    *
-   * Favor application is NOT here — it's in vagabond-character-enhancer.mjs via
-   * monkey-patches on buildAndEvaluateD20 (skills/saves) and rollAttack (attacks).
+   * Favor application is NOT here — it's in the handler methods above
+   * (onPreRollAttack and onPreBuildAndEvaluateD20), dispatched from vagabond-character-enhancer.mjs.
    */
   _registerVirtuosoHooks() {
     // Intercept Virtuoso item usage from the character sheet.
@@ -403,10 +553,10 @@ export const BardFeatures = {
       if (!actor) return;
       const item = actor.items.get(itemId);
       if (!item || item.name.toLowerCase() !== "virtuoso") return;
-      if (!this._hasFeature(actor, "bard_virtuoso")) return;
+      if (!hasFeature(actor, "bard_virtuoso")) return;
 
       // Suppress the default item card and run our Virtuoso flow instead
-      this._log(`Virtuoso: Intercepted item use — running Performance check for ${actor.name}`);
+      log("Bard",`Virtuoso: Intercepted item use — running Performance check for ${actor.name}`);
       this.useVirtuoso(actor);
       return false;
     });
@@ -485,7 +635,7 @@ export const BardFeatures = {
         // Out of combat: any PC on the scene with bard_virtuoso means Inspiration is assumed
         const scenePCs = canvas.tokens?.placeables
           ?.filter(t => t.actor?.type === "character") || [];
-        hasInspiration = scenePCs.some(t => this._hasFeature(t.actor, "bard_virtuoso"));
+        hasInspiration = scenePCs.some(t => hasFeature(t.actor, "bard_virtuoso"));
       }
 
       if (!hasInspiration) return;
@@ -499,7 +649,7 @@ export const BardFeatures = {
         // Update button text to show the bonus
         const label = btn.textContent.trim();
         btn.innerHTML = `<i class="fas fa-heart"></i> ${label} + d6 <i class="fas fa-music vce-inspiration-icon" aria-hidden="true"></i>`;
-        this._log(`Inspiration: Added +1d6 to healing formula: ${formula} → ${btn.dataset.damageAmount}`);
+        log("Bard",`Inspiration: Added +1d6 to healing formula: ${formula} → ${btn.dataset.damageAmount}`);
       });
     });
 
@@ -516,7 +666,7 @@ export const BardFeatures = {
         if (virtuosoEffects.length > 0) {
           const ids = virtuosoEffects.map(e => e.id);
           deletionPromises.push(actor.deleteEmbeddedDocuments("ActiveEffect", ids).then(() => {
-            this._log(`Virtuoso: Buff expired on ${actor.name} (round changed)`);
+            log("Bard",`Virtuoso: Buff expired on ${actor.name} (round changed)`);
           }));
         }
       }
@@ -537,7 +687,7 @@ export const BardFeatures = {
       const { status, tokenIds, sceneId } = starstruckData;
       if (!status || !Array.isArray(tokenIds)) return;
 
-      this._log(`Starstruck: Countdown die expired — cleaning up ${status} from ${tokenIds.length} targets`);
+      log("Bard",`Starstruck: Countdown die expired — cleaning up ${status} from ${tokenIds.length} targets`);
 
       // Find tokens on the scene and remove the status
       const scene = game.scenes.get(sceneId);
@@ -555,7 +705,7 @@ export const BardFeatures = {
 
         cleanupPromises.push(
           actor.toggleStatusEffect(status, { active: false }).then(() => {
-            this._log(`Starstruck: Removed ${status} from ${actor.name} (die expired)`);
+            log("Bard",`Starstruck: Removed ${status} from ${actor.name} (die expired)`);
           })
         );
       }
@@ -571,7 +721,7 @@ export const BardFeatures = {
         if (virtuosoEffects.length > 0) {
           const ids = virtuosoEffects.map(e => e.id);
           cleanupPromises.push(actor.deleteEmbeddedDocuments("ActiveEffect", ids).then(() => {
-            this._log(`Virtuoso: Cleaned up buff on ${actor.name} (combat ended)`);
+            log("Bard",`Virtuoso: Cleaned up buff on ${actor.name} (combat ended)`);
           }));
         }
       }
@@ -588,7 +738,7 @@ export const BardFeatures = {
       ui.notifications.warn("Virtuoso: Select a character actor.");
       return;
     }
-    if (!this._hasFeature(actor, "bard_virtuoso")) {
+    if (!hasFeature(actor, "bard_virtuoso")) {
       ui.notifications.warn(`${actor.name} doesn't have the Virtuoso feature.`);
       return;
     }
@@ -609,7 +759,7 @@ export const BardFeatures = {
     const difficulty = skillData?.difficulty || 10;
     const isSuccess = roll.total >= difficulty;
 
-    this._log(`Virtuoso: ${actor.name} rolled ${roll.total} vs DC ${difficulty} — ${isSuccess ? "PASS" : "FAIL"}`);
+    log("Bard",`Virtuoso: ${actor.name} rolled ${roll.total} vs DC ${difficulty} — ${isSuccess ? "PASS" : "FAIL"}`);
 
     // Build the chat card using the system's vagabond-chat-card-v2 structure
     // so it matches the visual style of attack/skill/save cards.
@@ -695,7 +845,7 @@ export const BardFeatures = {
    */
   async _applyVirtuosoBuff(bard, buffType) {
     // AE changes are intentionally EMPTY for Valor/Resolve. The favor is applied
-    // via monkey-patches in vagabond-character-enhancer.mjs, not via AE changes.
+    // via handler methods (onPreRollAttack, onPreBuildAndEvaluateD20), not via AE changes.
     // The AE exists purely as a flag carrier — the patches check for the
     // virtuosoBuff flag on the actor's effects and combine favor with the
     // already-resolved favorHinder state from the roll handler.
@@ -703,18 +853,18 @@ export const BardFeatures = {
     // Why not AE OVERRIDE on system.favorHinder?
     // The system reads actor.system.favorHinder BEFORE calling roll methods.
     // An AE override makes it always "favor", bulldozing flanking hinder and
-    // other conditions. The monkey-patches run AFTER the system resolves
+    // other conditions. The handler methods run AFTER the system resolves
     // favorHinder, so they can properly combine (hinder + favor = "none").
     const buffConfig = {
       valor: {
         name: "Virtuoso: Valor",
         description: "Favor on Attack and Cast Checks",
-        changes: [] // Favor applied via roll builder monkey-patch
+        changes: [] // Favor applied via handler methods, not AE changes
       },
       resolve: {
         name: "Virtuoso: Resolve",
         description: "Favor on Saves",
-        changes: [] // Favor applied via roll builder monkey-patch
+        changes: [] // Favor applied via handler methods, not AE changes
       },
       inspiration: {
         name: "Virtuoso: Inspiration",
@@ -726,7 +876,7 @@ export const BardFeatures = {
     const config = buffConfig[buffType];
     if (!config) return;
 
-    this._log(`Virtuoso: ${bard.name} chose ${buffType} — applying to all PCs`);
+    log("Bard",`Virtuoso: ${bard.name} chose ${buffType} — applying to all PCs`);
 
     // Apply to all PCs in combat. RAW says "your Group" which means the party.
     // Only apply to combatants in the active encounter — non-combatant actors
@@ -755,6 +905,11 @@ export const BardFeatures = {
       }
     }
 
+    // Play Virtuoso FX — on bard and/or each target depending on config
+    for (const target of targetActors) {
+      FocusManager.playFeatureFX(bard, "bard_virtuoso", target);
+    }
+
     const applyPromises = targetActors.map(async (actor) => {
       // Remove any existing Virtuoso buff first
       const existing = actor.effects.filter(e => e.getFlag(MODULE_ID, "virtuosoBuff"));
@@ -768,7 +923,7 @@ export const BardFeatures = {
       };
 
       // Climax (L8): If the Bard has Climax, granted dice can Explode
-      if (this._hasFeature(bard, "bard_climax")) {
+      if (hasFeature(bard, "bard_climax")) {
         aeFlags.climaxExplode = true;
       }
 
@@ -783,14 +938,14 @@ export const BardFeatures = {
         disabled: false,
         transfer: false
       }]);
-      this._log(`Virtuoso: Applied ${config.name} to ${actor.name}${aeFlags.climaxExplode ? " (Climax: dice can Explode)" : ""}`);
+      log("Bard",`Virtuoso: Applied ${config.name} to ${actor.name}${aeFlags.climaxExplode ? " (Climax: dice can Explode)" : ""}`);
     });
 
     await Promise.all(applyPromises);
     ui.notifications.info(`Virtuoso: ${bard.name} grants ${config.name}! (${config.description})`);
 
     // Chain Starstruck if the Bard has the feature
-    if (this._hasFeature(bard, "bard_starstruck")) {
+    if (hasFeature(bard, "bard_starstruck")) {
       await this._handleStarstruck(bard);
     }
   },
@@ -812,10 +967,10 @@ export const BardFeatures = {
   async _handleStarstruck(bard) {
     if (!canvas?.tokens?.placeables) return;
 
-    const hasEnhancement = this._hasFeature(bard, "bard_starstruckEnhancement");
+    const hasEnhancement = hasFeature(bard, "bard_starstruckEnhancement");
     const bardToken = canvas.tokens.placeables.find(t => t.actor?.id === bard.id);
     if (!bardToken) {
-      this._log("Starstruck: No token found for Bard on canvas");
+      log("Bard","Starstruck: No token found for Bard on canvas");
       return;
     }
 
@@ -833,7 +988,7 @@ export const BardFeatures = {
         ui.notifications.info("Starstruck Enhancement: No Near Enemies found within 30ft.");
         return;
       }
-      this._log(`Starstruck Enhancement: Found ${targetTokens.length} enemies within 30ft`);
+      log("Bard",`Starstruck Enhancement: Found ${targetTokens.length} enemies within 30ft`);
     } else {
       // L4: Single target — must have an enemy targeted
       const targets = Array.from(game.user.targets);
@@ -844,7 +999,7 @@ export const BardFeatures = {
       }
       // Use only the first targeted NPC
       targetTokens = [targetTokens[0]];
-      this._log(`Starstruck: Targeting ${targetTokens[0].actor.name}`);
+      log("Bard",`Starstruck: Targeting ${targetTokens[0].actor.name}`);
     }
 
     // Choose which status to apply
@@ -875,13 +1030,13 @@ export const BardFeatures = {
 
       // Skip if already has this status
       if (targetActor.statuses?.has(chosenStatus)) {
-        this._log(`Starstruck: ${targetActor.name} already has ${chosenStatus}, skipping`);
+        log("Bard",`Starstruck: ${targetActor.name} already has ${chosenStatus}, skipping`);
         continue;
       }
 
       await targetActor.toggleStatusEffect(chosenStatus, { active: true });
       affectedTokens.push(token);
-      this._log(`Starstruck: Applied ${chosenStatus} to ${targetActor.name}`);
+      log("Bard",`Starstruck: Applied ${chosenStatus} to ${targetActor.name}`);
     }
 
     if (affectedTokens.length === 0) {
@@ -919,7 +1074,7 @@ export const BardFeatures = {
         });
       }
 
-      this._log(`Starstruck: Created Cd4 countdown die "${dieName}"`);
+      log("Bard",`Starstruck: Created Cd4 countdown die "${dieName}"`);
     } catch (e) {
       console.warn(`${MODULE_ID} | Failed to create Starstruck countdown die:`, e);
     }
@@ -1264,7 +1419,7 @@ export const BardFeatures = {
           <div class="card-body">
             <header class="card-header">
               <div class="header-icon">
-                <img src="icons/tools/instruments/lute-brown.webp" alt="Virtuoso">
+                <img src="icons/tools/instruments/lute-gold-brown.webp" alt="Virtuoso">
               </div>
               <div class="header-info">
                 <h3 class="header-title">Virtuoso: ${buff.name}</h3>

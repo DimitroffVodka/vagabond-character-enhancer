@@ -3,7 +3,7 @@
  * Scans actor class/ancestry/perk items and sets flags + managed Active Effects.
  */
 
-import { MODULE_ID } from "./vagabond-character-enhancer.mjs";
+import { MODULE_ID, log } from "./utils.mjs";
 
 // Import class registries — each class file owns all its feature definitions
 import { BARBARIAN_REGISTRY } from "./class-features/barbarian.mjs";
@@ -94,14 +94,6 @@ const PERK_FEATURE_REGISTRY = PERK_REGISTRY;
 export const FeatureDetector = {
   _debounceTimers: new Map(),
 
-  /**
-   * Log a debug message if debug mode is enabled.
-   */
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | FeatureDetector |`, ...args);
-    }
-  },
 
   /**
    * Register all hooks for automatic feature detection.
@@ -134,7 +126,7 @@ export const FeatureDetector = {
       }
     });
 
-    this._log("Hooks registered.");
+    log("FeatureDetector","Hooks registered.");
   },
 
   /**
@@ -156,7 +148,7 @@ export const FeatureDetector = {
   async scanAll() {
     if (!game.user.isGM) return;
     const characters = game.actors.filter(a => a.type === "character");
-    this._log(`Scanning ${characters.length} characters...`);
+    log("FeatureDetector",`Scanning ${characters.length} characters...`);
     for (const actor of characters) {
       await this.scan(actor);
     }
@@ -190,7 +182,7 @@ export const FeatureDetector = {
         const registered = CLASS_FEATURE_REGISTRY[featureName];
         if (registered) {
           features[registered.flag] = true;
-          this._log(`Detected: ${feature.name} (${registered.class}) on ${actor.name}`);
+          log("FeatureDetector",`Detected: ${feature.name} (${registered.class}) on ${actor.name}`);
         }
       }
     }
@@ -205,7 +197,7 @@ export const FeatureDetector = {
       for (const [traitName, traitDef] of Object.entries(ANCESTRY_TRAIT_REGISTRY)) {
         if (traitDef.ancestry === ancestryName) {
           features[traitDef.flag] = true;
-          this._log(`Detected trait: ${traitName} (${traitDef.ancestry}) on ${actor.name}`);
+          log("FeatureDetector",`Detected trait: ${traitName} (${traitDef.ancestry}) on ${actor.name}`);
         }
       }
     }
@@ -217,19 +209,25 @@ export const FeatureDetector = {
         const registered = PERK_FEATURE_REGISTRY[perkName];
         if (registered) {
           features[registered.flag] = true;
-          this._log(`Detected perk: ${item.name} on ${actor.name}`);
+          log("FeatureDetector",`Detected perk: ${item.name} on ${actor.name}`);
         }
       }
     }
 
-    // --- Update flags ---
+    // --- Update flags (skip write if nothing changed) ---
+    // IMPORTANT: unsetFlag + setFlag instead of just setFlag, because setFlag
+    // deep-merges and would preserve stale flags (e.g. a level 8 feature flag
+    // lingering after the actor drops back to level 3).
     const oldFeatures = actor.getFlag(MODULE_ID, "features") ?? {};
-    await actor.setFlag(MODULE_ID, "features", features);
+    const changed = JSON.stringify(oldFeatures) !== JSON.stringify(features);
+    if (changed) {
+      await actor.unsetFlag(MODULE_ID, "features");
+      await actor.setFlag(MODULE_ID, "features", features);
+      // --- Manage Active Effects (only when features changed) ---
+      await this._syncManagedEffects(actor, features, oldFeatures);
+    }
 
-    // --- Manage Active Effects ---
-    await this._syncManagedEffects(actor, features, oldFeatures);
-
-    this._log(`Scan complete for ${actor.name}:`, features);
+    log("FeatureDetector",`Scan complete for ${actor.name}:`, features);
   },
 
   /**
@@ -275,7 +273,7 @@ export const FeatureDetector = {
     });
 
     if (toDelete.length > 0) {
-      this._log(`Removing ${toDelete.length} managed effects from ${actor.name}`);
+      log("FeatureDetector",`Removing ${toDelete.length} managed effects from ${actor.name}`);
       await actor.deleteEmbeddedDocuments("ActiveEffect", toDelete.map(e => e.id));
     }
 
@@ -297,7 +295,7 @@ export const FeatureDetector = {
     }
 
     if (toCreate.length > 0) {
-      this._log(`Creating ${toCreate.length} managed effects on ${actor.name}:`, toCreate.map(e => e.name));
+      log("FeatureDetector",`Creating ${toCreate.length} managed effects on ${actor.name}:`, toCreate.map(e => e.name));
       await actor.createEmbeddedDocuments("ActiveEffect", toCreate);
     }
   }

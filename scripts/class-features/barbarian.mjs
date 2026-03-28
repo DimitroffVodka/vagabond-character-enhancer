@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Barbarian features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -36,14 +36,14 @@ export const BARBARIAN_REGISTRY = {
   //   - DR gating: damage-helper.mjs checks actor.statuses.has('berserk') AND
   //     _isLightOrNoArmor(actor) before applying incomingDamageReductionPerDie.
   //     However, system has a bug reading empty damageAmount for dice count —
-  //     module monkey-patches calculateFinalDamage to fix this (see vagabond-character-enhancer.mjs).
+  //     module fixes this via onCalculateFinalDamage handler below.
   //   - Exploding dice: damage-helper.mjs _getExplodeValues() reads bonuses.globalExplode
   //     and per-item explodeValues. Module sets both via companion AE + weapon flags.
   //   - Die upsizing: system reads {weaponSkill}DamageDieSizeBonus from actor schema
   //     and applies to damage formula in item.mjs and chat-card.mjs.
   //   - Berserk status conditions: config.mjs defines "Can't be Frightened" but doesn't
   //     enforce it. Module adds frightened immunity globally for all berserk characters
-  //     (see vagabond-character-enhancer.mjs, not barbarian-specific).
+  //     (see _registerBerserkFrightenImmunity below, not barbarian-specific).
   //
   // MODULE HANDLES:
   //   - Permanent AE: Sets incomingDamageReductionPerDie = 1 (system gates behind berserk)
@@ -53,8 +53,8 @@ export const BARBARIAN_REGISTRY = {
   //     - universalDamageBonus = 1 (if Rip and Tear is present)
   //   - Per-weapon explodeValues set to upsized die max face (restored on berserk drop
   //     or weapon unequip). Also handles weapons equipped or created mid-berserk.
-  //   - Monkey-patch: Auto-applies Berserk on attack via rollAttack() wrapper
-  //     (see vagabond-character-enhancer.mjs)
+  //   - Auto-applies Berserk on attack via onPreRollAttack handler below
+  //     (dispatched from vagabond-character-enhancer.mjs)
   //   - Runtime hook: Auto-applies Berserk on taking damage (updateActor + options.vceOldHP)
   //   - Runtime hook: Removes Berserk when combat ends (deleteCombat)
   //   - Runtime hook: RAGE tag + DR breakdown on chat cards (renderChatMessage)
@@ -66,8 +66,8 @@ export const BARBARIAN_REGISTRY = {
   //   - renderChatMessage for die upsizing — damage is rolled inline with the attack,
   //     no data-damage-formula buttons exist. System uses DamageDieSizeBonus fields instead.
   //   - preCreateChatMessage for auto-berserk on attack — fires AFTER damage is rolled,
-  //     so the triggering attack never benefits from upsizing. Solution: monkey-patch
-  //     item.rollAttack() which runs BEFORE damage is rolled.
+  //     so the triggering attack never benefits from upsizing. Solution: onPreRollAttack
+  //     handler which runs BEFORE damage is rolled.
   //   - globalExplodeValues as a single string — can't represent different max faces for
   //     different die sizes. Solution: set explodeValues per-weapon to the upsized max face.
   //   - updateActor for HP change detection — actor already has post-update data, so
@@ -238,7 +238,7 @@ export const BARBARIAN_REGISTRY = {
   //   - Favor/Hinder system exists for attack rolls via item.rollAttack().
   //
   // MODULE HANDLES:
-  //   - Monkey-patches item.rollAttack() via dynamic import (see vagabond-character-enhancer.mjs)
+  //   - onPreRollAttackBloodthirsty handler below (dispatched from vagabond-character-enhancer.mjs)
   //   - Before the attack roll, checks if any targeted token (game.user.targets) is missing HP
   //   - If so, upgrades favorHinder: none → favor, hinder → none
   //   - Blindsight sense for wounded beings is narrative/GM-managed (not automated)
@@ -260,7 +260,7 @@ export const BARBARIAN_REGISTRY = {
   // STATUS: module
   //
   // SYSTEM HANDLES:
-  //   - Same DR system as Rage. Module monkey-patch of calculateFinalDamage
+  //   - Same DR system as Rage. Module's onCalculateFinalDamage handler
   //     reads total incomingDamageReductionPerDie (Rage 1 + Rip and Tear 1 = 2).
   //   - universalDamageBonus is read by damage-helper.mjs and added to all damage rolls.
   //
@@ -315,23 +315,58 @@ export const BarbarianFeatures = {
     this._registerAggressorHooks();
     this._registerFearmongerHooks();
     this._registerBloodthirstyHooks();
+    this._registerBerserkFrightenImmunity();
 
-    this._log("Barbarian hooks registered.");
+    log("Barbarian","Barbarian hooks registered.");
   },
 
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | Barbarian |`, ...args);
+  /* -------------------------------------------- */
+  /*  Handler Methods (called from main dispatcher) */
+  /* -------------------------------------------- */
+
+  /**
+   * Auto-apply Berserk before attack roll (Rage).
+   * Called from rollAttack dispatcher.
+   */
+  async onPreRollAttack(ctx) {
+    if (!ctx.features?.barbarian_rage || ctx.actor.statuses?.has("berserk")) return;
+    if (!BarbarianFeatures._isLightOrNoArmor(ctx.actor)) return;
+    await ctx.actor.toggleStatusEffect("berserk", { active: true });
+    await new Promise(r => setTimeout(r, 50));
+    log("Barbarian", `Rage: auto-applied Berserk before attack roll`);
+  },
+
+  /**
+   * Bloodthirsty: Favor on attacks vs wounded targets.
+   * Called from rollAttack dispatcher.
+   */
+  onPreRollAttackBloodthirsty(ctx) {
+    if (!ctx.features?.barbarian_bloodthirsty || ctx.favorHinder === "favor") return;
+    const targets = game.user.targets;
+    for (const token of targets) {
+      const tActor = token.actor;
+      if (!tActor) continue;
+      const hp = tActor.system.health;
+      if (hp && hp.value < hp.max) {
+        ctx.favorHinder = combineFavor(ctx.favorHinder, "favor");
+        log("Barbarian", `Bloodthirsty: upgraded to ${ctx.favorHinder} (wounded target)`);
+        return;
+      }
     }
   },
 
   /**
-   * Check if an actor has a specific feature flag.
+   * Rage DR: Reduce incoming damage while berserk.
+   * Called from calculateFinalDamage dispatcher.
    */
-  _hasFeature(actor, flag) {
-    const features = actor?.getFlag(MODULE_ID, "features");
-    return features?.[flag] ?? false;
+  onCalculateFinalDamage(ctx) {
+    if (!ctx.needsRageDR) return;
+    const reductionPerDie = ctx.actor.system.incomingDamageReductionPerDie;
+    const rageDR = reductionPerDie * ctx.numDice;
+    log("Barbarian", `Rage DR: ${reductionPerDie} × ${ctx.numDice} dice = ${rageDR} reduction`);
+    ctx.result = Math.max(0, ctx.result - rageDR);
   },
+
 
   /**
    * Check if actor is wearing light or no armor.
@@ -386,7 +421,7 @@ export const BarbarianFeatures = {
       if (baseDie === 0) continue;
 
       const upsizedMax = baseDie + dieSizeBonus;
-      this._log(`Rage: Setting explodeValues="${upsizedMax}" on ${weapon.name} (d${baseDie} → d${upsizedMax})`);
+      log("Barbarian",`Rage: Setting explodeValues="${upsizedMax}" on ${weapon.name} (d${baseDie} → d${upsizedMax})`);
       updates.push({
         _id: weapon.id,
         "system.explodeValues": String(upsizedMax),
@@ -415,7 +450,7 @@ export const BarbarianFeatures = {
     const updates = [];
     for (const weapon of weapons) {
       const original = weapon.getFlag(MODULE_ID, "originalExplodeValues") ?? "";
-      this._log(`Rage: Restoring explodeValues="${original}" on ${weapon.name}`);
+      log("Barbarian",`Rage: Restoring explodeValues="${original}" on ${weapon.name}`);
       updates.push({
         _id: weapon.id,
         "system.explodeValues": original,
@@ -442,9 +477,9 @@ export const BarbarianFeatures = {
    * - globalExplode=1, die size bonuses=+2, weapon explodeValues set per-weapon
    * - universalDamageBonus=1 (if Rip and Tear)
    *
-   * MONKEY-PATCHES (in vagabond-character-enhancer.mjs):
-   * - item.rollAttack(): auto-applies Berserk before damage roll on first attack
-   * - calculateFinalDamage(): fixes DR dice counting (system reads empty damageAmount)
+   * HANDLER METHODS (dispatched from vagabond-character-enhancer.mjs):
+   * - onPreRollAttack(): auto-applies Berserk before damage roll on first attack
+   * - onCalculateFinalDamage(): fixes DR dice counting (system reads empty damageAmount)
    *
    * RUNTIME hooks (below):
    * 1. createActiveEffect/deleteActiveEffect: manage Rage (Active) companion AE
@@ -456,7 +491,7 @@ export const BarbarianFeatures = {
   _registerRageHooks() {
     // --- Auto-apply Berserk when barbarian makes an attack ---
     // "you can go Berserk as part of making an attack"
-    // Handled via monkey-patch of item.rollAttack() in vagabond-character-enhancer.mjs.
+    // Handled via onPreRollAttack handler above (dispatched from vagabond-character-enhancer.mjs).
     // This runs BEFORE damage is rolled, so die upsizing and exploding are active
     // on the same attack card. The old preCreateChatMessage approach was too late
     // (damage already rolled by then).
@@ -472,18 +507,18 @@ export const BarbarianFeatures = {
       if (!effect.statuses?.has("berserk")) return;
       const actor = effect.parent;
       if (!actor || actor.type !== "character") return;
-      if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (!hasFeature(actor, "barbarian_rage")) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
       // Don't create duplicates
       if (actor.effects.find(e => e.getFlag(MODULE_ID, "rageActive"))) return;
 
       const classItem = actor.items.find(i => i.type === "class");
-      this._log(`Rage: Berserk applied to ${actor.name} — creating Rage (Active) companion AE`);
+      log("Barbarian",`Rage: Berserk applied to ${actor.name} — creating Rage (Active) companion AE`);
 
       // Build changes — these only apply while berserk (AE exists only while berserk)
-      // NOTE: Frightened immunity from Berserk is handled globally in vagabond-character-enhancer.mjs,
-      // not here — it applies to ALL berserk characters, not just barbarians.
+      // NOTE: Frightened immunity from Berserk is handled globally in
+      // _registerBerserkFrightenImmunity — it applies to ALL berserk characters, not just barbarians.
       const changes = [
         // Exploding dice — enable global explode
         { key: "system.bonuses.globalExplode", mode: 2, value: "1" },
@@ -496,7 +531,7 @@ export const BarbarianFeatures = {
       ];
 
       // If actor has Rip and Tear, add +1 universal damage bonus
-      if (this._hasFeature(actor, "barbarian_ripAndTear")) {
+      if (hasFeature(actor, "barbarian_ripAndTear")) {
         changes.push({ key: "system.universalDamageBonus", mode: 2, value: "1" });
       }
 
@@ -527,7 +562,7 @@ export const BarbarianFeatures = {
 
       const rageActive = actor.effects.find(e => e.getFlag(MODULE_ID, "rageActive"));
       if (rageActive) {
-        this._log(`Rage: Berserk removed from ${actor.name} — removing Rage (Active) companion AE`);
+        log("Barbarian",`Rage: Berserk removed from ${actor.name} — removing Rage (Active) companion AE`);
         await rageActive.delete();
       }
     });
@@ -539,7 +574,7 @@ export const BarbarianFeatures = {
       // Add RAGE tag to attack cards from berserk barbarians
       const speakerActor = message.speaker?.actor ? game.actors.get(message.speaker.actor) : null;
       if (speakerActor &&
-          this._hasFeature(speakerActor, "barbarian_rage") &&
+          hasFeature(speakerActor, "barbarian_rage") &&
           this._isBerserk(speakerActor) &&
           this._isLightOrNoArmor(speakerActor)) {
         const header = el.querySelector(".card-header");
@@ -575,7 +610,7 @@ export const BarbarianFeatures = {
       }
 
       if (!targetActor) return;
-      if (!this._hasFeature(targetActor, "barbarian_rage") ||
+      if (!hasFeature(targetActor, "barbarian_rage") ||
           !this._isBerserk(targetActor) ||
           !this._isLightOrNoArmor(targetActor)) return;
 
@@ -617,7 +652,7 @@ export const BarbarianFeatures = {
     Hooks.on("updateActor", async (actor, changes, options) => {
       if (!game.user.isGM) return;
       if (actor.type !== "character") return;
-      if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (!hasFeature(actor, "barbarian_rage")) return;
       if (this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
@@ -629,7 +664,7 @@ export const BarbarianFeatures = {
       if (oldHP === undefined) return;
 
       if (newHP < oldHP) {
-        this._log(`Rage: ${actor.name} took damage (${oldHP} → ${newHP}) — auto-applying Berserk`);
+        log("Barbarian",`Rage: ${actor.name} took damage (${oldHP} → ${newHP}) — auto-applying Berserk`);
         await actor.toggleStatusEffect("berserk", { active: true });
       }
     });
@@ -643,18 +678,18 @@ export const BarbarianFeatures = {
         if (!actor || actor.type !== "character") continue;
 
         // Remove Berserk if barbarian has Rage
-        if (this._hasFeature(actor, "barbarian_rage") && this._isBerserk(actor)) {
+        if (hasFeature(actor, "barbarian_rage") && this._isBerserk(actor)) {
           cleanupPromises.push(actor.toggleStatusEffect("berserk", { active: false }).then(() => {
-            this._log(`Rage: Combat ended — removing Berserk from ${actor.name}`);
+            log("Barbarian",`Rage: Combat ended — removing Berserk from ${actor.name}`);
           }));
         }
 
         // Remove Aggressor speed bonus if still active
-        if (this._hasFeature(actor, "barbarian_aggressor")) {
+        if (hasFeature(actor, "barbarian_aggressor")) {
           const aggressorEffect = actor.effects.find(e => e.getFlag(MODULE_ID, "aggressor"));
           if (aggressorEffect) {
             cleanupPromises.push(aggressorEffect.delete().then(() => {
-              this._log(`Aggressor: Combat ended — removing speed bonus from ${actor.name}`);
+              log("Barbarian",`Aggressor: Combat ended — removing speed bonus from ${actor.name}`);
             }));
           }
         }
@@ -670,7 +705,7 @@ export const BarbarianFeatures = {
 
       const actor = item.parent;
       if (!actor || actor.type !== "character") return;
-      if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (!hasFeature(actor, "barbarian_rage")) return;
       if (!this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
@@ -678,7 +713,7 @@ export const BarbarianFeatures = {
       if (changes.system?.equipped === false) {
         const original = item.getFlag(MODULE_ID, "originalExplodeValues");
         if (original !== undefined) {
-          this._log(`Rage: Weapon ${item.name} unequipped while berserk — restoring explodeValues`);
+          log("Barbarian",`Rage: Weapon ${item.name} unequipped while berserk — restoring explodeValues`);
           await item.update({
             "system.explodeValues": original,
             [`flags.${MODULE_ID}.-=originalExplodeValues`]: null
@@ -697,7 +732,7 @@ export const BarbarianFeatures = {
       if (baseDie === 0) return;
 
       const upsizedMax = baseDie + 2;
-      this._log(`Rage: Weapon ${item.name} equipped while berserk — setting explodeValues="${upsizedMax}"`);
+      log("Barbarian",`Rage: Weapon ${item.name} equipped while berserk — setting explodeValues="${upsizedMax}"`);
       await item.update({
         "system.explodeValues": String(upsizedMax),
         [`flags.${MODULE_ID}.originalExplodeValues`]: item.system.explodeValues ?? ""
@@ -712,7 +747,7 @@ export const BarbarianFeatures = {
 
       const actor = item.parent;
       if (!actor || actor.type !== "character") return;
-      if (!this._hasFeature(actor, "barbarian_rage")) return;
+      if (!hasFeature(actor, "barbarian_rage")) return;
       if (!this._isBerserk(actor)) return;
       if (!this._isLightOrNoArmor(actor)) return;
 
@@ -720,7 +755,7 @@ export const BarbarianFeatures = {
       if (baseDie === 0) return;
 
       const upsizedMax = baseDie + 2;
-      this._log(`Rage: Weapon ${item.name} added while berserk — setting explodeValues="${upsizedMax}"`);
+      log("Barbarian",`Rage: Weapon ${item.name} added while berserk — setting explodeValues="${upsizedMax}"`);
       await item.update({
         "system.explodeValues": String(upsizedMax),
         [`flags.${MODULE_ID}.originalExplodeValues`]: item.system.explodeValues ?? ""
@@ -746,9 +781,9 @@ export const BarbarianFeatures = {
         for (const combatant of combat.combatants) {
           const actor = combatant.actor;
           if (!actor || actor.type !== "character") continue;
-          if (!this._hasFeature(actor, "barbarian_aggressor")) continue;
+          if (!hasFeature(actor, "barbarian_aggressor")) continue;
 
-          this._log(`Aggressor: Applying +10 speed to ${actor.name}`);
+          log("Barbarian",`Aggressor: Applying +10 speed to ${actor.name}`);
           applyPromises.push(this._applyAggressorEffect(actor));
         }
         await Promise.all(applyPromises);
@@ -761,12 +796,12 @@ export const BarbarianFeatures = {
         for (const combatant of combat.combatants) {
           const actor = combatant.actor;
           if (!actor || actor.type !== "character") continue;
-          if (!this._hasFeature(actor, "barbarian_aggressor")) continue;
+          if (!hasFeature(actor, "barbarian_aggressor")) continue;
 
           const existing = actor.effects.find(e => e.getFlag(MODULE_ID, "aggressor"));
           if (existing) {
             removePromises.push(this._removeAggressorEffect(actor).then(() => {
-              this._log(`Aggressor: Round 1 over — removed +10 speed from ${actor.name}`);
+              log("Barbarian",`Aggressor: Round 1 over — removed +10 speed from ${actor.name}`);
             }));
           }
         }
@@ -825,7 +860,7 @@ export const BarbarianFeatures = {
 
       const attacker = this._findRecentAttacker(actor);
       if (!attacker) return;
-      if (!this._hasFeature(attacker, "barbarian_fearmonger")) return;
+      if (!hasFeature(attacker, "barbarian_fearmonger")) return;
 
       await this._applyFearmonger(actor, attacker);
     });
@@ -866,7 +901,7 @@ export const BarbarianFeatures = {
 
         if (toRemove.length > 0) {
           deletionPromises.push(actor.deleteEmbeddedDocuments("ActiveEffect", toRemove).then(() => {
-            this._log(`Fearmonger: Frightened expired on ${actor.name}`);
+            log("Barbarian",`Fearmonger: Frightened expired on ${actor.name}`);
           }));
         }
       }
@@ -919,7 +954,7 @@ export const BarbarianFeatures = {
     if (killedTokens.length === 0) return;
     const killedToken = killedTokens[0];
 
-    this._log(`Fearmonger: ${attacker.name} killed ${killedNpc.name}, checking for weaker enemies within 30ft`);
+    log("Barbarian",`Fearmonger: ${attacker.name} killed ${killedNpc.name}, checking for weaker enemies within 30ft`);
 
     const processedActorUuids = new Set();
     const frightenedTokens = [];
@@ -971,7 +1006,7 @@ export const BarbarianFeatures = {
           }
         }
       };
-      this._log(`Fearmonger: Applied Frightened to ${token.actor.name} (expires after round ${currentRound + 1})`);
+      log("Barbarian",`Fearmonger: Applied Frightened to ${token.actor.name} (expires after round ${currentRound + 1})`);
       return token.actor.createEmbeddedDocuments("ActiveEffect", [effectData]);
     });
 
@@ -984,9 +1019,43 @@ export const BarbarianFeatures = {
   /* -------------------------------------------- */
 
   _registerBloodthirstyHooks() {
-    // Bloodthirsty is handled via monkey-patch of item.rollAttack() in
-    // vagabond-character-enhancer.mjs (dynamic import of system's Item class).
+    // Bloodthirsty is handled via onPreRollAttackBloodthirsty handler above
+    // (dispatched from vagabond-character-enhancer.mjs).
     // No runtime hooks needed here — just log registration.
-    this._log("Bloodthirsty: rollAttack patch registered in main module.");
+    log("Barbarian","Bloodthirsty: handler registered.");
+  },
+
+  /* -------------------------------------------- */
+  /*  Berserk: Frighten Immunity (all berserk)    */
+  /* -------------------------------------------- */
+
+  /**
+   * Enforce "Can't be Frightened" for ALL berserk characters.
+   * System config defines this rule but doesn't enforce it mechanically.
+   */
+  _registerBerserkFrightenImmunity() {
+    Hooks.on("createActiveEffect", async (effect, options, userId) => {
+      if (!game.user.isGM) return;
+      if (!effect.statuses?.has("berserk")) return;
+      const actor = effect.parent;
+      if (!actor) return;
+      if (actor.effects.find(e => e.getFlag(MODULE_ID, "berserkFrightImmune"))) return;
+      await actor.createEmbeddedDocuments("ActiveEffect", [{
+        name: "Berserk (Frighten Immune)",
+        img: "icons/svg/terror.svg",
+        flags: { [MODULE_ID]: { managed: true, berserkFrightImmune: true } },
+        changes: [{ key: "system.statusImmunities", mode: 2, value: "frightened" }],
+        disabled: false,
+        transfer: false
+      }]);
+    });
+    Hooks.on("deleteActiveEffect", async (effect, options, userId) => {
+      if (!game.user.isGM) return;
+      if (!effect.statuses?.has("berserk")) return;
+      const actor = effect.parent;
+      if (!actor) return;
+      const frightImmune = actor.effects.find(e => e.getFlag(MODULE_ID, "berserkFrightImmune"));
+      if (frightImmune) await frightImmune.delete();
+    });
   }
 };

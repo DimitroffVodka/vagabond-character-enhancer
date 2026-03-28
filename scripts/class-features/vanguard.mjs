@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Vanguard features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -78,13 +78,8 @@ export const VANGUARD_REGISTRY = {
 /* -------------------------------------------- */
 
 export const VanguardFeatures = {
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | VanguardFeatures |`, ...args);
-    }
-  },
 
   registerHooks() {
-    this._log("Hooks registered.");
+    log("Vanguard","Hooks registered.");
   }
 };

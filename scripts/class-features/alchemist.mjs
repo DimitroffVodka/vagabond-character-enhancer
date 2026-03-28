@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Alchemist features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log } from "../utils.mjs";
 import { AlchemyCookbook } from "../alchemy/alchemy-cookbook.mjs";
 import {
   registerMaterialsHook, registerCountdownDamageHook, registerEffectExpirationHook,
@@ -96,6 +96,66 @@ export const ALCHEMIST_REGISTRY = {
 
 export const AlchemistFeatures = {
 
+  /* -------------------------------------------- */
+  /*  Handler Methods (called from main dispatcher) */
+  /* -------------------------------------------- */
+
+  /**
+   * Consumable weapon flag: Force auto-roll damage for consumable weapons.
+   * Called from rollAttack dispatcher.
+   */
+  onPreRollAttack(ctx) {
+    const isConsumableWeapon = ctx.item.system?.isConsumable
+      && ctx.item.system?.equipmentType === "weapon";
+    if (isConsumableWeapon) {
+      ctx.VagabondDamageHelper._vceForceRollDamage = true;
+    }
+  },
+
+  /**
+   * Alchemical weapon redirect: Full attack flow for alchemical weapons.
+   * Called from item.roll dispatcher.
+   */
+  async onPreItemRoll(ctx) {
+    const ALCHEMICAL_WEAPON_TYPES = new Set(["acid", "explosive", "poison"]);
+    const alcType = (ctx.item.system.alchemicalType ?? "").toLowerCase();
+    const isAlchemicalWeapon = ctx.item.type === "equipment"
+      && ctx.item.system.equipmentType === "weapon"
+      && (ALCHEMICAL_WEAPON_TYPES.has(alcType) || ctx.item.name?.toLowerCase().includes("holy water"));
+    if (!isAlchemicalWeapon) return;
+
+    const actor = ctx.item.actor;
+    if (!actor) return;
+
+    try {
+      const { VagabondChatCard } = globalThis.vagabond.utils;
+      const targets = Array.from(game.user.targets).map(t => ({
+        tokenId: t.id, sceneId: t.scene.id,
+        actorId: t.actor?.id, actorName: t.name, actorImg: t.document.texture.src,
+      }));
+      const favorHinder = actor.system?.favorHinder || "none";
+      const attackResult = await ctx.item.rollAttack(actor, favorHinder);
+      if (!attackResult) { ctx.handled = true; ctx.result = undefined; return; }
+      if (attackResult.isCritical && attackResult.weaponSkill?.stat) {
+        attackResult.critStatBonus = actor.getRollData().stats?.[attackResult.weaponSkill.stat]?.value || 0;
+      }
+      let damageRoll = null;
+      const isHit = attackResult.isHit ?? false;
+      if (isHit || attackResult.isCritical) {
+        damageRoll = await ctx.item.rollDamage(actor, attackResult.isCritical, attackResult.weaponSkill?.stat ?? null);
+      }
+      await VagabondChatCard.weaponAttack(actor, ctx.item, attackResult, damageRoll, targets);
+      await ctx.item.handleConsumption?.();
+      ctx.handled = true;
+      ctx.result = attackResult.roll;
+    } catch (e) {
+      console.error(`${MODULE_ID} | Alchemical weapon attack failed:`, e);
+      ui.notifications.error("Alchemical attack failed — check console.");
+      ctx.handled = true;
+      ctx.result = undefined;
+    }
+  },
+
   /** Expose API for crawl strip and macros */
   api: {
     cookbook: AlchemyCookbook,
@@ -150,6 +210,6 @@ export const AlchemistFeatures = {
       });
     });
 
-    console.log(`${MODULE_ID} | Alchemist Cookbook hooks registered.`);
+    log("Alchemist", "Cookbook hooks registered.");
   }
 };

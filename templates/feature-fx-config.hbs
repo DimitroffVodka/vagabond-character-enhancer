@@ -1,0 +1,153 @@
+<div class="vce-fx-wrapper">
+
+  {{!-- Status Bar --}}
+  <div class="vce-fx-status-bar">
+    <span class="vce-fx-chip {{#if sequencerAvailable}}vce-fx-chip-on{{else}}vce-fx-chip-off{{/if}}">
+      <i class="fas {{#if sequencerAvailable}}fa-check-circle{{else}}fa-times-circle{{/if}}"></i>
+      Sequencer
+    </span>
+    <span class="vce-fx-chip {{#if jb2aAvailable}}vce-fx-chip-on{{else}}vce-fx-chip-off{{/if}}">
+      <i class="fas {{#if jb2aAvailable}}fa-check-circle{{else}}fa-times-circle{{/if}}"></i>
+      JB2A
+    </span>
+  </div>
+
+  {{!-- Main Layout --}}
+  <div class="vce-fx-layout">
+
+    {{!-- Left Nav --}}
+    <div class="vce-fx-nav">
+      {{#each classes}}
+        <button type="button" class="vce-fx-nav-btn {{#if active}}active{{/if}}"
+                data-action="switchClass" data-class-key="{{key}}">
+          {{label}}
+        </button>
+      {{/each}}
+    </div>
+
+    {{!-- Right Panels --}}
+    <div class="vce-fx-panels">
+      {{#each classes}}
+        <div class="vce-fx-panel {{#if active}}active{{/if}}" data-class="{{key}}">
+          <div class="vce-fx-panel-scroll">
+            {{#each features}}
+              <fieldset class="vce-fx-feature">
+                <legend>
+                  <label class="vce-fx-enable-label">
+                    <input type="checkbox" name="{{key}}.enabled" {{#if enabled}}checked{{/if}} />
+                    {{label}}
+                  </label>
+                </legend>
+
+                <div class="vce-fx-field-grid">
+                  {{!-- Target --}}
+                  <div class="vce-fx-field">
+                    <label>Applies To</label>
+                    <select name="{{key}}.target">
+                      <option value="caster" {{#if (eq target "caster")}}selected{{/if}}>Caster</option>
+                      <option value="target" {{#if (eq target "target")}}selected{{/if}}>Target</option>
+                      <option value="both" {{#if (eq target "both")}}selected{{/if}}>Both</option>
+                    </select>
+                  </div>
+
+                  {{!-- Animation File --}}
+                  <div class="vce-fx-field vce-fx-field-wide">
+                    <label>Animation</label>
+                    <div class="vce-fx-file-input">
+                      <input type="text" name="{{key}}.file" value="{{file}}" placeholder="Path to .webm animation" />
+                      <button type="button" class="vce-fx-browse-btn" data-action="browseVideo" data-field="{{key}}.file" title="Browse">
+                        <i class="fas fa-folder-open"></i>
+                      </button>
+                      <button type="button" class="vce-fx-browse-btn" data-action="previewFx" data-feature-key="{{key}}" title="Preview">
+                        <i class="fas fa-play"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  {{!-- Scale --}}
+                  <div class="vce-fx-field vce-fx-field-scale">
+                    <label>Scale: <span class="vce-fx-scale-value">{{scale}}</span></label>
+                    <input type="range" name="{{key}}.scale" value="{{scale}}" min="0.2" max="3" step="0.1" class="vce-fx-slider" />
+                  </div>
+
+                  {{!-- Opacity --}}
+                  <div class="vce-fx-field">
+                    <label>Opacity</label>
+                    <input type="number" name="{{key}}.opacity" value="{{opacity}}" min="0.1" max="1" step="0.1" />
+                  </div>
+
+                  {{!-- Fade In --}}
+                  <div class="vce-fx-field">
+                    <label>Fade In (ms)</label>
+                    <input type="number" name="{{key}}.fadeIn" value="{{fadeIn}}" min="0" max="3000" step="100" />
+                  </div>
+
+                  {{!-- Fade Out --}}
+                  <div class="vce-fx-field">
+                    <label>Fade Out (ms)</label>
+                    <input type="number" name="{{key}}.fadeOut" value="{{fadeOut}}" min="0" max="3000" step="100" />
+                  </div>
+
+                  {{!-- Persist --}}
+                  <div class="vce-fx-field">
+                    <label>
+                      <input type="checkbox" name="{{key}}.persist" {{#if persist}}checked{{/if}} />
+                      Loop
+                    </label>
+                  </div>
+
+                  {{!-- Below Token --}}
+                  <div class="vce-fx-field">
+                    <label>
+                      <input type="checkbox" name="{{key}}.belowToken" {{#if belowToken}}checked{{/if}} />
+                      Below Token
+                    </label>
+                  </div>
+
+                  {{!-- Sound --}}
+                  <div class="vce-fx-field vce-fx-field-wide">
+                    <label>Sound</label>
+                    <div class="vce-fx-file-input">
+                      <input type="text" name="{{key}}.sound" value="{{sound}}" placeholder="Path to audio file" />
+                      <button type="button" class="vce-fx-browse-btn" data-action="browseAudio" data-field="{{key}}.sound" title="Browse">
+                        <i class="fas fa-folder-open"></i>
+                      </button>
+                      <button type="button" class="vce-fx-browse-btn" data-action="previewSound" data-feature-key="{{key}}" title="Preview Sound">
+                        <i class="fas fa-volume-up"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  {{!-- Sound Volume --}}
+                  <div class="vce-fx-field vce-fx-field-scale">
+                    <label>Volume: <span class="vce-fx-scale-value">{{soundVolume}}</span></label>
+                    <input type="range" name="{{key}}.soundVolume" value="{{soundVolume}}" min="0" max="1" step="0.05" class="vce-fx-slider" />
+                  </div>
+                </div>
+
+                {{!-- Hidden fields to preserve class/label through form submission --}}
+                <input type="hidden" name="{{key}}.label" value="{{label}}" />
+                <input type="hidden" name="{{key}}.class" value="{{class}}" />
+              </fieldset>
+            {{/each}}
+          </div>
+        </div>
+      {{/each}}
+    </div>
+
+  </div>
+
+  {{!-- Footer --}}
+  <div class="vce-fx-footer">
+    <button type="submit" class="vce-fx-save-btn">
+      <i class="fas fa-save"></i> Save
+    </button>
+    <button type="button" data-action="saveAndClose" class="vce-fx-save-btn">
+      <i class="fas fa-save"></i> Save &amp; Close
+    </button>
+    <button type="button" data-action="close" class="vce-fx-cancel-btn">
+      <i class="fas fa-times"></i> Cancel
+    </button>
+  </div>
+
+</div>

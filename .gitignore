@@ -1,0 +1,8 @@
+# Claude Code local config
+.claude/
+.mcp.json
+.impeccable.md
+PLAN.md
+
+# LevelDB lock files
+packs/*/LOCK

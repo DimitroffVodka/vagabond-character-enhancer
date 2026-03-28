@@ -5,7 +5,7 @@
  * The right sliding panel (HP, stats, skills, spells, focus) stays untouched.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID } from "../utils.mjs";
 
 export const PolymorphSheet = {
 

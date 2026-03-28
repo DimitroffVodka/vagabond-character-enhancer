@@ -3,7 +3,8 @@
  * Registry entries + runtime hooks for all Dancer features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor } from "../utils.mjs";
+import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -169,19 +170,118 @@ export const DancerFeatures = {
     this._registerFlashOfBeautyHooks();
     this._registerCombatExpiryHooks();
     this._patchStepUpSheet();
-    this._log("Dancer hooks registered.");
+    log("Dancer","Dancer hooks registered.");
   },
 
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | Dancer |`, ...args);
+  /* -------------------------------------------- */
+  /*  Handler Methods (called from main dispatcher) */
+  /* -------------------------------------------- */
+
+  /**
+   * Choreographer: One-check favor on d20 rolls.
+   * Called from buildAndEvaluateD20 dispatcher.
+   */
+  onPreBuildD20(ctx) {
+    if (!ctx.actor.getFlag?.(MODULE_ID, "choreographerFavor")) return;
+    ctx.favorHinder = combineFavor(ctx.favorHinder, "favor");
+    // Consume async, don't block roll
+    ctx.actor.unsetFlag(MODULE_ID, "choreographerFavor");
+    ctx.actor.unsetFlag(MODULE_ID, "choreographerFavorExpireRound");
+    log("Dancer", `Choreographer: Consumed one-check Favor on d20 roll for ${ctx.actor.name}`);
+  },
+
+  /**
+   * Choreographer: One-check favor on attacks/spells (rollData path).
+   * Called from buildAndEvaluateD20WithRollData dispatcher.
+   */
+  onPreBuildD20WithRollData(ctx) {
+    if (!ctx.currentRollActor?.getFlag?.(MODULE_ID, "choreographerFavor")) return;
+    ctx.favorHinder = combineFavor(ctx.favorHinder, "favor");
+    ctx.currentRollActor.unsetFlag(MODULE_ID, "choreographerFavor");
+    ctx.currentRollActor.unsetFlag(MODULE_ID, "choreographerFavorExpireRound");
+    log("Dancer", `Choreographer: Consumed one-check Favor on attack/spell for ${ctx.currentRollActor.name}`);
+  },
+
+  /**
+   * Evasive + Choreographer + Step Up on saves (_rollSave path).
+   * Called from _rollSave dispatcher.
+   */
+  async onPreRollSave(ctx) {
+    // Evasive: Reflex saves can't be hindered
+    if (ctx.saveType === "reflex" && ctx.features?.dancer_evasive && !ctx.actor.statuses?.has("incapacitated")) {
+      ctx.isHindered = false;
+      ctx.ctrlKey = false;
+      if (ctx.attackerModifier === "hinder") ctx.attackerModifier = "none";
+      if (!ctx.needRestore) ctx.origFH = ctx.actor.system.favorHinder;
+      if (ctx.actor.system.favorHinder === "hinder") {
+        ctx.actor.system.favorHinder = "none";
+        ctx.needRestore = true;
+      }
+      log("Dancer", `Evasive: Reflex save can't be Hindered for ${ctx.actor.name}`);
+    }
+
+    // Choreographer: One-check Favor on saves
+    if (ctx.actor.getFlag?.(MODULE_ID, "choreographerFavor")) {
+      if (!ctx.needRestore) ctx.origFH = ctx.actor.system.favorHinder;
+      if (ctx.actor.system.favorHinder === "hinder") {
+        ctx.actor.system.favorHinder = "none";
+      } else if (ctx.actor.system.favorHinder !== "favor") {
+        ctx.actor.system.favorHinder = "favor";
+      }
+      ctx.needRestore = true;
+      await ctx.actor.unsetFlag(MODULE_ID, "choreographerFavor");
+      await ctx.actor.unsetFlag(MODULE_ID, "choreographerFavorExpireRound");
+      log("Dancer", `Choreographer: Consumed one-check Favor on save for ${ctx.actor.name}`);
+    }
+
+    // Step Up: 2d20kh on Reflex saves
+    if (ctx.saveType === "reflex" && ctx.actor.getFlag?.(MODULE_ID, "stepUpActive")) {
+      const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+      ctx._origConditionalHinder = VagabondRollBuilder.buildAndEvaluateD20WithConditionalHinder;
+      VagabondRollBuilder.buildAndEvaluateD20WithConditionalHinder = async function (a, effectiveFH, isCondHindered, baseFormula = null) {
+        return ctx._origConditionalHinder.call(this, a, effectiveFH, isCondHindered, "2d20kh");
+      };
+      ctx.rollBuilderPatched = true;
+      log("Dancer", `Step Up: Injecting 2d20kh baseFormula for Reflex save on ${ctx.actor.name}`);
     }
   },
 
-  _hasFeature(actor, flag) {
-    const features = actor?.getFlag(MODULE_ID, "features");
-    return features?.[flag] ?? false;
+  /**
+   * Evasive + Choreographer + Step Up for sheet-initiated saves.
+   * Called from RollHandler.roll dispatcher.
+   */
+  async onPreSheetRoll(ctx) {
+    // Evasive: Reflex saves can't be hindered
+    if (ctx.saveKey === "reflex" && ctx.features?.dancer_evasive && !ctx.actor.statuses?.has("incapacitated")) {
+      ctx.stripHinder("Evasive");
+    }
+
+    // Choreographer: One-check Favor
+    if (ctx.actor.getFlag?.(MODULE_ID, "choreographerFavor")) {
+      if (!ctx.needRestore) ctx.origFH = ctx.actor.system.favorHinder;
+      if (ctx.actor.system.favorHinder === "hinder") {
+        ctx.actor.system.favorHinder = "none";
+      } else if (ctx.actor.system.favorHinder !== "favor") {
+        ctx.actor.system.favorHinder = "favor";
+      }
+      ctx.needRestore = true;
+      await ctx.actor.unsetFlag(MODULE_ID, "choreographerFavor");
+      await ctx.actor.unsetFlag(MODULE_ID, "choreographerFavorExpireRound");
+      log("Dancer", `Choreographer: Consumed one-check Favor on sheet save for ${ctx.actor.name}`);
+    }
+
+    // Step Up: 2d20kh on Reflex saves
+    if (ctx.saveKey === "reflex" && ctx.actor.getFlag?.(MODULE_ID, "stepUpActive")) {
+      const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
+      ctx._origBuildD20Ref = VagabondRollBuilder.buildAndEvaluateD20;
+      VagabondRollBuilder.buildAndEvaluateD20 = async function (actor, favorHinder, baseFormula = null) {
+        return ctx._origBuildD20Ref.call(this, actor, favorHinder, "2d20kh");
+      };
+      ctx.rollPatched = true;
+      log("Dancer", `Step Up: Injecting 2d20kh for sheet Reflex save on ${ctx.actor.name}`);
+    }
   },
+
 
   /* -------------------------------------------- */
   /*  Fleet of Foot: Dynamic Reflex Crit Bonus    */
@@ -197,7 +297,7 @@ export const DancerFeatures = {
       if (!game.user.isGM) return;
       if (actor.type !== "character") return;
       if (!changes.system?.attributes?.level) return;
-      if (!this._hasFeature(actor, "dancer_fleetOfFoot")) return;
+      if (!hasFeature(actor, "dancer_fleetOfFoot")) return;
 
       const level = actor.system.attributes?.level?.value ?? 1;
       const critBonus = -Math.ceil(level / 4);
@@ -216,7 +316,7 @@ export const DancerFeatures = {
       await ae.update({
         changes: [{ key: "system.reflexCritBonus", mode: 2, value: String(critBonus) }]
       });
-      this._log(`Fleet of Foot: Updated reflexCritBonus to ${critBonus} for ${actor.name} (level ${level})`);
+      log("Dancer",`Fleet of Foot: Updated reflexCritBonus to ${critBonus} for ${actor.name} (level ${level})`);
     });
 
     // Also update on initial feature detection (scan triggers createEmbeddedDocuments,
@@ -237,7 +337,7 @@ export const DancerFeatures = {
         await effect.update({
           changes: [{ key: "system.reflexCritBonus", mode: 2, value: String(critBonus) }]
         });
-        this._log(`Fleet of Foot: Set initial reflexCritBonus to ${critBonus} for ${actor.name} (level ${level})`);
+        log("Dancer",`Fleet of Foot: Set initial reflexCritBonus to ${critBonus} for ${actor.name} (level ${level})`);
       }
     });
   },
@@ -261,9 +361,9 @@ export const DancerFeatures = {
       const item = actor.items.get(itemId);
       if (!item) return;
       if (!item.name.toLowerCase().includes("step up")) return;
-      if (!this._hasFeature(actor, "dancer_stepUp")) return;
+      if (!hasFeature(actor, "dancer_stepUp")) return;
 
-      this._log(`Step Up: Intercepted item use — opening dialog for ${actor.name}`);
+      log("Dancer",`Step Up: Intercepted item use — opening dialog for ${actor.name}`);
       this.performStepUp(actor);
       return false;
     });
@@ -287,8 +387,8 @@ export const DancerFeatures = {
       return;
     }
 
-    const maxTargets = this._hasFeature(actor, "dancer_doubleTime") ? 2 : 1;
-    const hasChoreographer = this._hasFeature(actor, "dancer_choreographer");
+    const maxTargets = hasFeature(actor, "dancer_doubleTime") ? 2 : 1;
+    const hasChoreographer = hasFeature(actor, "dancer_choreographer");
 
     // Build checkbox HTML for ally selection
     const allyOptions = allyTokens.map(t => {
@@ -331,6 +431,9 @@ export const DancerFeatures = {
     const selectedIds = confirmed.slice(0, maxTargets);
     const currentRound = game.combat?.round ?? 0;
 
+    // Play Step Up FX on the dancer
+    FocusManager.playFeatureFX(actor, "dancer_stepUp");
+
     // Activate Step Up on the dancer (2d20kh on Reflex Saves)
     await actor.setFlag(MODULE_ID, "stepUpActive", true);
     await actor.setFlag(MODULE_ID, "stepUpExpireRound", currentRound + 1);
@@ -363,7 +466,7 @@ export const DancerFeatures = {
       await this._createSpeedBonusAE(actor, currentRound);
     }
 
-    if (this._hasFeature(actor, "dancer_doubleTime") && selectedIds.length > 1) {
+    if (hasFeature(actor, "dancer_doubleTime") && selectedIds.length > 1) {
       tags.push("Double Time");
     }
 
@@ -406,7 +509,7 @@ export const DancerFeatures = {
       `
     });
 
-    this._log(`Step Up: Activated for ${actor.name}, allies: ${allyNames}`);
+    log("Dancer",`Step Up: Activated for ${actor.name}, allies: ${allyNames}`);
   },
 
   /**
@@ -433,7 +536,7 @@ export const DancerFeatures = {
       disabled: false,
       transfer: false
     }]);
-    this._log(`Choreographer: Created +10 Speed AE on ${actor.name}`);
+    log("Dancer",`Choreographer: Created +10 Speed AE on ${actor.name}`);
   },
 
   /* -------------------------------------------- */
@@ -453,7 +556,7 @@ export const DancerFeatures = {
       if (!actorId) return;
       const actor = game.actors.get(actorId);
       if (!actor) return;
-      if (!this._hasFeature(actor, "dancer_flashOfBeauty")) return;
+      if (!hasFeature(actor, "dancer_flashOfBeauty")) return;
 
       // Check if the roll was a crit
       const rolls = message.rolls;
@@ -510,7 +613,7 @@ export const DancerFeatures = {
       `;
       cardBody.appendChild(reminder);
 
-      this._log(`Flash of Beauty: Crit save detected for ${actor.name} (d20: ${d20Result}, threshold: ${critThreshold})`);
+      log("Dancer",`Flash of Beauty: Crit save detected for ${actor.name} (d20: ${d20Result}, threshold: ${critThreshold})`);
     });
   },
 
@@ -545,7 +648,7 @@ export const DancerFeatures = {
       if (stepUpExpire !== undefined && currentRound >= stepUpExpire) {
         await actor.unsetFlag(MODULE_ID, "stepUpActive");
         await actor.unsetFlag(MODULE_ID, "stepUpExpireRound");
-        this._log(`Step Up: Expired 2d20kh on ${actor.name}`);
+        log("Dancer",`Step Up: Expired 2d20kh on ${actor.name}`);
       }
 
       // Bonus action (ally)
@@ -553,7 +656,7 @@ export const DancerFeatures = {
       if (bonusExpire !== undefined && currentRound >= bonusExpire) {
         await actor.unsetFlag(MODULE_ID, "stepUpBonusAction");
         await actor.unsetFlag(MODULE_ID, "stepUpBonusActionExpireRound");
-        this._log(`Step Up: Expired bonus action on ${actor.name}`);
+        log("Dancer",`Step Up: Expired bonus action on ${actor.name}`);
       }
 
       // Choreographer favor (ally)
@@ -561,7 +664,7 @@ export const DancerFeatures = {
       if (favorExpire !== undefined && currentRound >= favorExpire) {
         await actor.unsetFlag(MODULE_ID, "choreographerFavor");
         await actor.unsetFlag(MODULE_ID, "choreographerFavorExpireRound");
-        this._log(`Choreographer: Expired favor on ${actor.name}`);
+        log("Dancer",`Choreographer: Expired favor on ${actor.name}`);
       }
 
       // Choreographer speed AE
@@ -570,7 +673,7 @@ export const DancerFeatures = {
         const aeExpire = speedAE.getFlag(MODULE_ID, "expireRound");
         if (aeExpire !== undefined && currentRound >= aeExpire) {
           await speedAE.delete();
-          this._log(`Choreographer: Expired speed AE on ${actor.name}`);
+          log("Dancer",`Choreographer: Expired speed AE on ${actor.name}`);
         }
       }
     }
@@ -600,7 +703,7 @@ export const DancerFeatures = {
       const speedAE = actor.effects.find(e => e.getFlag(MODULE_ID, "choreographerSpeed"));
       if (speedAE) await speedAE.delete();
     }
-    this._log("Step Up: All buffs cleared (combat ended).");
+    log("Dancer","Step Up: All buffs cleared (combat ended).");
   },
 
   /* -------------------------------------------- */
@@ -774,7 +877,7 @@ export const DancerFeatures = {
   },
 
   _bindStepUpEvents(container, actor, features) {
-    const maxTargets = this._hasFeature(actor, "dancer_doubleTime") ? 2 : 1;
+    const maxTargets = hasFeature(actor, "dancer_doubleTime") ? 2 : 1;
 
     // Enforce max checkbox selection
     const checkboxes = container.querySelectorAll('input[name="ally"]');
@@ -819,6 +922,9 @@ export const DancerFeatures = {
     const hasChoreographer = !!features?.dancer_choreographer;
     const currentRound = game.combat?.round ?? 0;
 
+    // Play Step Up FX on the dancer
+    FocusManager.playFeatureFX(actor, "dancer_stepUp");
+
     // Activate Step Up on the dancer (2d20kh on Reflex Saves)
     await actor.setFlag(MODULE_ID, "stepUpActive", true);
     await actor.setFlag(MODULE_ID, "stepUpExpireRound", currentRound + 1);
@@ -845,7 +951,7 @@ export const DancerFeatures = {
       await this._createSpeedBonusAE(actor, currentRound);
     }
 
-    if (this._hasFeature(actor, "dancer_doubleTime") && selectedIds.length > 1) {
+    if (hasFeature(actor, "dancer_doubleTime") && selectedIds.length > 1) {
       tags.push("Double Time");
     }
 
@@ -881,6 +987,6 @@ export const DancerFeatures = {
         </div>`
     });
 
-    this._log(`Step Up (tab): Activated for ${actor.name}, allies: ${allyNames}`);
+    log("Dancer",`Step Up (tab): Activated for ${actor.name}, allies: ${allyNames}`);
   }
 };

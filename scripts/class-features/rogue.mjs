@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Rogue features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -66,11 +66,6 @@ export const ROGUE_REGISTRY = {
 /* -------------------------------------------- */
 
 export const RogueFeatures = {
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | RogueFeatures |`, ...args);
-    }
-  },
 
   registerHooks() {
     // Rogue features need:
@@ -79,6 +74,6 @@ export const RogueFeatures = {
     //   - Evasive: hook on Reflex saves (ignore hinder) and Dodge (extra die removal)
     //   - Waylay: hook on NPC death for extra action
 
-    this._log("Hooks registered.");
+    log("Rogue","Hooks registered.");
   }
 };

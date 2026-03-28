@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Witch features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -67,11 +67,6 @@ export const WITCH_REGISTRY = {
 /* -------------------------------------------- */
 
 export const WitchFeatures = {
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | WitchFeatures |`, ...args);
-    }
-  },
 
   registerHooks() {
     // Witch features center on the Hex mechanic:
@@ -80,6 +75,6 @@ export const WitchFeatures = {
     //   - Widdershins: damage weakness + status immunity bypass on hex target
     // These need significant custom state management.
 
-    this._log("Hooks registered.");
+    log("Witch","Hooks registered.");
   }
 };

@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Merchant features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log, hasFeature } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -66,15 +66,6 @@ export const MERCHANT_REGISTRY = {
 /* -------------------------------------------- */
 
 export const MerchantFeatures = {
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | MerchantFeatures |`, ...args);
-    }
-  },
-
-  _hasFeature(actor, flag) {
-    return actor.getFlag(MODULE_ID, `features.${flag}`);
-  },
 
   registerHooks() {
     // Deep Pockets: Dynamic AE based on level
@@ -82,7 +73,7 @@ export const MerchantFeatures = {
       this._applyDeepPocketsScaling(actor, desiredEffects);
     });
 
-    this._log("Hooks registered.");
+    log("Merchant","Hooks registered.");
   },
 
   /**
@@ -102,6 +93,6 @@ export const MerchantFeatures = {
       { key: "system.inventory.bonusSlots", mode: 2, value: `${bonusSlots}` }
     ];
 
-    this._log(`Deep Pockets: Level ${level} → +${bonusSlots} inventory slots`);
+    log("Merchant",`Deep Pockets: Level ${level} → +${bonusSlots} inventory slots`);
   }
 };

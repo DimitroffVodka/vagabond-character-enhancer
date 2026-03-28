@@ -5,7 +5,7 @@
  * used by both the Cookbook window and the crawl-strip craft menu.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID } from "../utils.mjs";
 
 // ── Damage Helper — route through system's armor/immune/weak calculation ─────
 

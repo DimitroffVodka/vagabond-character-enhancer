@@ -9,7 +9,7 @@
  * Right-click any item row to add/remove it as a formula.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID } from "../utils.mjs";
 import {
   getAlchemistData, fetchCompendiumItems, itemValueInSilver,
   getCraftCost, formatCost, craftItem, getAlchemicalEffect,

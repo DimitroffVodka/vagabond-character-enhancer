@@ -31,6 +31,18 @@
       {
         "id": "vagabond-crawler",
         "type": "module"
+      },
+      {
+        "id": "sequencer",
+        "type": "module"
+      },
+      {
+        "id": "JB2A_DnD5e",
+        "type": "module"
+      },
+      {
+        "id": "psfx",
+        "type": "module"
       }
     ]
   },

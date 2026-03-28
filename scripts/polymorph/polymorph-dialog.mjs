@@ -4,7 +4,7 @@
  * Sources beasts from the BeastCache (compendium data, not world actors).
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID } from "../utils.mjs";
 
 export const PolymorphDialog = {
 

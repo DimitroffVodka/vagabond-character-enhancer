@@ -4,7 +4,8 @@
  * stat overlay, and reversion when focus drops.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log } from "../utils.mjs";
+import { FocusManager } from "../focus/focus-manager.mjs";
 import { PolymorphDialog } from "./polymorph-dialog.mjs";
 import { BeastCache } from "./beast-cache.mjs";
 
@@ -29,11 +30,6 @@ const SIZE_MAP = {
 
 export const PolymorphManager = {
 
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | Polymorph |`, ...args);
-    }
-  },
 
   /**
    * API for Vagabond Crawler integration.
@@ -106,14 +102,14 @@ export const PolymorphManager = {
     // Don't re-open if already polymorphed or if the Beast Form tab
     // is already handling the transformation (prevents double-dialog).
     if (actor.getFlag(MODULE_ID, "polymorphData")) {
-      this._log(`${actor.name} is already polymorphed — skipping dialog.`);
+      log("PolymorphManager",`${actor.name} is already polymorphed — skipping dialog.`);
       return;
     }
     if (this._transformInProgress) {
-      this._log(`${actor.name} transform already in progress — skipping dialog.`);
+      log("PolymorphManager",`${actor.name} transform already in progress — skipping dialog.`);
       return;
     }
-    this._log(`${actor.name} focused Polymorph — skipping dialog (Beast Form tab handles it).`);
+    log("PolymorphManager",`${actor.name} focused Polymorph — skipping dialog (Beast Form tab handles it).`);
     // The Beast Form tab's _openBeastDialog handles the dialog now.
     // This hook only needs to handle Savagery toggling, which is done
     // in druid.mjs before this method is called.
@@ -132,7 +128,10 @@ export const PolymorphManager = {
   /* -------------------------------------------- */
 
   async applyBeastForm(actor, beastActor) {
-    this._log(`Applying ${beastActor.name} form to ${actor.name}`);
+    // Play Beast Form FX on the druid
+    FocusManager.playFeatureFX(actor, "druid_feralShift");
+
+    log("PolymorphManager",`Applying ${beastActor.name} form to ${actor.name}`);
 
     // --- Save original token state (preserve through re-transforms) ---
     const token = this._getLinkedToken(actor);
@@ -173,7 +172,7 @@ export const PolymorphManager = {
         width: gridSize,
         height: gridSize
       });
-      this._log(`Token swapped to ${beastTokenImg} (${gridSize}x${gridSize})`);
+      log("PolymorphManager",`Token swapped to ${beastTokenImg} (${gridSize}x${gridSize})`);
     }
 
     // --- Apply stat overlay AEs ---
@@ -193,7 +192,7 @@ export const PolymorphManager = {
    * @param {object} cacheEntry - Beast data from BeastCache
    */
   async applyBeastFormFromCache(actor, cacheEntry) {
-    this._log(`Applying ${cacheEntry.name} form to ${actor.name} (from compendium)`);
+    log("PolymorphManager",`Applying ${cacheEntry.name} form to ${actor.name} (from compendium)`);
 
     // --- Save original token state (preserve through re-transforms) ---
     const token = this._getLinkedToken(actor);
@@ -247,7 +246,7 @@ export const PolymorphManager = {
         width: gridSize,
         height: gridSize
       });
-      this._log(`Token swapped to ${beastTokenImg} (${gridSize}x${gridSize})`);
+      log("PolymorphManager",`Token swapped to ${beastTokenImg} (${gridSize}x${gridSize})`);
     }
 
     // --- Apply stat overlay AEs ---
@@ -268,7 +267,7 @@ export const PolymorphManager = {
     const polyData = actor.getFlag(MODULE_ID, "polymorphData");
     if (!polyData) return;
 
-    this._log(`Reverting ${actor.name} from ${polyData.beastName}`);
+    log("PolymorphManager",`Reverting ${actor.name} from ${polyData.beastName}`);
 
     // --- Restore token ---
     const token = this._getLinkedToken(actor);
@@ -515,7 +514,7 @@ export const PolymorphManager = {
       }
     }]);
 
-    this._log(`Applied polymorph AE with ${changes.length} changes`);
+    log("PolymorphManager",`Applied polymorph AE with ${changes.length} changes`);
   },
 
   /* -------------------------------------------- */
@@ -617,7 +616,7 @@ export const PolymorphManager = {
           return images[Math.floor(Math.random() * images.length)];
         }
       } catch (e) {
-        this._log(`Wildcard token resolution failed for ${beastActor.name}:`, e);
+        log("PolymorphManager",`Wildcard token resolution failed for ${beastActor.name}:`, e);
       }
     }
 

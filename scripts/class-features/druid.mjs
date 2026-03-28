@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Druid features.
  */
 
-import { MODULE_ID } from "../vagabond-character-enhancer.mjs";
+import { MODULE_ID, log, hasFeature } from "../utils.mjs";
 import { PolymorphManager } from "../polymorph/polymorph-manager.mjs";
 
 /* -------------------------------------------- */
@@ -64,7 +64,7 @@ export const DRUID_REGISTRY = {
   // STATUS: module
   //
   // MODULE HANDLES:
-  //   - Monkey-patch on calculateFinalDamage in vagabond-character-enhancer.mjs.
+  //   - onCalculateFinalDamage handler below (dispatched from vagabond-character-enhancer.mjs).
   //     After armor/rage DR, checks if target has druid_tempestWithin and damage
   //     type is cold, fire, or shock. Reduces by floor(classLevel / 2) * numDice.
   "tempest within": {
@@ -165,19 +165,28 @@ export const DruidFeatures = {
   registerHooks() {
     this._registerPolymorphHooks();
     this._registerForceOfNatureHooks();
-    this._log("Druid hooks registered.");
+    log("Druid","Druid hooks registered.");
   },
 
-  _log(...args) {
-    if (game.settings.get(MODULE_ID, "debugMode")) {
-      console.log(`${MODULE_ID} | Druid |`, ...args);
-    }
+  /* -------------------------------------------- */
+  /*  Handler Methods (called from main dispatcher) */
+  /* -------------------------------------------- */
+
+  /**
+   * Tempest Within: Reduce cold/fire/shock damage.
+   * Called from calculateFinalDamage dispatcher.
+   */
+  onCalculateFinalDamage(ctx) {
+    if (!ctx.features?.druid_tempestWithin) return;
+    if (!["cold", "fire", "shock"].includes(ctx.damageType?.toLowerCase())) return;
+    const classLevel = ctx.features._classLevel ?? 1;
+    const reductionPerDie = Math.floor(classLevel / 2);
+    if (reductionPerDie <= 0) return;
+    const tempestDR = reductionPerDie * ctx.numDice;
+    log("Druid", `Tempest Within: ${reductionPerDie} × ${ctx.numDice} dice = ${tempestDR} reduction (${ctx.damageType})`);
+    ctx.result = Math.max(0, ctx.result - tempestDR);
   },
 
-  _hasFeature(actor, flag) {
-    const features = actor?.getFlag(MODULE_ID, "features");
-    return features?.[flag] ?? false;
-  },
 
   /**
    * Determine if the current user is the "primary owner" of this actor.
@@ -226,7 +235,7 @@ export const DruidFeatures = {
           e.getFlag(MODULE_ID, "featureFlag") === "druid_savagery"
         );
         if (ae && ae.disabled === isFocusingPolymorph) {
-          this._log(`Savagery: ${isFocusingPolymorph ? "Enabling" : "Disabling"} +1 Armor for ${actor.name}`);
+          log("Druid",`Savagery: ${isFocusingPolymorph ? "Enabling" : "Disabling"} +1 Armor for ${actor.name}`);
           await ae.update({ disabled: !isFocusingPolymorph });
         }
       }
@@ -279,7 +288,7 @@ export const DruidFeatures = {
     Hooks.on("updateActor", async (actor, changes, options) => {
       if (actor.type !== "character") return;
       if (!this._isPrimaryOwner(actor)) return;
-      if (!this._hasFeature(actor, "druid_forceOfNature")) return;
+      if (!hasFeature(actor, "druid_forceOfNature")) return;
 
       const newHP = foundry.utils.getProperty(changes, "system.health.value");
       if (newHP === undefined || newHP > 0) return;
@@ -295,7 +304,7 @@ export const DruidFeatures = {
       await roll.evaluate();
       const success = roll.total <= awareness;
 
-      this._log(`Force of Nature: ${actor.name} dropped to 0 HP. Rolled ${roll.total} vs Awareness ${awareness} — ${success ? "SUCCESS" : "FAIL"}`);
+      log("Druid",`Force of Nature: ${actor.name} dropped to 0 HP. Rolled ${roll.total} vs Awareness ${awareness} — ${success ? "SUCCESS" : "FAIL"}`);
 
       // Post result to chat
 
