@@ -155,23 +155,23 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 
 ---
 
-## Registry + Managed AE Classes
-
-These classes have feature registries with auto-detection flags and managed Active Effects where applicable, but no runtime hooks yet.
-
 ### Hunter
 
 | Feature          | Level | Status    | What's Automated                                                     |
 |------------------|-------|-----------|----------------------------------------------------------------------|
-| Hunter's Mark    | 1     | 🔲 Todo   | Mark target → 2d20 keep highest                                      |
+| Hunter's Mark    | 1     | ✅ Module   | Mark target → 2d20 keep highest                                      |
 | Survivalist      | 1     | 📝 Flavor | Perk grant + narrative bonuses                                       |
 | Rover            | 2     | ✅ Module  | Difficult Terrain doesn't impede walking Speed. Gain Climb and Swim. |
-| Overwatch        | 4     | 🔲 Todo   | Mark bonus extends to saves                                          |
+| Overwatch        | 4     | ✅ Module   | Mark bonus extends to saves                                          |
 | Quarry           | 6     | 📝 Flavor | Narrative blindsight sense                                           |
-| Lethal Precision | 8     | 🔲 Todo   | 3d20 keep highest                                                    |
-| Apex Predator    | 10    | 🔲 Todo   | Ignore immune + armor vs mark                                        |
+| Lethal Precision | 8     | ✅ Moduleo   | 3d20 keep highest                                                    |
+| Apex Predator    | 10    | ✅ Module   | Ignore immune + armor vs mark                                        |
 
 ---
+
+## Registry + Managed AE Classes
+
+These classes have feature registries with auto-detection flags and managed Active Effects where applicable, but no runtime hooks yet.
 
 ### Luminary
 
