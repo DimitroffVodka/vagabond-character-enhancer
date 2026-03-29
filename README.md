@@ -148,7 +148,7 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 | Feature           | Level | Status    | What's Automated                                                                 |
 |-------------------|-------|-----------|----------------------------------------------------------------------------------|
 | Fighting Style    | 1     | 📝 Flavor | Perk grants (manual)                                                             |
-| Valor             | 1/4/8 | ✅ AE      | attackCritBonus + reflexCritBonus + endureCritBonus: -1/-2/-3 scaling with level |
+| Valor             | 1/4/8 | ✅ SystemY      | attackCritBonus + reflexCritBonus + endureCritBonus: -1/-2/-3 scaling with level |
 | Momentum          | 2     | ✅ Module  | Pass save → next attack favored                                                  |
 | Muster for Battle | 6     | 📝 Flavor | Two actions on first turn                                                        |
 | Harrying          | 10    | 📝 Flavor | Attack twice with Attack action                                                  |
@@ -169,23 +169,20 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 
 ---
 
-## Registry + Managed AE Classes
-
-These classes have feature registries with auto-detection flags and managed Active Effects where applicable, but no runtime hooks yet.
-
 ### Luminary
 
 | Feature        | Level | Status    | What's Automated               |
 |----------------|-------|-----------|--------------------------------|
 | Theurgy        | 1     | ✅ System  | Casting handled by base system |
-| Radiant Healer | 1     | 🔲 Todo   | Healing dice explode on max    |
-| Overheal       | 2     | 🔲 Todo   | Excess HP redirect             |
-| Ever-Cure      | 4     | 🔲 Todo   | Healing removes a status       |
+| Radiant Healer | 1     | ✅ Module   | Healing dice explode on max    |
+| Overheal       | 2     | ✅ Module    | Excess HP redirect             |
+| Ever-Cure      | 4     | ✅ Module   | Healing removes a status       |
 | Revivify       | 6     | 📝 Flavor | Narrative revival mechanic     |
-| Saving Grace   | 8     | 🔲 Todo   | Healing dice also explode on 2 |
+| Saving Grace   | 8     | ✅ Module   | Healing dice also explode on 2 |
 | Life-Giver     | 10    | 📝 Flavor | Modifies Revivify              |
 
 ---
+
 
 ### Magus
 
@@ -195,9 +192,9 @@ These classes have feature registries with auto-detection flags and managed Acti
 | Esoteric Eye     | 1     | 📝 Flavor | Narrative magic detection              |
 | Spell Parry      | 2     | 📝 Flavor | Defensive choice                       |
 | Arcane Recall    | 4     | 📝 Flavor | Swap spell known on rest               |
-| Spell Surge      | 6     | 🔲 Todo   | Block cast by 10+ → reflect            |
-| Aegis Obscura    | 8     | 🔲 Todo   | Allsight + half magic damage with Ward |
-| Spell Surge (8+) | 10    | 🔲 Todo   | Lower Spell Surge threshold            |
+| Spell Surge      | 6     | ✅ Module   | Block cast by 10+ → reflect            |
+| Aegis Obscura    | 8     | 📝 Flavor   | Allsight + half magic damage with Ward |
+| Spell Surge (8+) | 10    | ✅ Module   | Lower Spell Surge threshold            |
 
 ---
 
@@ -373,3 +370,4 @@ Ancestry traits are automatically detected from compendium items on the characte
 - **Countdown Dice Overlay** — Visual overlay for tracking countdown dice on effects
 - **NPC Ability Automation** — With Vagabond Crawler module: morale checks, NPC abilities, and combat AI
 - **Perk Detection** — Auto-detects perks from character items and applies relevant AEs
+- **Manual Rolls** - Apply damage or healing from just standard dice rolls in chat by right clicking the result
