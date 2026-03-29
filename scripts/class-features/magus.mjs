@@ -11,10 +11,12 @@
  *   Aegis Obscura (L8)     → half magic damage reminder when Ward is focused
  *
  * Spell Surge hooks createChatMessage to detect high-margin Block saves
- * from magi and posts a "Reflect!" notification card.
+ * from magi against Cast actions and posts a "Reflect!" notification card.
+ * Uses _saveSourceAttackType (set by handleSaveRoll patch) to filter.
  */
 
 import { MODULE_ID, log, hasFeature } from "../utils.mjs";
+import { _saveSourceAttackType } from "../vagabond-character-enhancer.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -79,6 +81,7 @@ export const MAGUS_REGISTRY = {
   //
   // MODULE HANDLES:
   //   - Hooks createChatMessage to detect Block saves from magi
+  //   - Checks _saveSourceAttackType to ensure the save was provoked by a Cast
   //   - Parses roll total and difficulty from save card HTML
   //   - If margin >= 10, posts a "Spell Surge: Reflect!" notification
   "spell surge": {
@@ -160,6 +163,12 @@ export const MagusFeatures = {
     // Must have Spell Surge
     if (!hasFeature(actor, "magus_spellSurge")) return;
 
+    // Only trigger on saves provoked by a Cast action (not melee/ranged attacks)
+    // _saveSourceAttackType is set by the handleSaveRoll patch and is still
+    // available here because createChatMessage fires inside the try block.
+    const attackType = _saveSourceAttackType;
+    if (!attackType || !attackType.startsWith("cast")) return;
+
     // Parse the roll total and difficulty from the HTML
     const totalMatch = content.match(/class="roll-value"[^>]*>(\d+)</);
     const diffMatch = content.match(/class="roll-target"[^>]*>(\d+)</);
@@ -184,7 +193,7 @@ export const MagusFeatures = {
         <div class="card-body">
           <header class="card-header">
             <div class="header-icon">
-              <img src="icons/magic/defensive/shield-barrier-deflection-blue.webp" alt="Spell Surge">
+              <img src="icons/magic/defensive/shield-barrier-glowing-blue.webp" alt="Spell Surge">
             </div>
             <div class="header-info">
               <h3 class="header-title">Spell Surge!</h3>

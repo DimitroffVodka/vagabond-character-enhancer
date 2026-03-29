@@ -11,16 +11,16 @@
  *   Ever-Cure (L4)      → healing removes a status condition
  *   Saving Grace (L8)   → healing dice also explode on 2
  *
- * Healing in Vagabond has two paths:
- *   1. Equipment items (potions): item.roll() → formula evaluated → chat card
- *   2. Spell healing: cast → postItemRestorativeEffect → "Apply Healing" button
+ * Radiant Healer + Saving Grace use the system's built-in explosion support:
+ *   - postScan hook persistently sets canExplode + explodeValues on
+ *     healing spell items via spell.update()
+ *   - VagabondDamageHelper.rollSpellDamage calls _manuallyExplodeDice natively
+ *   - The "Spells" qualifier means only spell healing explodes, not equipment
  *
- * Both converge at handleApplyRestorative() when the heal button is clicked.
- * The explosion bonus is rolled in onPreHandleRestorative (spell path) and
- * onPreItemRoll (equipment path), mirroring the Bard Inspiration pattern.
- *
- * Ever-Cure posts a chat card with status removal buttons after healing.
- * Overheal calculates excess and posts a redirect option.
+ * Overheal + Ever-Cure trigger after handleApplyRestorative completes:
+ *   - Pre-heal HP snapshot is compared to post-heal state
+ *   - Excess healing (amount - actualHealing) triggers Overheal redirect card
+ *   - Removable statuses on healed target trigger Ever-Cure card
  */
 
 import { MODULE_ID, log, hasFeature } from "../utils.mjs";
@@ -51,9 +51,9 @@ export const LUMINARY_REGISTRY = {
   // STATUS: module
   //
   // MODULE HANDLES:
-  //   - onPreHandleRestorative: rolls explosion bonus dice for spell healing
-  //   - onPreItemRoll: rolls explosion bonus dice for equipment healing
-  //   - Explosion: each d6 that rolls 6 spawns another d6, recursively
+  //   - castSpell patch temporarily sets spell.system.canExplode + explodeValues
+  //   - System's rollSpellDamage calls _manuallyExplodeDice with those values
+  //   - Only applies to spells with damageType "healing"
   "radiant healer": {
     class: "luminary", level: 1, flag: "luminary_radiantHealer", status: "module",
     description: "Gain Assured Healer Perk. Healing rolls from Spells can explode on their highest value."
@@ -68,8 +68,8 @@ export const LUMINARY_REGISTRY = {
   // STATUS: module
   //
   // MODULE HANDLES:
-  //   - Hooks createChatMessage to detect healing application results
-  //   - Calculates excess healing and posts a redirect chat card
+  //   - onPostHandleRestorative compares pre/post HP to detect excess
+  //   - Posts a redirect card with the excess amount
   //   - Redirect button applies excess to a targeted being
   "overheal": {
     class: "luminary", level: 2, flag: "luminary_overheal", status: "module",
@@ -85,8 +85,9 @@ export const LUMINARY_REGISTRY = {
   // STATUS: module
   //
   // MODULE HANDLES:
-  //   - After healing applied, posts chat card with status removal buttons
-  //   - Button click removes the chosen status from the healed target
+  //   - onPostHandleRestorative checks healed targets for removable statuses
+  //   - Posts chat card with status removal buttons
+  //   - Button click removes the chosen status
   "ever-cure": {
     class: "luminary", level: 4, flag: "luminary_everCure", status: "module",
     description: "When you restore HP, end Charmed, Confused, Dazed, Frightened, or Sickened on Target."
@@ -141,12 +142,6 @@ const EVER_CURE_STATUSES = ["charmed", "confused", "dazed", "frightened", "sicke
 export const LuminaryFeatures = {
 
   registerHooks() {
-    // Ever-Cure + Overheal: detect healing chat cards and inject buttons
-    Hooks.on("createChatMessage", (message) => {
-      if (!game.user.isGM) return;
-      this._checkHealingResult(message);
-    });
-
     // Ever-Cure button clicks
     Hooks.on("renderChatMessage", (message, html) => {
       const el = html instanceof jQuery ? html[0] : html;
@@ -158,7 +153,54 @@ export const LuminaryFeatures = {
       });
     });
 
+    // Radiant Healer + Saving Grace: sync explosion settings on healing spells
+    Hooks.on(`${MODULE_ID}.postScan`, (actor, features) => {
+      this._syncHealingExplosion(actor);
+    });
+
     log("Luminary", "Hooks registered.");
+  },
+
+  /* -------------------------------------------- */
+  /*  Radiant Healer + Saving Grace: Spell Explosion */
+  /* -------------------------------------------- */
+
+  /**
+   * Sync explosion settings on all healing spells for a Luminary actor.
+   * Called from preSyncEffects during feature detection. Persistently updates
+   * canExplode/explodeValues on healing spell items so the system's native
+   * _manuallyExplodeDice handles explosion during rollSpellDamage.
+   */
+  async _syncHealingExplosion(actor) {
+    const hasRadiant = hasFeature(actor, "luminary_radiantHealer");
+    const hasSavingGrace = hasFeature(actor, "luminary_savingGrace");
+
+    const healingSpells = actor.items.filter(i => i.type === "spell" && i.system.damageType === "healing");
+    if (healingSpells.length === 0) return;
+
+    for (const spell of healingSpells) {
+      if (hasRadiant) {
+        // Assured Healer (granted by Radiant Healer): explode on 1
+        // Radiant Healer: "also" explode on highest value (die size)
+        // Saving Grace (L8): also explode on 2
+        const baseDieSize = spell.system.damageDieSize || 6;
+        const dieSize = baseDieSize + (actor.system.spellDamageDieSizeBonus || 0);
+        const values = [1, dieSize];
+        if (hasSavingGrace) values.push(2);
+        const explodeValues = [...new Set(values)].join(",");
+
+        if (!spell.system.canExplode || spell.system.explodeValues !== explodeValues) {
+          await spell.update({ "system.canExplode": true, "system.explodeValues": explodeValues });
+          log("Luminary", `Radiant Healer: set ${spell.name} to explode on [${explodeValues}]`);
+        }
+      } else {
+        // Not a Luminary with Radiant Healer — remove explosion if we previously set it
+        if (spell.system.canExplode) {
+          await spell.update({ "system.canExplode": false, "system.explodeValues": "" });
+          log("Luminary", `Radiant Healer: cleared explosion on ${spell.name}`);
+        }
+      }
+    }
   },
 
   /* -------------------------------------------- */
@@ -166,153 +208,47 @@ export const LuminaryFeatures = {
   /* -------------------------------------------- */
 
   /**
-   * Radiant Healer + Saving Grace: Explode healing dice for equipment items.
-   * Called from item.roll dispatcher (equipment healing path).
+   * Post-healing handler for Overheal + Ever-Cure.
+   * Called after handleApplyRestorative completes. Compares pre-heal HP
+   * snapshots to current state to detect excess healing and offer features.
    *
-   * Modifies the item formula to add explosion notation.
-   * The system will roll it, and we restore the original formula after.
+   * @param {object} ctx - { actorId, damageType, healAmount }
+   * @param {Map<string,number>} preHealHP - Map of targetActorId → HP before healing
+   * @param {Array} targetActors - Array of target actors that were healed
    */
-  async onPreItemRoll(ctx) {
-    if (ctx.item.type !== "equipment" || ctx.item.system.damageType !== "healing") return;
-    if (!hasFeature(ctx.actor, "luminary_radiantHealer")) return;
-
-    // Store source luminary info for post-healing hooks
-    ctx._luminaryHealSource = ctx.actor.id;
-
-    // We can't easily make the system's roll explode via formula alone.
-    // Instead, flag this for post-roll explosion bonus.
-    ctx._radiantHealer = true;
-    ctx._savingGrace = hasFeature(ctx.actor, "luminary_savingGrace");
-  },
-
-  /**
-   * Radiant Healer + Saving Grace: Explode healing dice for spell healing.
-   * Called from handleApplyRestorative dispatcher (spell healing path).
-   *
-   * Rolls explosion bonus dice and adds to the healing amount.
-   */
-  async onPreHandleRestorative(ctx) {
+  async onPostHandleRestorative(ctx, preHealHP, targetActors) {
     if (ctx.damageType !== "healing") return;
 
-    // Determine the source actor (the healer)
     const sourceActor = ctx.actorId ? game.actors.get(ctx.actorId) : null;
     if (!sourceActor) return;
-    if (!hasFeature(sourceActor, "luminary_radiantHealer")) return;
 
-    // Skip equipment items — handled by onPreItemRoll path
-    if (ctx.itemId) {
-      const sourceItem = sourceActor.items.get(ctx.itemId);
-      if (sourceItem?.type === "equipment") return;
-    }
+    const hasOverheal = hasFeature(sourceActor, "luminary_overheal");
+    const hasEverCure = hasFeature(sourceActor, "luminary_everCure");
+    if (!hasOverheal && !hasEverCure) return;
 
-    const hasSavingGrace = hasFeature(sourceActor, "luminary_savingGrace");
-    const originalAmount = parseInt(ctx.button.dataset.damageAmount) || 0;
+    const healAmount = parseInt(ctx.button.dataset.damageAmount) || 0;
 
-    // Roll explosion bonus: simulate each healing die exploding
-    // Spell healing uses d6. Estimate dice count from amount (min 1).
-    const diceCount = Math.max(1, Math.ceil(originalAmount / 4));
-    const explosionBonus = this._rollExplosionBonus(diceCount, 6, hasSavingGrace);
+    for (const targetActor of targetActors) {
+      if (!targetActor) continue;
 
-    if (explosionBonus > 0) {
-      ctx.button.dataset.damageAmount = String(originalAmount + explosionBonus);
-      const graceNote = hasSavingGrace ? " (explodes on 2 and 6)" : " (explodes on 6)";
+      const prevHP = preHealHP.get(targetActor.id) ?? 0;
+      const currentHP = targetActor.system.health?.value ?? 0;
+      const maxHP = targetActor.system.health?.max ?? 0;
+      const actualHealing = currentHP - prevHP;
 
-      ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor: sourceActor }),
-        content: `<div class="vagabond-chat-card-v2" data-card-type="radiant-healer">
-          <div class="card-body">
-            <section class="content-body">
-              <div class="card-description" style="text-align:center;">
-                <i class="fas fa-sun"></i> <strong>Radiant Healer:</strong>
-                +${explosionBonus} healing${graceNote}
-              </div>
-            </section>
-          </div>
-        </div>`
-      });
+      // Account for healing modifier (Sickened etc.)
+      const healingModifier = targetActor.system.incomingHealingModifier || 0;
+      const modifiedAmount = Math.max(0, healAmount + healingModifier);
+      const excess = modifiedAmount - actualHealing;
 
-      log("Luminary", `Radiant Healer: +${explosionBonus} explosion bonus (${originalAmount} → ${originalAmount + explosionBonus})`);
-    }
-
-    // Store source info for Ever-Cure / Overheal post-heal hooks
-    ctx._luminaryHealSource = sourceActor.id;
-    ctx._luminaryEverCure = hasFeature(sourceActor, "luminary_everCure");
-    ctx._luminaryOverheal = hasFeature(sourceActor, "luminary_overheal");
-  },
-
-  /* -------------------------------------------- */
-  /*  Explosion Dice                               */
-  /* -------------------------------------------- */
-
-  /**
-   * Roll explosion bonus dice.
-   * For each simulated die, if it rolls a max value (or 2 with Saving Grace),
-   * add the result and roll another. Repeat until no explosion.
-   *
-   * @param {number} diceCount - Number of healing dice to simulate explosions for
-   * @param {number} dieFaces - Die size (typically 6 for spell healing)
-   * @param {boolean} savingGrace - If true, also explode on 2
-   * @returns {Promise<number>} Total explosion bonus
-   */
-  _rollExplosionBonus(diceCount, dieFaces, savingGrace) {
-    let totalBonus = 0;
-    const maxExplosions = 50; // Safety limit
-
-    const shouldExplode = (val) => val === dieFaces || (savingGrace && val === 2);
-    const rollDie = () => Math.floor(Math.random() * dieFaces) + 1;
-
-    for (let i = 0; i < diceCount; i++) {
-      // Each die gets one chance to explode
-      const result = rollDie();
-      if (shouldExplode(result)) {
-        totalBonus += result;
-        // Chain explosions
-        let chainResult = result;
-        let chains = 0;
-        while (shouldExplode(chainResult) && chains < maxExplosions) {
-          chainResult = rollDie();
-          totalBonus += chainResult;
-          chains++;
-        }
+      // Overheal: redirect excess HP
+      if (hasOverheal && excess > 0 && actualHealing >= 0) {
+        await this._offerOverheal(sourceActor, excess);
       }
-    }
 
-    return totalBonus;
-  },
-
-  /* -------------------------------------------- */
-  /*  Post-Healing Detection                       */
-  /* -------------------------------------------- */
-
-  /**
-   * Detect healing application results from chat messages.
-   * Triggers Ever-Cure status removal and Overheal excess redirect.
-   */
-  async _checkHealingResult(message) {
-    const content = message.content || "";
-
-    // Look for healing result cards from the system
-    // System posts healing results with "heal" type
-    if (!content.includes("heal") && !content.includes("Healing")) return;
-
-    // Find the source luminary — check speaker
-    const speakerActorId = message.speaker?.actor;
-    if (!speakerActorId) return;
-    const sourceActor = game.actors.get(speakerActorId);
-    if (!sourceActor || sourceActor.type !== "character") return;
-
-    const features = sourceActor.getFlag(MODULE_ID, "features");
-    if (!features?.luminary_radiantHealer) return;
-
-    // Check for Ever-Cure: parse the target from the message
-    if (features.luminary_everCure) {
-      // Try to find target actor ID from the message content
-      const targetMatch = content.match(/data-actor-id="([^"]+)"/);
-      if (targetMatch) {
-        const targetActor = game.actors.get(targetMatch[1]);
-        if (targetActor) {
-          await this._offerEverCure(sourceActor, targetActor);
-        }
+      // Ever-Cure: offer status removal if HP was actually restored
+      if (hasEverCure && actualHealing > 0) {
+        await this._offerEverCure(sourceActor, targetActor);
       }
     }
   },
@@ -410,7 +346,6 @@ export const LuminaryFeatures = {
 
   /**
    * Post an Overheal redirect card when excess healing is detected.
-   * Called after healing is applied to a target at max HP.
    */
   async _offerOverheal(luminary, excessAmount) {
     if (excessAmount <= 0) return;
@@ -420,7 +355,7 @@ export const LuminaryFeatures = {
         <div class="card-body">
           <header class="card-header">
             <div class="header-icon">
-              <img src="icons/magic/life/heart-area-circle-green-white.webp" alt="Overheal">
+              <img src="icons/magic/life/heart-cross-green.webp" alt="Overheal">
             </div>
             <div class="header-info">
               <h3 class="header-title">Overheal</h3>
