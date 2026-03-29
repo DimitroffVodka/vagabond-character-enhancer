@@ -29,6 +29,9 @@ export let _damageSourceActorId = null;
 // if the save was provoked by a Cast (vs melee/ranged).
 export let _saveSourceAttackType = null;
 
+// Brawl intent state. Set by rollWeapon patch, consumed by renderChatMessage.
+import { BrawlIntent, setBrawlIntent, resetBrawlIntent } from "./brawl/brawl-intent.mjs";
+
 import { FeatureDetector } from "./feature-detector.mjs";
 import { BarbarianFeatures } from "./class-features/barbarian.mjs";
 import { BardFeatures } from "./class-features/bard.mjs";
@@ -246,6 +249,7 @@ Hooks.once("ready", async () => {
         RevelatorFeatures.onPreRollAttack(ctx);           // Holy Diver favor
         BarbarianFeatures.onPreRollAttackBloodthirsty(ctx); // Bloodthirsty
         AlchemistFeatures.onPreRollAttack(ctx);           // Consumable weapon flag
+        BrawlIntent.onPreRollAttack(ctx);                 // Bully Favor for Grapple/Shove
 
         // Stash actor for Climax/Choreographer in buildAndEvaluateD20WithRollData
         _currentRollActor = actor;
@@ -257,6 +261,7 @@ Hooks.once("ready", async () => {
           ctx.rollResult = result;
           await GunslingerFeatures.onPostRollAttack(ctx);
           await HunterFeatures.onPostRollAttack(ctx);
+          BrawlIntent.onPostRollAttack(ctx);              // Stash meta for button injection
 
           return result;
         } catch (e) {
@@ -521,6 +526,36 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched RollHandler.roll.`);
 
+    // --- RollHandler.rollWeapon: Brawl/Shield intent dialog ---
+    const origRollWeapon = RollHandler.prototype.rollWeapon;
+    RollHandler.prototype.rollWeapon = async function (event, target) {
+      const element = target || event.currentTarget;
+      const itemId = element.dataset.itemId || element.closest("[data-item-id]")?.dataset.itemId;
+      const item = this.actor.items.get(itemId);
+
+      if (item) {
+        const isBrawlOrShield = item.system.properties?.some(p =>
+          ["brawl", "shield"].includes(p.toLowerCase()));
+        if (isBrawlOrShield) {
+          const { TargetHelper } = await import("/systems/vagabond/module/helpers/target-helper.mjs");
+          const targetsAtRollTime = TargetHelper.captureCurrentTargets();
+          if (targetsAtRollTime.length > 0) {
+            const features = getFeatures(this.actor);
+            const result = await BrawlIntent.showIntentDialog(this.actor, item, targetsAtRollTime, features);
+            if (result === null) return; // cancelled
+            setBrawlIntent({ ...result, targetsAtRollTime });
+          }
+        }
+      }
+
+      try {
+        return await origRollWeapon.call(this, event, target);
+      } finally {
+        resetBrawlIntent();
+      }
+    };
+    console.log(`${MODULE_ID} | Patched RollHandler.rollWeapon.`);
+
     // --- SpellHandler.castSpell: Stash _currentRollActor ---
     const { SpellHandler } = await import("/systems/vagabond/module/sheets/handlers/spell-handler.mjs");
     const origCastSpell = SpellHandler.prototype.castSpell;
@@ -579,6 +614,7 @@ Hooks.once("ready", async () => {
     focusRelease: (actor, key) => FocusManager.releaseFeatureFocus(actor, key),
     focusStatus: (actor) => FocusManager.getFocusStatus(actor),
     hunterMark: (actor) => HunterFeatures.useMarkAction(actor),
+    brawlIntent: BrawlIntent,
     aura: (actor, spell, radius) => AuraManager.activate(actor, spell, radius),
     auraMenu: (actor) => AuraManager.showAuraMenu(actor),
     auraEnd: (actor) => AuraManager.deactivate(actor),
@@ -662,6 +698,7 @@ Hooks.once("ready", async () => {
   VanguardFeatures.registerHooks();
   WitchFeatures.registerHooks();
   WizardFeatures.registerHooks();
+  BrawlIntent.registerHooks();
   FocusManager.registerHooks();
 
   // Patch character sheet for Beast Form panel injection

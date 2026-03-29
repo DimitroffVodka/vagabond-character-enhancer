@@ -33,10 +33,10 @@ export const PUGILIST_REGISTRY = {
   // was previously lower. Once per Round, spend half Speed for second attack.
   // If Favor on Brawl and hit a viable target, can Grapple or Shove.
   //
-  // STATUS: flavor — d4 minimum is already the base system Unarmed damage.
-  // Second attack and favor grapple are action economy / GM-adjudicated.
+  // STATUS: module — Favor + Brawl hit → Grapple/Shove buttons via brawl-intent.mjs.
+  // Second attack is action economy / GM-adjudicated. d4 min is base system.
   "fisticuffs": {
-    class: "pugilist", level: 1, flag: "pugilist_fisticuffs", status: "flavor",
+    class: "pugilist", level: 1, flag: "pugilist_fisticuffs", status: "module",
     description: "Brawl Weapons use d4 minimum. Spend half Speed for second attack. Favor → Grapple/Shove."
   },
 
