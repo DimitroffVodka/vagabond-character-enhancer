@@ -29,6 +29,10 @@ export let _damageSourceActorId = null;
 // if the save was provoked by a Cast (vs melee/ranged).
 export let _saveSourceAttackType = null;
 
+// Direct damage source attack type. Set by handleApplyDirect patch so
+// calculateFinalDamage can bypass armor for cast attacks.
+export let _directSourceAttackType = null;
+
 // Brawl intent state. Set by rollWeapon patch, consumed by renderChatMessage.
 import { BrawlIntent, setBrawlIntent, resetBrawlIntent } from "./brawl/brawl-intent.mjs";
 
@@ -171,10 +175,25 @@ Hooks.once("ready", async () => {
   try {
     const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
 
-    // --- calculateFinalDamage: Rage DR + Tempest Within + Apex Predator ---
+    // --- calculateFinalDamage: Cast armor bypass + Rage DR + Tempest Within + Apex Predator ---
     const origCalcFinal = VagabondDamageHelper.calculateFinalDamage;
     VagabondDamageHelper.calculateFinalDamage = function (actor, damage, damageType, attackingWeapon = null, sneakDice = 0) {
       let result = origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice);
+
+      // Cast attacks bypass armor unless target wears Orichalcum
+      const origAttackType = _directSourceAttackType || _saveSourceAttackType;
+      if (origAttackType === 'castClose' || origAttackType === 'castRanged') {
+        const equippedArmor = actor.items?.find(i => {
+          const isArmor = (i.type === 'armor') ||
+            (i.type === 'equipment' && i.system.equipmentType === 'armor');
+          return isArmor && i.system.equipped;
+        });
+        if (!equippedArmor || equippedArmor.system.metal !== 'orichalcum') {
+          const armorRating = actor.system.armor || 0;
+          result = Math.min(result + armorRating, damage); // Add back subtracted armor
+        }
+      }
+
       const features = getFeatures(actor);
 
       // Apex Predator: check if this target is marked by the hunter dealing the damage
@@ -417,6 +436,12 @@ Hooks.once("ready", async () => {
       _saveSourceActorId = button.dataset.actorId || null;
       _damageSourceActorId = button.dataset.actorId || null;
       _saveSourceAttackType = button.dataset.attackType || null;
+      // Look up original NPC action attackType (before system normalizes castClose/castRanged)
+      const saveSourceActor = game.actors.get(button.dataset.actorId);
+      const saveActionIdx = button.dataset.actionIndex;
+      const saveAction = (saveActionIdx !== '' && saveActionIdx != null)
+        ? saveSourceActor?.system?.actions?.[parseInt(saveActionIdx)] : null;
+      if (saveAction?.attackType?.startsWith('cast')) _saveSourceAttackType = saveAction.attackType;
       try { return await origHandleSaveRoll.call(this, button, event); }
       finally { _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null; }
     };
@@ -425,17 +450,29 @@ Hooks.once("ready", async () => {
       _saveSourceActorId = button.dataset.actorId || null;
       _damageSourceActorId = button.dataset.actorId || null;
       _saveSourceAttackType = button.dataset.attackType || null;
+      // Look up original NPC action attackType (before system normalizes castClose/castRanged)
+      const saveReminderActor = game.actors.get(button.dataset.actorId);
+      const saveReminderIdx = button.dataset.actionIndex;
+      const saveReminderAction = (saveReminderIdx !== '' && saveReminderIdx != null)
+        ? saveReminderActor?.system?.actions?.[parseInt(saveReminderIdx)] : null;
+      if (saveReminderAction?.attackType?.startsWith('cast')) _saveSourceAttackType = saveReminderAction.attackType;
       try { return await origHandleSaveReminderRoll.call(this, button, event); }
       finally { _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null; }
     };
     console.log(`${MODULE_ID} | Patched handleSaveRoll + handleSaveReminderRoll.`);
 
-    // --- handleApplyDirect: Track damage source actor for Apex Predator ---
+    // --- handleApplyDirect: Track damage source actor + original attack type ---
     const origHandleApplyDirect = VagabondDamageHelper.handleApplyDirect;
     VagabondDamageHelper.handleApplyDirect = async function (button) {
       _damageSourceActorId = button.dataset.actorId || null;
+      // Look up original NPC action attackType (before system normalizes castClose/castRanged)
+      const directSourceActor = game.actors.get(button.dataset.actorId);
+      const directActionIdx = button.dataset.actionIndex;
+      const directAction = (directActionIdx !== '' && directActionIdx != null)
+        ? directSourceActor?.system?.actions?.[parseInt(directActionIdx)] : null;
+      _directSourceAttackType = directAction?.attackType || null;
       try { return await origHandleApplyDirect.call(this, button); }
-      finally { _damageSourceActorId = null; }
+      finally { _damageSourceActorId = null; _directSourceAttackType = null; }
     };
     console.log(`${MODULE_ID} | Patched handleApplyDirect.`);
 
