@@ -131,7 +131,7 @@ export const FocusManager = {
   /* -------------------------------------------- */
 
   registerHooks() {
-    // Sync FX when spell focus changes (system updates spellIds)
+    // Sync FX + spell effects when spell focus changes (system updates spellIds)
     Hooks.on("updateActor", (actor, changes) => {
       if (actor.type !== "character") return;
       if (changes.system?.focus?.spellIds !== undefined) {
@@ -139,13 +139,20 @@ export const FocusManager = {
         setTimeout(() => {
           this._syncFocusingStatus(actor);
           this._syncFocusFX(actor);
+          this._syncLightFocus(actor);
         }, 0);
       }
     });
 
-    // Restore FX on scene load
+    // Restore FX + Light on scene load
     Hooks.on("canvasReady", () => {
       this._restoreAllFX();
+      // Re-sync Light focus for all characters on the scene
+      for (const token of canvas.tokens?.placeables || []) {
+        if (token.actor?.type === "character") {
+          this._syncLightFocus(token.actor);
+        }
+      }
     });
 
     // Play FX when a token is placed for a focusing actor
@@ -366,6 +373,70 @@ export const FocusManager = {
       await actor.toggleStatusEffect("focusing", { active: true });
     } else if (totalCount === 0 && hasFocusingStatus) {
       await actor.toggleStatusEffect("focusing", { active: false });
+    }
+  },
+
+  /* -------------------------------------------- */
+  /*  Light Spell Focus — Token Light Emission    */
+  /* -------------------------------------------- */
+
+  /**
+   * Sync token light emission when Light spell is focused/unfocused.
+   * Light sheds bright light out to 30' (Near) while focused.
+   */
+  async _syncLightFocus(actor) {
+    const focusedIds = actor.system?.focus?.spellIds || [];
+    const isFocusingLight = focusedIds.some(id => {
+      const spell = actor.items.get(id);
+      return spell?.name?.toLowerCase() === "light";
+    });
+
+    const token = actor.getActiveTokens()?.[0]?.document;
+    if (!token) return;
+
+    const FLAG_LIGHT = "originalLight";
+
+    if (isFocusingLight) {
+      // Save original light settings (only if not already saved)
+      const saved = actor.getFlag(MODULE_ID, FLAG_LIGHT);
+      if (!saved) {
+        await actor.setFlag(MODULE_ID, FLAG_LIGHT, {
+          bright: token.light.bright,
+          dim: token.light.dim,
+          color: token.light.color,
+          alpha: token.light.alpha,
+          animationType: token.light.animation?.type,
+          animationSpeed: token.light.animation?.speed,
+          animationIntensity: token.light.animation?.intensity
+        });
+      }
+      // Apply Light spell emission: 30' bright, warm golden glow
+      await token.update({
+        "light.bright": 30,
+        "light.dim": 0,
+        "light.color": "#ffffaa",
+        "light.alpha": 0.4,
+        "light.animation.type": "torch",
+        "light.animation.speed": 3,
+        "light.animation.intensity": 3
+      });
+      log("Light", `${actor.name}: Light focused — token emitting 30' bright light`);
+    } else {
+      // Restore original light settings
+      const saved = actor.getFlag(MODULE_ID, FLAG_LIGHT);
+      if (saved) {
+        await token.update({
+          "light.bright": saved.bright ?? 0,
+          "light.dim": saved.dim ?? 0,
+          "light.color": saved.color ?? null,
+          "light.alpha": saved.alpha ?? 0.5,
+          "light.animation.type": saved.animationType ?? null,
+          "light.animation.speed": saved.animationSpeed ?? 5,
+          "light.animation.intensity": saved.animationIntensity ?? 5
+        });
+        await actor.unsetFlag(MODULE_ID, FLAG_LIGHT);
+        log("Light", `${actor.name}: Light unfocused — token light restored`);
+      }
     }
   },
 

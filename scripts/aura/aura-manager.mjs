@@ -35,10 +35,10 @@ const AURA_SPELLS = {
     icon: "icons/magic/holy/prayer-hands-glowing-yellow-light.webp",
     templateColor: "#FFD700",
     templateBorder: "#DAA520",
-    description: "+1 bonus to each damage die and to Will Saves vs Frightened",
+    description: "+1 per damage die (+2 vs Undead/Hellspawn), +1 Will Saves vs Frightened",
     fx: "jb2a.bless",
+    // Per-die damage bonus is handled by calculateFinalDamage hook, not AE
     changes: [
-      { key: "system.universalDamageBonus", mode: 2, value: "1" },
       { key: "system.saves.will.bonus", mode: 2, value: "1" }
     ]
   },

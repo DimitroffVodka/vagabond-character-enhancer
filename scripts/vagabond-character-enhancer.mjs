@@ -62,6 +62,8 @@ import { FeatureFxConfig } from "./focus/feature-fx-config.mjs";
 import { PolymorphSheet } from "./polymorph/polymorph-sheet.mjs";
 import { BeastCache } from "./polymorph/beast-cache.mjs";
 import { populateBeasts } from "./polymorph/populate-beasts.mjs";
+import { DrakenFeatures } from "./ancestry-features/draken.mjs";
+import { ImbueManager } from "./spell-features/imbue-manager.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -178,6 +180,27 @@ Hooks.once("ready", async () => {
     // --- calculateFinalDamage: Cast armor bypass + Rage DR + Tempest Within + Apex Predator ---
     const origCalcFinal = VagabondDamageHelper.calculateFinalDamage;
     VagabondDamageHelper.calculateFinalDamage = function (actor, damage, damageType, attackingWeapon = null, sneakDice = 0) {
+      // Draconic Resilience: halve matching damage before armor/immune/weak
+      const drakenType = actor.getFlag?.(MODULE_ID, "draken_draconicResilienceType");
+      if (drakenType && damageType?.toLowerCase() === drakenType) {
+        const original = damage;
+        damage = Math.floor(damage / 2);
+        const reduction = original - damage;
+        log("Draken", `Draconic Resilience (${drakenType}): ${original} → ${damage} (−${reduction})`);
+        const typeLabel = drakenType.charAt(0).toUpperCase() + drakenType.slice(1);
+        ChatMessage.create({
+          content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+            <div class="card-body"><section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                <strong>${actor.name}</strong> — <em>Draconic Resilience (${typeLabel})</em><br>
+                ${typeLabel} damage halved: ${original} → ${damage} (−${reduction})
+              </div>
+            </section></div>
+          </div>`,
+          speaker: ChatMessage.getSpeaker({ actor })
+        });
+      }
+
       let result = origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice);
 
       // Cast attacks bypass armor unless target wears Orichalcum
@@ -281,6 +304,7 @@ Hooks.once("ready", async () => {
           await GunslingerFeatures.onPostRollAttack(ctx);
           await HunterFeatures.onPostRollAttack(ctx);
           BrawlIntent.onPostRollAttack(ctx);              // Stash meta for button injection
+          await ImbueManager.onPostRollAttack(ctx);        // Consume imbue after attack
 
           return result;
         } catch (e) {
@@ -298,9 +322,37 @@ Hooks.once("ready", async () => {
       VagabondItem.prototype.rollDamage = async function (actor, isCritical = false, statKey = null) {
         const ctx = { item: this, actor, features: getFeatures(actor), isCritical };
         GunslingerFeatures.onPreRollDamage(ctx);
+
+        // Exalt: +1 per damage die (+2 vs Undead/Hellspawn) — added to roll formula
+        let exaltOrigDamage;
+        const focusedIds = actor.system?.focus?.spellIds || [];
+        const hasExaltAura = !!actor.effects.find(e => e.getFlag(MODULE_ID, "auraSpell") === "Exalt");
+        const hasExaltFocus = focusedIds.some(id => actor.items.get(id)?.name?.toLowerCase() === "exalt");
+        if (hasExaltAura || hasExaltFocus) {
+          const formula = this.system.currentDamage || "d6";
+          const numDice = VagabondDamageHelper._countDiceInFormula(formula);
+          if (numDice > 0) {
+            // Check if any target is Undead or Hellspawn
+            const targets = Array.from(game.user.targets);
+            const isDoubled = targets.some(t => {
+              const bt = t.actor?.system?.beingType || "";
+              return ["Undead", "Hellspawn"].includes(bt);
+            });
+            const bonusPerDie = isDoubled ? 2 : 1;
+            const exaltBonus = numDice * bonusPerDie;
+            exaltOrigDamage = this.system.currentDamage;
+            this.system.currentDamage = `${formula} + ${exaltBonus}`;
+            log("Exalt", `${actor.name}: +${bonusPerDie} × ${numDice} dice = +${exaltBonus} added to ${formula}${isDoubled ? " (vs Undead/Hellspawn)" : ""}`);
+          }
+        }
+
         try {
           return await origRollDamage.call(this, actor, isCritical, statKey);
         } finally {
+          // Restore Exalt-modified damage
+          if (exaltOrigDamage !== undefined) {
+            this.system.currentDamage = exaltOrigDamage;
+          }
           if (ctx.origCanExplode !== undefined) {
             this.system.canExplode = ctx.origCanExplode;
             this.system.explodeValues = ctx.origExplodeValues;
@@ -593,10 +645,34 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched RollHandler.rollWeapon.`);
 
-    // --- SpellHandler.castSpell: Stash _currentRollActor ---
+    // --- SpellHandler.castSpell: Stash _currentRollActor + Imbue delivery bypass ---
     const { SpellHandler } = await import("/systems/vagabond/module/sheets/handlers/spell-handler.mjs");
     const origCastSpell = SpellHandler.prototype.castSpell;
     SpellHandler.prototype.castSpell = async function (event, target) {
+      // Check if this cast uses Imbue delivery — if so, bypass d20/damage rolls
+      const spellId = target.dataset.spellId;
+      const state = this._getSpellState?.(spellId);
+      if (state?.deliveryType === "imbue") {
+        const spell = this.actor.items.get(spellId);
+        if (spell) {
+          const costs = this._calculateSpellCost(spellId);
+          const handled = await ImbueManager.handleImbueCast(this.actor, spell, state, costs);
+          if (handled) {
+            // Reset spell state
+            const defaultUseFx = spell.system.damageType === "-";
+            this.spellStates[spellId] = {
+              damageDice: 1,
+              deliveryType: state.deliveryType,
+              deliveryIncrease: 0,
+              useFx: defaultUseFx
+            };
+            this._saveSpellStates();
+            this._updateSpellDisplay(spellId);
+            return;
+          }
+        }
+      }
+
       _currentRollActor = this.actor;
       try {
         const result = await origCastSpell.call(this, event, target);
@@ -656,6 +732,9 @@ Hooks.once("ready", async () => {
     auraMenu: (actor) => AuraManager.showAuraMenu(actor),
     auraEnd: (actor) => AuraManager.deactivate(actor),
     layOnHands: (actor) => RevelatorFeatures.useLayOnHands(actor),
+    setDraconicResilience: (actor) => DrakenFeatures.promptResilienceChoice(actor),
+    imbue: ImbueManager,
+    clearImbue: (actor) => ImbueManager.clearImbue(actor),
     rescan: (actor) => FeatureDetector.scan(actor),
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
@@ -737,6 +816,8 @@ Hooks.once("ready", async () => {
   WizardFeatures.registerHooks();
   BrawlIntent.registerHooks();
   FocusManager.registerHooks();
+  DrakenFeatures.registerHooks();
+  ImbueManager.registerHooks();
 
   // Patch character sheet for Beast Form panel injection
   PolymorphSheet.patchSheet();
