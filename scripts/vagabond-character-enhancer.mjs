@@ -64,6 +64,7 @@ import { BeastCache } from "./polymorph/beast-cache.mjs";
 import { populateBeasts } from "./polymorph/populate-beasts.mjs";
 import { DrakenFeatures } from "./ancestry-features/draken.mjs";
 import { ImbueManager } from "./spell-features/imbue-manager.mjs";
+import { SummonerFeatures } from "./class-features/summoner.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -735,6 +736,36 @@ Hooks.once("ready", async () => {
     setDraconicResilience: (actor) => DrakenFeatures.promptResilienceChoice(actor),
     imbue: ImbueManager,
     clearImbue: (actor) => ImbueManager.clearImbue(actor),
+    summoner: SummonerFeatures,
+    conjure: (actor) => SummonerFeatures.showConjureDialog(actor),
+    banish: (actor) => SummonerFeatures.banishSummon(actor, "Manual"),
+    /** API for Vagabond Crawler: get summon action data for a summoner actor */
+    getSummonData: (actor) => {
+      if (!actor) return null;
+      const features = actor.getFlag(MODULE_ID, "features");
+      if (!features?.summoner_creatureCodex) return null;
+      const conjure = actor.getFlag(MODULE_ID, "activeConjure");
+      if (!conjure) return { hasSummoner: true, hasConjure: false };
+      const summonActor = game.actors.get(conjure.summonActorId);
+      return {
+        hasSummoner: true,
+        hasConjure: true,
+        summonName: conjure.summonName,
+        summonImg: conjure.summonImg,
+        summonHD: conjure.summonHD,
+        actions: (summonActor?.system?.actions || []).map((a, i) => ({
+          index: i, name: a.name, note: a.note,
+          rollDamage: a.rollDamage, flatDamage: a.flatDamage,
+          damageType: a.damageType, attackType: a.attackType,
+          extraInfo: a.extraInfo
+        })),
+        abilities: summonActor?.system?.abilities || [],
+        /** Call this to roll a summon action from the crawler */
+        useAction: (actionIdx) => SummonerFeatures.rollSummonAction(actor, conjure, actionIdx),
+        /** Call this to banish */
+        useBanish: () => SummonerFeatures.banishSummon(actor, "Dismissed")
+      };
+    },
     rescan: (actor) => FeatureDetector.scan(actor),
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
@@ -818,6 +849,7 @@ Hooks.once("ready", async () => {
   FocusManager.registerHooks();
   DrakenFeatures.registerHooks();
   ImbueManager.registerHooks();
+  SummonerFeatures.registerHooks();
 
   // Patch character sheet for Beast Form panel injection
   PolymorphSheet.patchSheet();

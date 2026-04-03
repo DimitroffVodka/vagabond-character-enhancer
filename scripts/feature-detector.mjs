@@ -24,6 +24,7 @@ import { LUMINARY_REGISTRY } from "./class-features/luminary.mjs";
 import { MAGUS_REGISTRY } from "./class-features/magus.mjs";
 import { REVELATOR_REGISTRY } from "./class-features/revelator.mjs";
 import { MERCHANT_REGISTRY } from "./class-features/merchant.mjs";
+import { SUMMONER_REGISTRY } from "./class-features/summoner.mjs";
 
 // Import ancestry registries — each ancestry file owns all its trait definitions
 import { HUMAN_TRAITS } from "./ancestry-features/human.mjs";
@@ -62,7 +63,8 @@ const CLASS_FEATURE_REGISTRY = {
   ...LUMINARY_REGISTRY,
   ...MAGUS_REGISTRY,
   ...REVELATOR_REGISTRY,
-  ...MERCHANT_REGISTRY
+  ...MERCHANT_REGISTRY,
+  ...SUMMONER_REGISTRY
 };
 
 // Import perk registry

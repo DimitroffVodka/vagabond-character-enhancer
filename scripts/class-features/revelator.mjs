@@ -213,8 +213,10 @@ export const RevelatorFeatures = {
    */
   async _checkSelflessTrigger(message) {
     const content = message.content || "";
-    // Look for damage application results (system posts these)
-    if (!content.includes("damage") && !content.includes("Damage")) return;
+    // Only trigger on actual damage application results, not attack/action cards.
+    // The system's applyResult() posts cards with data-card-type="apply-result"
+    // and the note "damage applied — HP:".
+    if (!content.includes("damage applied")) return;
 
     // Find revelators with Selfless in active combat
     if (!game.combat) return;
