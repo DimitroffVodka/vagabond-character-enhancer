@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.1.6
+
+### New Features
+- **Second Nature (L4):** When conjuring, choose between Focus (1 Mana/round) or Cd4 duration (no focus needed). Countdown die rolled each round — summon expires when it shrinks past d4.
+- **Avatar Emergence (L6):** Once per Shift, conjure a Summon without spending Mana. Dialog offers free conjure or pay mana. Resets when mana is restored to max (on Rest).
+- **Guardian Force (L8):** If summoner drops to 0 HP with a Summon conjured, the summon persists on a Cd4 countdown. When the countdown expires, the summoner is revived at 1 HP and gains 1 Fatigue.
+- **Improved Summon Tab:** Active summon panel now shows full NPC stat block — portrait, HD/Size/Type tags, HP bar, armor overlay, speed group, movement types, senses, immunities, weaknesses, clickable actions, and abilities. Matches the Druid Beast Form panel styling.
+- **Custom Compendium Packs:** Module now ships with 3 new compendiums:
+  - **VCE: Custom Classes** — Dragoon, Summoner, Samurai, Jester, Psychic, Monk
+  - **VCE: Custom Perks** — Summoner (Conjurer) perk
+  - **VCE: Custom Ancestries** — Harpy, Fiend, Mimic, Satyr, Varmi, Centaur, Golem, Changeling, Pollywog, Rook, Pixie, Lepus
+
+### Bug Fixes
+- Fixed Soulbonder armor bonus using wrong Active Effect key (`system.bonuses.armor` → `system.armorBonus`).
+
 ## v0.1.5
 
 ### New Features

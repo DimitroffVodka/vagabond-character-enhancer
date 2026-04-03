@@ -59,21 +59,21 @@ export const SUMMONER_REGISTRY = {
     class: "summoner",
     level: 4,
     flag: "summoner_secondNature",
-    status: "todo",
+    status: "module",
     description: "Rather than Focus on a Summon, you can choose for it to remain for Cd4 Rounds."
   },
   "avatar emergence": {
     class: "summoner",
     level: 6,
     flag: "summoner_avatarEmergence",
-    status: "todo",
+    status: "module",
     description: "Once per Shift, you can conjure a Summon without Mana to conjure it."
   },
   "guardian force": {
     class: "summoner",
     level: 8,
     flag: "summoner_guardianForce",
-    status: "todo",
+    status: "module",
     description: "If you drop to 0 HP with a Summon conjured, it remains for Cd4 Rounds. If not banished before the die shrinks, you are revived at 1 HP and gain 1 Fatigue."
   },
   "ultimate weapon": {
@@ -107,15 +107,11 @@ export const SummonerFeatures = {
       }
     });
 
-    // Combat round: drain 1 mana per round for all summoners with active conjures.
-    // Vagabond uses freeform turn order, so we drain when the round advances
-    // rather than tracking individual turns.
+    // Combat round: drain mana / tick Second Nature countdown / Guardian Force countdown
     Hooks.on("updateCombat", async (combat, changes) => {
       if (!("round" in changes)) return;
-      // Only one client should process this — prefer GM, fallback to first owner
       if (!game.user.isGM && game.users.find(u => u.isGM && u.active)) return;
 
-      // Check all characters in combat for active conjures
       for (const combatant of combat.combatants) {
         const actor = combatant.actor;
         if (!actor || actor.type !== "character") continue;
@@ -123,10 +119,80 @@ export const SummonerFeatures = {
         const conjure = actor.getFlag(MODULE_ID, FLAG_CONJURE);
         if (!conjure) continue;
 
+        // Second Nature countdown (no focus mode)
+        if (conjure.secondNatureCountdown) {
+          const die = conjure.secondNatureCountdown;
+          const roll = new Roll(`1d${die}`);
+          await roll.evaluate();
+          const rolled = roll.total;
+          ChatMessage.create({
+            content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+              <div class="card-body"><section class="content-body">
+                <div class="card-description" style="text-align:center;">
+                  <strong>${actor.name}</strong> — Second Nature: Cd${die} → rolled ${rolled}
+                  ${rolled === 1 ? (die === 4 ? " — <strong>Summon expires!</strong>" : ` — shrinks to Cd${die - 2}`) : " — persists"}
+                </div>
+              </section></div>
+            </div>`,
+            speaker: ChatMessage.getSpeaker({ actor })
+          });
+          if (rolled === 1) {
+            if (die <= 4) {
+              await this.banishSummon(actor, "Second Nature expired");
+            } else {
+              await actor.setFlag(MODULE_ID, FLAG_CONJURE + ".secondNatureCountdown", die - 2);
+            }
+          }
+          continue; // No mana drain for Second Nature
+        }
+
+        // Guardian Force countdown (summoner at 0 HP)
+        if (conjure.guardianForceCountdown) {
+          const die = conjure.guardianForceCountdown;
+          const roll = new Roll(`1d${die}`);
+          await roll.evaluate();
+          const rolled = roll.total;
+          ChatMessage.create({
+            content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+              <div class="card-body"><section class="content-body">
+                <div class="card-description" style="text-align:center;">
+                  <strong>${actor.name}</strong> — Guardian Force: Cd${die} → rolled ${rolled}
+                  ${rolled === 1 ? (die === 4 ? " — <strong>Revived at 1 HP!</strong>" : ` — shrinks to Cd${die - 2}`) : " — summon persists"}
+                </div>
+              </section></div>
+            </div>`,
+            speaker: ChatMessage.getSpeaker({ actor })
+          });
+          if (rolled === 1) {
+            if (die <= 4) {
+              // Guardian Force resolves: revive summoner at 1 HP + 1 Fatigue
+              await actor.update({
+                "system.health.value": 1,
+                "system.fatigue": Math.min(5, (actor.system.fatigue ?? 0) + 1)
+              });
+              ChatMessage.create({
+                content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+                  <div class="card-body"><section class="content-body">
+                    <div class="card-description" style="text-align:center;">
+                      <strong>${actor.name}</strong> is revived by <strong>Guardian Force</strong>!
+                      (1 HP, +1 Fatigue)
+                    </div>
+                  </section></div>
+                </div>`,
+                speaker: ChatMessage.getSpeaker({ actor })
+              });
+              await this.banishSummon(actor, "Guardian Force resolved");
+            } else {
+              await actor.setFlag(MODULE_ID, FLAG_CONJURE + ".guardianForceCountdown", die - 2);
+            }
+          }
+          continue; // No mana drain during Guardian Force
+        }
+
+        // Normal focus mode: drain 1 mana per round
         const featureFocus = actor.getFlag(MODULE_ID, "featureFocus") || [];
         const hasFocus = featureFocus.some(f => f.key === FOCUS_KEY);
         if (!hasFocus) continue;
-
         await this._drainMana(actor);
       }
     });
@@ -139,7 +205,6 @@ export const SummonerFeatures = {
       const newHP = changes.system?.health?.value ?? changes["system.health.value"];
       if (newHP === undefined || newHP > 0) return;
 
-      // Check if any character has this NPC as their active conjure
       for (const char of game.actors.filter(a => a.type === "character")) {
         const conjure = char.getFlag(MODULE_ID, FLAG_CONJURE);
         if (conjure?.summonActorId === actor.id) {
@@ -149,7 +214,59 @@ export const SummonerFeatures = {
       }
     });
 
-    // Watch for focus drop on summoner_conjure
+    // Watch summoner HP for Guardian Force (L8) — 0 HP triggers countdown
+    Hooks.on("preUpdateActor", (actor, changes, options) => {
+      if (actor.type !== "character") return;
+      const newHP = changes.system?.health?.value ?? changes["system.health.value"];
+      if (newHP !== undefined) {
+        options._vceOldHP = actor.system.health?.value ?? 0;
+      }
+    });
+    Hooks.on("updateActor", async (actor, changes, options) => {
+      if (actor.type !== "character") return;
+      if (!game.user.isGM && game.users.find(u => u.isGM && u.active)) return;
+
+      const newHP = changes.system?.health?.value ?? changes["system.health.value"];
+      if (newHP === undefined || newHP > 0) return;
+      const oldHP = options._vceOldHP;
+      if (oldHP === undefined || oldHP <= 0) return; // Already at 0
+
+      const conjure = actor.getFlag(MODULE_ID, FLAG_CONJURE);
+      if (!conjure) return;
+      const features = getFeatures(actor);
+      if (!features?.summoner_guardianForce) return;
+      if (conjure.guardianForceCountdown) return; // Already in Guardian Force mode
+
+      // Activate Guardian Force: summon persists on Cd4 countdown
+      await actor.setFlag(MODULE_ID, FLAG_CONJURE + ".guardianForceCountdown", 4);
+      // Release normal focus (summon persists without it now)
+      await FocusManager.releaseFeatureFocus(actor, FOCUS_KEY);
+      ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+          <div class="card-body"><section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <strong>${actor.name}</strong> drops to 0 HP — <strong>Guardian Force</strong> activates!
+              <br>${conjure.summonName} persists for Cd4 Rounds.
+            </div>
+          </section></div>
+        </div>`,
+        speaker: ChatMessage.getSpeaker({ actor })
+      });
+    });
+
+    // Reset Avatar Emergence when mana is restored to max (on Rest)
+    Hooks.on("updateActor", async (actor, changes) => {
+      if (actor.type !== "character") return;
+      const newMana = changes.system?.mana?.current;
+      if (newMana === undefined) return;
+      const maxMana = actor.system.mana?.max ?? 0;
+      if (newMana >= maxMana && actor.getFlag(MODULE_ID, "avatarEmergenceUsed")) {
+        await actor.unsetFlag(MODULE_ID, "avatarEmergenceUsed");
+        log("Summoner", `${actor.name}: Avatar Emergence reset (mana restored)`);
+      }
+    });
+
+    // Watch for focus drop on summoner_conjure (only if not in countdown mode)
     Hooks.on("updateActor", async (actor, changes) => {
       if (actor.type !== "character") return;
       if (!game.user.isGM) return;
@@ -158,8 +275,9 @@ export const SummonerFeatures = {
 
       const conjure = actor.getFlag(MODULE_ID, FLAG_CONJURE);
       if (!conjure) return;
+      // Don't banish if in Second Nature or Guardian Force countdown mode
+      if (conjure.secondNatureCountdown || conjure.guardianForceCountdown) return;
 
-      // Check if focus is still held
       const featureFocus = actor.getFlag(MODULE_ID, "featureFocus") || [];
       const hasFocus = featureFocus.some(f => f.key === FOCUS_KEY);
       if (!hasFocus) {
@@ -396,66 +514,136 @@ export const SummonerFeatures = {
 
   /**
    * Build HTML for the active summon stats + Banish button.
+   * Mirrors the Druid's Beast Form panel layout for consistency.
    */
   _buildSummonActiveHTML(conjure, actor) {
-    const speedParts = [];
     const summonActor = game.actors.get(conjure.summonActorId);
     const speed = summonActor?.system?.speed ?? 30;
-    speedParts.push(`${speed}'`);
     const sv = summonActor?.system?.speedValues || {};
-    if (sv.fly) speedParts.push(`Fly ${sv.fly}'`);
-    if (sv.swim) speedParts.push(`Swim ${sv.swim}'`);
-    if (sv.climb) speedParts.push(`Climb ${sv.climb}'`);
-
-    const actions = (summonActor?.system?.actions || []).map((a, i) => {
-      const dmgText = a.rollDamage
-        ? `${a.rollDamage}${a.flatDamage ? ` + ${a.flatDamage}` : ""} ${a.damageType !== "-" ? a.damageType : ""}`
-        : "";
-      return `
-      <div class="vce-summon-action" data-action-idx="${i}"
-        style="margin:4px 0; padding:6px 10px; border:1px solid #555; border-radius:4px; cursor:pointer;"
-        role="button" tabindex="0"
-        title="Click to use (Mysticism check)">
-        <strong>${a.name}</strong>
-        ${a.note ? `<span style="opacity:0.7; font-size:0.85em;"> — ${a.note}</span>` : ""}
-        ${dmgText ? `<br>Damage: ${dmgText}` : ""}
-        ${a.extraInfo ? `<br><em style="font-size:0.85em;">${a.extraInfo}</em>` : ""}
-      </div>`;
-    }).join("");
-
-    const abilities = (summonActor?.system?.abilities || []).map(a => `
-      <div style="margin:2px 0;">
-        <strong>${a.name}:</strong> <span style="font-size:0.9em;">${a.description}</span>
-      </div>
-    `).join("");
-
-    const immunities = conjure.summonImmunities?.length
-      ? conjure.summonImmunities.join(", ") : "None";
-
+    const size = summonActor?.system?.size || "medium";
+    const beingType = summonActor?.system?.beingType || "—";
+    const senses = summonActor?.system?.senses || "";
+    const immunities = summonActor?.system?.immunities || conjure.summonImmunities || [];
+    const weaknesses = summonActor?.system?.weaknesses || [];
     const hp = summonActor?.system?.health;
-    const hpStr = hp ? `${hp.value}/${hp.max}` : "—";
+    const hpStr = hp ? `${hp.value} / ${hp.max}` : "—";
 
-    return `
-      <div class="vce-bf-header" style="display:flex; align-items:center; gap:12px; padding:8px;">
-        <img src="${conjure.summonImg || "icons/svg/mystery-man.svg"}"
-          style="width:64px; height:64px; border:2px solid #888; border-radius:8px;" />
-        <div style="flex:1;">
-          <h2 style="margin:0;">${conjure.summonName}</h2>
-          <div style="font-size:0.9em; opacity:0.8;">
-            HD ${conjure.summonHD} | HP: ${hpStr} | Armor: ${conjure.summonArmor}
-          </div>
-          <div style="font-size:0.85em; opacity:0.7;">
-            Speed: ${speedParts.join(", ")} | Immunities: ${immunities}
+    // --- Header (portrait + tags + banish) ---
+    let html = `
+      <div class="vce-bf-header">
+        <img src="${conjure.summonImg || "icons/svg/mystery-man.svg"}" class="vce-bf-portrait"
+          alt="${conjure.summonName} portrait" />
+        <div class="vce-bf-info">
+          <h2 class="vce-bf-name">${conjure.summonName}</h2>
+          <div class="vce-bf-tags">
+            <span class="vce-bf-tag">HD ${conjure.summonHD}</span>
+            <span class="vce-bf-tag">${size}</span>
+            <span class="vce-bf-tag">${beingType}</span>
           </div>
         </div>
-        <button class="vce-summon-banish" title="Banish Summon"
-          style="padding:6px 12px; background:#8b0000; color:white; border:none; border-radius:4px; cursor:pointer;">
-          <i class="fas fa-times"></i> Banish
+        <button class="vce-summon-banish vce-bf-end" title="Banish Summon">
+          <i class="fas fa-times" aria-hidden="true"></i> Banish
         </button>
       </div>
-      ${actions ? `<div style="padding:0 8px;"><h3 style="margin:8px 0 4px;">Actions</h3>${actions}</div>` : ""}
-      ${abilities ? `<div style="padding:0 8px;"><h3 style="margin:8px 0 4px;">Abilities</h3>${abilities}</div>` : ""}
     `;
+
+    // --- HP Bar ---
+    const hpPct = hp ? Math.max(0, Math.min(100, (hp.value / hp.max) * 100)) : 100;
+    const hpColor = hpPct > 50 ? "#4a4" : hpPct > 25 ? "#ca4" : "#c44";
+    html += `
+      <div class="vce-bf-extras" style="padding:4px 8px;">
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong>HP:</strong>
+          <div style="flex:1; height:16px; background:#333; border-radius:8px; overflow:hidden; border:1px solid #555;">
+            <div style="width:${hpPct}%; height:100%; background:${hpColor}; transition:width 0.3s;"></div>
+          </div>
+          <span style="font-weight:bold; min-width:60px; text-align:right;">${hpStr}</span>
+        </div>
+      </div>
+    `;
+
+    // --- Armor + Speed (mirrors beast form layout) ---
+    html += `
+      <div class="vce-bf-stats-row">
+        <div class="armor-overlay vce-bf-armor-overlay">
+          <div class="armor-name">Armor</div>
+          <div class="armor-value">${summonActor?.system?.armor ?? conjure.summonArmor ?? 0}</div>
+        </div>
+        <div class="speed-stats-row">
+          <div class="speed-group">
+            <label class="speed-group-label">Crawl</label>
+            <div class="speed-group-cell"><span class="speed-group-input">${speed * 3}</span><span class="speed-group-unit">'</span></div>
+            <div class="speed-group-cell"><span class="speed-group-input speed-group-input-main">${speed}</span><span class="speed-group-unit">'</span></div>
+            <label class="speed-group-label">Travel</label>
+            <div class="speed-group-cell"><span class="speed-group-input">${Math.floor(speed / 5)}</span><span class="speed-group-unit">mi</span></div>
+            <label class="speed-group-speed-label">Speed</label>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Extra speeds + senses
+    const extraSpeeds = [];
+    if (sv.fly) extraSpeeds.push(`Fly ${sv.fly}'`);
+    if (sv.swim) extraSpeeds.push(`Swim ${sv.swim}'`);
+    if (sv.climb) extraSpeeds.push(`Climb ${sv.climb}'`);
+    if (sv.cling) extraSpeeds.push(`Cling ${sv.cling}'`);
+    if (extraSpeeds.length || senses) {
+      html += `<div class="vce-bf-extras">`;
+      if (extraSpeeds.length) html += `<span><strong>Movement:</strong> ${extraSpeeds.join(", ")}</span>`;
+      if (senses) html += `<span><strong>Senses:</strong> ${senses}</span>`;
+      html += `</div>`;
+    }
+
+    // --- Immunities / Weaknesses ---
+    if (immunities.length || weaknesses.length) {
+      html += `<div class="vce-bf-resists">`;
+      if (immunities.length) html += `<div class="vce-bf-resist"><strong>Immune:</strong> ${immunities.join(", ")}</div>`;
+      if (weaknesses.length) html += `<div class="vce-bf-resist"><strong>Weak:</strong> ${weaknesses.join(", ")}</div>`;
+      html += `</div>`;
+    }
+
+    // --- Actions (clickable — roll via Mysticism) ---
+    const actions = summonActor?.system?.actions || [];
+    if (actions.length > 0) {
+      html += `<div class="vce-bf-section"><h3 class="vce-bf-section-title">Actions</h3>`;
+      for (let i = 0; i < actions.length; i++) {
+        const a = actions[i];
+        const dmgParts = [];
+        if (a.rollDamage) dmgParts.push(a.rollDamage);
+        if (a.flatDamage) dmgParts.push(`+ ${a.flatDamage}`);
+        const dmgStr = dmgParts.length ? dmgParts.join(" ") : "";
+        const dTypeStr = a.damageType && a.damageType !== "-" ? ` ${a.damageType}` : "";
+        const rechargeStr = a.recharge ? ` <span style="opacity:0.6;">(${a.recharge})</span>` : "";
+
+        html += `
+          <div class="vce-bf-action vce-summon-action" data-action-idx="${i}"
+            role="button" tabindex="0" title="Click to use (Mysticism check)">
+            <div class="vce-bf-action-header">
+              <strong class="vce-bf-action-name">${a.name}</strong>${rechargeStr}
+              ${a.note ? `<span class="vce-bf-action-note">${a.note}</span>` : ""}
+            </div>
+            ${dmgStr ? `<div class="vce-bf-action-damage">${dmgStr}${dTypeStr}</div>` : ""}
+            ${a.extraInfo ? `<div class="vce-bf-action-extra">${a.extraInfo}</div>` : ""}
+          </div>`;
+      }
+      html += `</div>`;
+    }
+
+    // --- Abilities ---
+    const abilities = summonActor?.system?.abilities || [];
+    if (abilities.length > 0) {
+      html += `<div class="vce-bf-section"><h3 class="vce-bf-section-title">Abilities</h3>`;
+      for (const a of abilities) {
+        html += `
+          <div class="vce-bf-ability">
+            <strong>${a.name}:</strong> <span>${a.description}</span>
+          </div>`;
+      }
+      html += `</div>`;
+    }
+
+    return html;
   },
 
   /**
@@ -677,14 +865,43 @@ export const SummonerFeatures = {
       await this.banishSummon(actor, "Replaced by new summon");
     }
 
-    // Deduct mana (cost = HD)
+    // Avatar Emergence (L6): once per shift, conjure without mana cost
+    const features = getFeatures(actor);
     const cost = npcData.hd || 1;
     const currentMana = actor.system?.mana?.current ?? 0;
-    if (currentMana < cost) {
-      ui.notifications.error(`Not enough mana! Need ${cost}, have ${currentMana}.`);
-      return;
+    let freeConjure = false;
+
+    if (features?.summoner_avatarEmergence && !actor.getFlag(MODULE_ID, "avatarEmergenceUsed")) {
+      if (currentMana < cost) {
+        // Not enough mana — auto-use Avatar Emergence
+        freeConjure = true;
+      } else {
+        // Offer choice
+        freeConjure = await new Promise(resolve => {
+          new Dialog({
+            title: "Avatar Emergence",
+            content: `<p>Use <strong>Avatar Emergence</strong> to conjure ${npcData.name} for free? (Once per Shift)</p>
+              <p style="font-size:0.85em; opacity:0.7;">Otherwise costs ${cost} Mana.</p>`,
+            buttons: {
+              free: { icon: '<i class="fas fa-star"></i>', label: "Free (Avatar Emergence)", callback: () => resolve(true) },
+              mana: { icon: '<i class="fas fa-coins"></i>', label: `Pay ${cost} Mana`, callback: () => resolve(false) }
+            },
+            default: "free"
+          }).render(true);
+        });
+      }
     }
-    await actor.update({ "system.mana.current": currentMana - cost });
+
+    if (freeConjure) {
+      await actor.setFlag(MODULE_ID, "avatarEmergenceUsed", true);
+      log("Summoner", `${actor.name} used Avatar Emergence — free conjure`);
+    } else {
+      if (currentMana < cost) {
+        ui.notifications.error(`Not enough mana! Need ${cost}, have ${currentMana}.`);
+        return;
+      }
+      await actor.update({ "system.mana.current": currentMana - cost });
+    }
 
     // Get or import the source actor
     let sourceActorId = npcData.worldActorId;
@@ -735,22 +952,40 @@ export const SummonerFeatures = {
       return;
     }
 
-    // Acquire focus
-    const acquired = await FocusManager.acquireFeatureFocus(
-      actor, FOCUS_KEY, `Summon (${npcData.name})`, npcData.img || "icons/svg/mystery-man.svg"
-    );
-    if (!acquired) {
-      ui.notifications.warn("No focus slots available — summon cannot be maintained.");
-      await canvas.scene.deleteEmbeddedDocuments("Token", [tokenDoc.id]);
-      if (importedFromCompendium) {
-        const imp = game.actors.get(sourceActorId);
-        if (imp) try { await imp.delete(); } catch { /* permission */ }
+    // Second Nature (L4): choose Focus or Cd4 duration
+    let useSecondNature = false;
+    if (features?.summoner_secondNature) {
+      useSecondNature = await new Promise(resolve => {
+        new Dialog({
+          title: "Second Nature",
+          content: `<p>How should <strong>${npcData.name}</strong> be maintained?</p>`,
+          buttons: {
+            focus: { icon: '<i class="fas fa-brain"></i>', label: "Focus (1 Mana/round)", callback: () => resolve(false) },
+            countdown: { icon: '<i class="fas fa-hourglass-half"></i>', label: "Cd4 Rounds (no focus)", callback: () => resolve(true) }
+          },
+          default: "focus"
+        }).render(true);
+      });
+    }
+
+    if (!useSecondNature) {
+      // Normal: acquire focus
+      const acquired = await FocusManager.acquireFeatureFocus(
+        actor, FOCUS_KEY, `Summon (${npcData.name})`, npcData.img || "icons/svg/mystery-man.svg"
+      );
+      if (!acquired) {
+        ui.notifications.warn("No focus slots available — summon cannot be maintained.");
+        await canvas.scene.deleteEmbeddedDocuments("Token", [tokenDoc.id]);
+        if (importedFromCompendium) {
+          const imp = game.actors.get(sourceActorId);
+          if (imp) try { await imp.delete(); } catch { /* permission */ }
+        }
+        return;
       }
-      return;
     }
 
     // Store conjure state
-    await actor.setFlag(MODULE_ID, FLAG_CONJURE, {
+    const conjureState = {
       summonActorId: sourceActorId,
       summonTokenId: tokenDoc.id,
       summonName: npcData.name,
@@ -760,10 +995,11 @@ export const SummonerFeatures = {
       summonImmunities: npcData.immunities ?? [],
       importedFromCompendium,
       sceneId: canvas.scene.id
-    });
+    };
+    if (useSecondNature) conjureState.secondNatureCountdown = 4;
+    await actor.setFlag(MODULE_ID, FLAG_CONJURE, conjureState);
 
     // Apply Soulbonder if L2+
-    const features = getFeatures(actor);
     if (features?.summoner_soulbonder) {
       await this._applySoulbonder(actor, npcData);
     }
@@ -776,7 +1012,7 @@ export const SummonerFeatures = {
             <img src="${npcData.img || "icons/svg/mystery-man.svg"}" width="36" height="36"
               style="border:none; vertical-align:middle; margin-right:8px;">
             <strong>${actor.name}</strong> conjures <strong>${npcData.name}</strong>
-            (HD ${npcData.hd}, ${cost} Mana)
+            (HD ${npcData.hd}${freeConjure ? ", Avatar Emergence" : `, ${cost} Mana`}${useSecondNature ? ", Cd4 duration" : ""})
           </div>
         </section></div>
       </div>`,
@@ -993,7 +1229,7 @@ export const SummonerFeatures = {
         name: `Soulbonder: Armor (${summonData.name})`,
         icon: "icons/magic/defensive/shield-barrier-deflect-gold.webp",
         origin: `${MODULE_ID}.soulbonder`,
-        changes: [{ key: "system.bonuses.armor", mode: 2, value: String(armor) }],
+        changes: [{ key: "system.armorBonus", mode: 2, value: String(armor) }],
         disabled: false,
         transfer: true,
         flags: { [MODULE_ID]: { managed: true, [SOULBONDER_FLAG]: true } }
