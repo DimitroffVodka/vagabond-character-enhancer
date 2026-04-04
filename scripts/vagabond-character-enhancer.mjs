@@ -64,6 +64,7 @@ import { BeastCache } from "./polymorph/beast-cache.mjs";
 import { populateBeasts } from "./polymorph/populate-beasts.mjs";
 import { DrakenFeatures } from "./ancestry-features/draken.mjs";
 import { ImbueManager } from "./spell-features/imbue-manager.mjs";
+import { BlessManager } from "./spell-features/bless-manager.mjs";
 import { SummonerFeatures } from "./class-features/summoner.mjs";
 
 /* -------------------------------------------- */
@@ -204,6 +205,18 @@ Hooks.once("ready", async () => {
 
       let result = origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice);
 
+      // Silver weakness fix: the system skips metal checks for typeless ("-") damage.
+      // If the weapon is silvered and the target is weak to silver, bypass armor.
+      // (Extra weakness die is added in the rollDamage pre-hook, not here.)
+      if (damageType === "-" && attackingWeapon?.system?.metal) {
+        const weaponMetal = attackingWeapon.system.metal;
+        const weaknesses = actor.system?.weaknesses || [];
+        if (weaknesses.includes(weaponMetal)) {
+          result = damage; // Bypass armor: restore full damage
+          log("Bless", `Silver weakness on ${actor.name}: armor bypassed (${weaponMetal})`);
+        }
+      }
+
       // Cast attacks bypass armor unless target wears Orichalcum
       const origAttackType = _directSourceAttackType || _saveSourceAttackType;
       if (origAttackType === 'castClose' || origAttackType === 'castRanged') {
@@ -224,6 +237,11 @@ Hooks.once("ready", async () => {
       const apexCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
       HunterFeatures.onCalculateFinalDamage(apexCtx);
       result = apexCtx.result;
+
+      // Widdershins: hex target is Weak to witch's damage (bypass armor, not immunity)
+      const widdCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
+      WitchFeatures.onCalculateFinalDamage(widdCtx);
+      result = widdCtx.result;
 
       const needsRageDR = actor.system?.incomingDamageReductionPerDie > 0
         && actor.statuses?.has("berserk")
@@ -347,9 +365,30 @@ Hooks.once("ready", async () => {
           }
         }
 
+        // Silver/metal weakness: add extra damage die if target is weak to weapon's metal
+        let silverOrigDamage;
+        if (this.system?.metal && this.system.metal !== "none" && this.system.metal !== "common") {
+          const targets = Array.from(game.user.targets);
+          const weakTarget = targets.find(t => {
+            const weaknesses = t.actor?.system?.weaknesses || [];
+            return weaknesses.includes(this.system.metal);
+          });
+          if (weakTarget) {
+            const formula = this.system.currentDamage || "d6";
+            const dieSize = VagabondDamageHelper._extractDieSize?.(formula) || 6;
+            silverOrigDamage = this.system.currentDamage;
+            this.system.currentDamage = `${formula} + 1d${dieSize}`;
+            log("Bless", `${actor.name}: +1d${dieSize} weakness die vs ${weakTarget.name} (${this.system.metal})`);
+          }
+        }
+
         try {
           return await origRollDamage.call(this, actor, isCritical, statKey);
         } finally {
+          // Restore silver-modified damage
+          if (silverOrigDamage !== undefined) {
+            this.system.currentDamage = silverOrigDamage;
+          }
           // Restore Exalt-modified damage
           if (exaltOrigDamage !== undefined) {
             this.system.currentDamage = exaltOrigDamage;
@@ -489,21 +528,36 @@ Hooks.once("ready", async () => {
       _saveSourceActorId = button.dataset.actorId || null;
       _damageSourceActorId = button.dataset.actorId || null;
       _saveSourceAttackType = button.dataset.attackType || null;
-      // Look up original NPC action attackType (before system normalizes castClose/castRanged)
       const saveSourceActor = game.actors.get(button.dataset.actorId);
       const saveActionIdx = button.dataset.actionIndex;
       const saveAction = (saveActionIdx !== '' && saveActionIdx != null)
         ? saveSourceActor?.system?.actions?.[parseInt(saveActionIdx)] : null;
       if (saveAction?.attackType?.startsWith('cast')) _saveSourceAttackType = saveAction.attackType;
+
+      // Bless d4: apply BEFORE origHandleSaveRoll reads the difficulty
+      // Resolve target actors from button's stored targets
+      const targetsData = button.dataset.targets ? JSON.parse(button.dataset.targets) : [];
+      const saveType = button.dataset.saveType;
+      const _blessContexts = [];
+      for (const t of targetsData) {
+        const targetActor = t.actorId ? game.actors.get(t.actorId) : null;
+        if (!targetActor) continue;
+        const ctx = { actor: targetActor, saveType };
+        await BlessManager.onPreRollSave(ctx);
+        if (ctx._blessApplied) _blessContexts.push(ctx);
+      }
+
       try { return await origHandleSaveRoll.call(this, button, event); }
-      finally { _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null; }
+      finally {
+        for (const ctx of _blessContexts) BlessManager.onPostRollSave(ctx);
+        _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
+      }
     };
     const origHandleSaveReminderRoll = VagabondDamageHelper.handleSaveReminderRoll;
     VagabondDamageHelper.handleSaveReminderRoll = async function (button, event = null) {
       _saveSourceActorId = button.dataset.actorId || null;
       _damageSourceActorId = button.dataset.actorId || null;
       _saveSourceAttackType = button.dataset.attackType || null;
-      // Look up original NPC action attackType (before system normalizes castClose/castRanged)
       const saveReminderActor = game.actors.get(button.dataset.actorId);
       const saveReminderIdx = button.dataset.actionIndex;
       const saveReminderAction = (saveReminderIdx !== '' && saveReminderIdx != null)
@@ -736,6 +790,10 @@ Hooks.once("ready", async () => {
     setDraconicResilience: (actor) => DrakenFeatures.promptResilienceChoice(actor),
     imbue: ImbueManager,
     clearImbue: (actor) => ImbueManager.clearImbue(actor),
+    witch: WitchFeatures,
+    hex: (actor, targetId, targetName, targetImg) => WitchFeatures.applyHex(actor, targetId, targetName, targetImg),
+    unhex: (actor, targetId) => WitchFeatures.removeHex(actor, targetId),
+    betwixt: (actor) => WitchFeatures.useBetwixt(actor),
     summoner: SummonerFeatures,
     conjure: (actor) => SummonerFeatures.showConjureDialog(actor),
     banish: (actor) => SummonerFeatures.banishSummon(actor, "Manual"),
@@ -849,6 +907,7 @@ Hooks.once("ready", async () => {
   FocusManager.registerHooks();
   DrakenFeatures.registerHooks();
   ImbueManager.registerHooks();
+  BlessManager.registerHooks();
   SummonerFeatures.registerHooks();
 
   // Patch character sheet for Beast Form panel injection

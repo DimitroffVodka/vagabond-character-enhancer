@@ -47,13 +47,10 @@ const AURA_SPELLS = {
     icon: "icons/magic/holy/prayer-hands-glowing-yellow.webp",
     templateColor: "#87CEEB",
     templateBorder: "#4682B4",
-    description: "+d4 bonus to Saves",
+    description: "+d4 bonus to Saves (rolled per save)",
     fx: "jb2a.bless",
-    changes: [
-      { key: "system.saves.reflex.bonus", mode: 2, value: "1" },
-      { key: "system.saves.endure.bonus", mode: 2, value: "1" },
-      { key: "system.saves.will.bonus", mode: 2, value: "1" }
-    ]
+    // d4 save bonus is handled by BlessManager.onPreRollSave, not via AE changes
+    changes: []
   }
 };
 
@@ -116,10 +113,10 @@ export const AuraManager = {
     });
 
     // Auto-deactivate aura when focus is dropped
-    Hooks.on("updateActor", (actor, changes) => {
+    Hooks.on("updateActor", async (actor, changes) => {
       if (!game.user.isGM) return;
       if (changes.system?.focus?.spellIds !== undefined) {
-        AuraManager._checkFocusDrop(actor);
+        await AuraManager._checkFocusDrop(actor);
       }
     });
 
@@ -242,8 +239,14 @@ export const AuraManager = {
 
     const spellDef = AURA_SPELLS[auraState.spellKey];
 
-    // Stop Sequencer FX
+    // Stop Sequencer FX (both by actor ID and by token source)
     AuraManager._stopAuraFX(actor);
+    if (typeof Sequencer !== "undefined" && auraState.tokenId) {
+      try {
+        const tokenUuid = `Scene.${canvas.scene.id}.Token.${auraState.tokenId}`;
+        Sequencer.EffectManager.endEffects({ source: tokenUuid });
+      } catch { /* ignore */ }
+    }
 
     // Delete the template
     const template = canvas.scene.templates.get(auraState.templateId);
@@ -461,18 +464,25 @@ export const AuraManager = {
    * Apply an aura buff AE to a target actor.
    */
   async _applyBuff(targetActor, casterActor, spellDef) {
+    const flags = {
+      [MODULE_ID]: {
+        managed: true,
+        auraBuff: casterActor.id,
+        auraSpell: spellDef.label
+      }
+    };
+    // Bless aura needs the blessAE flag so the d4 save bonus is detected
+    if (spellDef.label === "Bless") {
+      flags[MODULE_ID].blessAE = true;
+    }
+
     const aeData = {
       name: `${spellDef.label} (Aura: ${casterActor.name})`,
       icon: spellDef.icon,
       origin: `Actor.${casterActor.id}`,
+      description: spellDef.description || "",
       disabled: false,
-      flags: {
-        [MODULE_ID]: {
-          managed: true,
-          auraBuff: casterActor.id,
-          auraSpell: spellDef.label
-        }
-      },
+      flags,
       changes: spellDef.changes
     };
 
@@ -522,6 +532,10 @@ export const AuraManager = {
       if (auraState) {
         await AuraManager.deactivate(actor);
       }
+    }
+    // Safety net: kill any lingering aura Sequencer effects
+    if (typeof Sequencer !== "undefined") {
+      try { Sequencer.EffectManager.endEffects({ name: /^vce-aura-/ }); } catch { /* ignore */ }
     }
   },
 
@@ -631,8 +645,15 @@ export const AuraManager = {
    * The system embeds delivery type in the chat card DOM:
    *   data-delivery-type="aura" data-delivery-text="10' Aura"
    */
+  /** Track processed aura cast message IDs to prevent duplicate activation */
+  _processedAuraCasts: new Set(),
+
   async _detectAuraCast(message, el) {
     if (!game.user.isGM) return;
+
+    // De-duplicate: renderChatMessage can fire multiple times for the same message
+    if (this._processedAuraCasts.has(message.id)) return;
+    this._processedAuraCasts.add(message.id);
 
     // Check if this message has an aura delivery tag
     const deliveryTag = el.querySelector('[data-delivery-type="aura"]');

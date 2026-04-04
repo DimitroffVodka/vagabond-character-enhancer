@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.1.7
+
+### New Features — Witch Class
+- **Hex (L1):** Mark targets as Hexed via button on spell chat cards. Tracks hex slots (max = ceil(level/2)), auto-removes oldest when over capacity. "Hexed (WitchName)" AE visible on target.
+- **Things Betwixt (L4):** Once per Scene, become invisible until next Turn. Requires Focus. Automatically removed on round change. API: `game.vagabondCharacterEnhancer.betwixt(actor)`.
+- **Widdershins (L8):** Hexed targets are Weak to the witch's damage — armor bypassed in calculateFinalDamage. Does not ignore Immunity.
+
+### New Features — Bless Spell
+- **Bless Mode Selection:** After casting Bless, chat card shows "Bless Allies (+d4 Saves)" and "Bless Weapons (Silvered)" buttons.
+- **Bless Allies — Actual d4 per Save:** Rolls a real 1d4 and adds it to the save roll formula (visible as a die, like Favor's d6). Patches the roll builder temporarily per save.
+- **Bless Weapons — Silvered:** Sets equipped weapon metal to "silver" for the duration. Restores original metal when Bless expires.
+- **Duration Tracking:** Bless AEs auto-expire on round change unless the caster is Focusing on Bless. Aura Bless managed by AuraManager lifecycle.
+- **Silver Weakness Fix:** The system skips metal weakness checks for typeless ("-") damage. Module now handles this: silvered weapons bypass armor on silver-weak targets, and the extra weakness die is added to the visible damage roll formula.
+
+### Bug Fixes
+- Fixed aura template duplication (4x templates on cast) — added message ID de-duplication guard.
+- Fixed stuck Sequencer aura FX — deactivate now stops effects by both name and token source, plus safety net regex cleanup.
+- Fixed `_checkFocusDrop` not awaited, causing incomplete aura cleanup.
+- Bless aura AEs now include `blessAE` flag for d4 save detection.
+
+### API
+- `game.vagabondCharacterEnhancer.hex(actor, targetId, targetName, targetImg)` — Apply hex
+- `game.vagabondCharacterEnhancer.unhex(actor, targetId)` — Remove hex
+- `game.vagabondCharacterEnhancer.betwixt(actor)` — Use Things Betwixt
+
 ## v0.1.6
 
 ### New Features
