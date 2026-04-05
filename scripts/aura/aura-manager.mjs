@@ -48,7 +48,7 @@ const AURA_SPELLS = {
     templateColor: "#87CEEB",
     templateBorder: "#4682B4",
     description: "+d4 bonus to Saves (rolled per save)",
-    fx: "jb2a.bless",
+    fx: null, // jb2a.bless asset doesn't exist in standard JB2A
     // d4 save bonus is handled by BlessManager.onPreRollSave, not via AE changes
     changes: []
   }
@@ -74,7 +74,7 @@ export const AuraManager = {
     if (AuraManager._hooksRegistered) return;
 
     // Move aura templates when tokens move
-    // Pass movedTokenId + new position so the scan uses committed positions
+    // Move aura templates when tokens move + rescan buffs
     Hooks.on("updateToken", (tokenDoc, changes, options, userId) => {
       if (changes.x !== undefined || changes.y !== undefined) {
         const newPos = {
@@ -95,10 +95,28 @@ export const AuraManager = {
     // Clean up auras on combat end
     Hooks.on("deleteCombat", () => AuraManager._cleanupAllAuras());
 
+    // Round change: deactivate unfocused auras (spell effects expire after 1 turn without focus)
+    Hooks.on("updateCombat", async (combat, changes) => {
+      if (!("round" in changes)) return;
+      if (!game.user.isGM && game.users.find(u => u.isGM && u.active)) return;
+
+      for (const actor of game.actors.filter(a => a.type === "character")) {
+        const auraState = actor.getFlag(MODULE_ID, "activeAura");
+        if (!auraState?.focusSpellId) continue;
+
+        // Check if the caster is focusing on the aura spell
+        const focusedIds = actor.system?.focus?.spellIds || [];
+        if (!focusedIds.includes(auraState.focusSpellId)) {
+          log("AuraManager", `${actor.name}'s aura expired — not focusing on spell`);
+          await AuraManager.deactivate(actor);
+        }
+      }
+    });
+
     // Clean up aura templates when scene changes
     Hooks.on("canvasReady", () => AuraManager._restoreAuras());
 
-    // Chat button handlers + auto-detect aura spell casts
+    // Chat button handlers
     Hooks.on("renderChatMessage", (message, html) => {
       const el = html instanceof jQuery ? html[0] : html;
       el.querySelectorAll("[data-action='vce-aura-activate']").forEach(btn => {
@@ -107,9 +125,11 @@ export const AuraManager = {
       el.querySelectorAll("[data-action='vce-aura-deactivate']").forEach(btn => {
         btn.addEventListener("click", (ev) => AuraManager._onDeactivateClick(ev));
       });
+    });
 
-      // Auto-activate aura when a spell is cast with Aura delivery
-      AuraManager._detectAuraCast(message, el);
+    // Auto-detect aura spell casts via createChatMessage (reliable in Foundry v13)
+    Hooks.on("createChatMessage", async (message) => {
+      await AuraManager._detectAuraCast(message);
     });
 
     // Auto-deactivate aura when focus is dropped
@@ -149,48 +169,74 @@ export const AuraManager = {
       return;
     }
 
-    // Find the caster's token on the current scene
-    const token = AuraManager._getCasterToken(actor);
-    if (!token) {
-      ui.notifications.warn(`No token found for ${actor.name} on the current scene.`);
-      return;
-    }
-
-    // Create the measured template
-    const templateData = {
-      t: "circle",
-      x: token.center.x,
-      y: token.center.y,
-      distance: radius,
-      fillColor: spellDef.templateColor,
-      borderColor: spellDef.templateBorder,
-      fillAlpha: 0.15,
-      flags: {
-        [MODULE_ID]: {
-          aura: true,
-          actorId: actor.id,
-          tokenId: token.id,
-          spellKey: spellKey,
-          radius: radius
-        }
+    // Determine the AE changes based on spell + mode (for Bless)
+    let aeChanges = [...(spellDef.changes || [])];
+    let aeName = `${spellDef.label} Aura`;
+    const aeFlags = {
+      [MODULE_ID]: {
+        managed: true,
+        auraSpell: spellDef.label,
+        auraBuff: actor.id
       }
     };
 
-    const [template] = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
+    // Bless: apply mode-specific changes
+    if (spellKey === "bless") {
+      const mode = AuraManager._blessAuraMode || "allies";
+      if (mode === "weapons") {
+        aeName = "Bless: Silvered Aura";
+        aeFlags[MODULE_ID].blessSilverAE = true;
+        // Note: Silver metal change on weapons can't be done via AE changes.
+        // We flag it and handle weapon silvering when the aura effect is applied.
+      } else {
+        aeFlags[MODULE_ID].blessAE = true;
+      }
+    }
 
-    // Store aura state on the actor
-    await actor.setFlag(MODULE_ID, "activeAura", {
+    // Create an Aura Effects-compatible AE on the caster
+    // The auraeffects module handles propagation to nearby tokens automatically
+    const aeData = {
+      name: aeName,
+      icon: spellDef.icon,
+      origin: `Actor.${actor.id}`,
+      disabled: false,
+      flags: aeFlags,
+      changes: aeChanges
+    };
+
+    const [createdAE] = await actor.createEmbeddedDocuments("ActiveEffect", [aeData]);
+
+    // Find the caster's token on the current scene
+    const token = AuraManager._getCasterToken(actor);
+
+    // Store aura state on the actor (for focus tracking + deactivate)
+    const auraData = {
       spellKey,
-      templateId: template.id,
+      aeId: createdAE?.id,
       radius,
-      tokenId: token.id
-    });
+      tokenId: token?.id
+    };
+    // Store Bless mode so _applyBuff can read it on subsequent rescans
+    if (spellKey === "bless") {
+      auraData.blessMode = AuraManager._blessAuraMode || "allies";
+    }
+    await actor.setFlag(MODULE_ID, "activeAura", auraData);
 
-    // Play Sequencer FX (if available)
-    AuraManager._playAuraFX(token, spellDef, radius);
-
-    // Apply buffs to allies in range
-    await AuraManager._applyBuffsInRange(actor, token, spellKey, radius);
+    if (token) {
+      // Create template + apply buffs to allies in range
+      const [template] = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [{
+        t: "circle",
+        x: token.center.x, y: token.center.y,
+        distance: radius,
+        fillColor: spellDef.templateColor,
+        borderColor: spellDef.templateBorder,
+        fillAlpha: 0.15,
+        flags: { [MODULE_ID]: { aura: true, actorId: actor.id, tokenId: token.id, spellKey, radius } }
+      }]);
+      await actor.setFlag(MODULE_ID, "activeAura.templateId", template?.id);
+      AuraManager._playAuraFX(token, spellDef, radius);
+      await AuraManager._applyBuffsInRange(actor, token, spellKey, radius);
+    }
 
     // Post chat notification
     ChatMessage.create({
@@ -239,22 +285,28 @@ export const AuraManager = {
 
     const spellDef = AURA_SPELLS[auraState.spellKey];
 
-    // Stop Sequencer FX (both by actor ID and by token source)
+    // Remove the aura AE from the caster (Aura Effects module handles propagation cleanup)
+    if (auraState.aeId) {
+      const ae = actor.effects.get(auraState.aeId);
+      if (ae) {
+        try { await ae.delete(); } catch { /* permission */ }
+      }
+    }
+
+    // Legacy cleanup: stop FX, delete template, remove manual buffs
     AuraManager._stopAuraFX(actor);
     if (typeof Sequencer !== "undefined" && auraState.tokenId) {
       try {
-        const tokenUuid = `Scene.${canvas.scene.id}.Token.${auraState.tokenId}`;
+        const tokenUuid = `Scene.${canvas.scene?.id}.Token.${auraState.tokenId}`;
         Sequencer.EffectManager.endEffects({ source: tokenUuid });
       } catch { /* ignore */ }
     }
-
-    // Delete the template
-    const template = canvas.scene.templates.get(auraState.templateId);
-    if (template) {
-      await template.delete();
+    if (auraState.templateId) {
+      const template = canvas.scene?.templates?.get(auraState.templateId);
+      if (template) {
+        try { await template.delete(); } catch { /* ignore */ }
+      }
     }
-
-    // Remove all aura buffs from allies
     await AuraManager._removeAllBuffs(actor);
 
     // Clear the flag
@@ -415,7 +467,6 @@ export const AuraManager = {
     const alliesInRange = new Set();
 
     for (const token of allTokens) {
-      if (token.actor?.id === casterActor.id) continue;
       if (token.actor?.type !== "character") continue;
 
       // Use override position if this token just moved
@@ -438,9 +489,11 @@ export const AuraManager = {
       }
     }
 
-    // Apply buffs to allies in range, remove from those out of range
+    // Apply buffs to allies in range (including caster), remove from those out of range
+    // Caster is always in range of their own aura
+    alliesInRange.add(casterActor.id);
     for (const token of allTokens) {
-      if (!token.actor || token.actor.id === casterActor.id) continue;
+      if (!token.actor) continue;
       if (token.actor.type !== "character") continue;
 
       const actorId = token.actor.id;
@@ -453,8 +506,11 @@ export const AuraManager = {
         await AuraManager._applyBuff(token.actor, casterActor, spellDef);
         log("AuraManager", `${token.actor.name} entered ${spellDef.label} aura from ${casterActor.name}`);
       } else if (!alliesInRange.has(actorId) && hasAuraBuff) {
-        // Left aura — remove buff
-        await hasAuraBuff.delete();
+        // Left aura — remove buff + restore silvered weapons if Bless Weapons
+        if (hasAuraBuff.getFlag(MODULE_ID, "blessSilverAE")) {
+          await AuraManager._restoreSilveredWeapons(token.actor);
+        }
+        try { await hasAuraBuff.delete(); } catch { /* already deleted */ }
         log("AuraManager", `${token.actor.name} left ${spellDef.label} aura from ${casterActor.name}`);
       }
     }
@@ -471,8 +527,43 @@ export const AuraManager = {
         auraSpell: spellDef.label
       }
     };
-    // Bless aura needs the blessAE flag so the d4 save bonus is detected
+    // Bless aura: apply based on chosen mode stored in caster's activeAura flag
     if (spellDef.label === "Bless") {
+      const auraState = casterActor.getFlag(MODULE_ID, "activeAura");
+      const mode = auraState?.blessMode || AuraManager._blessAuraMode || "allies";
+      if (mode === "weapons") {
+        // Silver the target's equipped weapons
+        flags[MODULE_ID].blessSilverAE = true;
+        try {
+          const weapons = targetActor.items.filter(i => {
+            const isWeapon = i.type === "weapon" || (i.type === "equipment" && i.system.equipmentType === "weapon");
+            return isWeapon && i.system.equipped;
+          });
+          for (const weapon of weapons) {
+            const origMetal = weapon.system.metal || "";
+            if (origMetal !== "silver") {
+              await weapon.update({
+                "system.metal": "silver",
+                [`flags.${MODULE_ID}.blessOrigMetal`]: origMetal
+              });
+            }
+          }
+          const aeData = {
+            name: `Bless: Silvered (Aura: ${casterActor.name})`,
+            icon: "icons/commodities/metal/ingot-silver.webp",
+            origin: `Actor.${casterActor.id}`,
+            description: "Weapons count as Silvered",
+            disabled: false,
+            flags,
+            changes: []
+          };
+          await targetActor.createEmbeddedDocuments("ActiveEffect", [aeData]);
+        } catch (e) {
+          log("AuraManager", `Could not silver ${targetActor.name}'s weapons (permission): ${e.message}`);
+        }
+        return;
+      }
+      // Allies mode: add blessAE flag for d4 save detection
       flags[MODULE_ID].blessAE = true;
     }
 
@@ -494,28 +585,48 @@ export const AuraManager = {
    * Checks both canvas token actors (for unlinked tokens) and game.actors.
    */
   async _removeAllBuffs(casterActor) {
-    // Check canvas tokens first (catches unlinked token actors)
+    const allActors = new Set();
+
+    // Collect actors from canvas tokens + game.actors
     if (canvas.tokens?.placeables) {
       for (const token of canvas.tokens.placeables) {
-        if (!token.actor) continue;
-        const auraBuff = token.actor.effects.find(e =>
-          e.getFlag(MODULE_ID, "auraBuff") === casterActor.id
-        );
-        if (auraBuff) {
-          await auraBuff.delete();
-          log("AuraManager", `Removed ${casterActor.name}'s aura buff from ${token.actor.name} (token)`);
-        }
+        if (token.actor) allActors.add(token.actor);
       }
     }
-    // Also check linked game.actors as fallback
-    for (const actor of game.actors) {
+    for (const actor of game.actors) allActors.add(actor);
+
+    for (const actor of allActors) {
       const auraBuff = actor.effects.find(e =>
         e.getFlag(MODULE_ID, "auraBuff") === casterActor.id
       );
-      if (auraBuff) {
-        await auraBuff.delete();
-        log("AuraManager", `Removed ${casterActor.name}'s aura buff from ${actor.name}`);
+      if (!auraBuff) continue;
+
+      // Restore silvered weapons before deleting the buff AE
+      if (auraBuff.getFlag(MODULE_ID, "blessSilverAE")) {
+        await AuraManager._restoreSilveredWeapons(actor);
       }
+
+      try { await auraBuff.delete(); } catch { /* already deleted */ }
+      log("AuraManager", `Removed ${casterActor.name}'s aura buff from ${actor.name}`);
+    }
+  },
+
+  /**
+   * Restore silvered weapons to their original metal on an actor.
+   */
+  async _restoreSilveredWeapons(actor) {
+    try {
+      for (const weapon of actor.items) {
+        const origMetal = weapon.getFlag(MODULE_ID, "blessOrigMetal");
+        if (origMetal === undefined) continue;
+        await weapon.update({
+          "system.metal": origMetal || "",
+          [`flags.${MODULE_ID}.-=blessOrigMetal`]: null
+        });
+        log("AuraManager", `Restored ${weapon.name} metal to "${origMetal}" on ${actor.name}`);
+      }
+    } catch (e) {
+      log("AuraManager", `Could not restore weapons on ${actor.name}: ${e.message}`);
     }
   },
 
@@ -535,7 +646,7 @@ export const AuraManager = {
     }
     // Safety net: kill any lingering aura Sequencer effects
     if (typeof Sequencer !== "undefined") {
-      try { Sequencer.EffectManager.endEffects({ name: /^vce-aura-/ }); } catch { /* ignore */ }
+      try { Sequencer.EffectManager.endEffects({ name: "vce-aura" }); } catch { /* ignore */ }
     }
   },
 
@@ -648,16 +759,16 @@ export const AuraManager = {
   /** Track processed aura cast message IDs to prevent duplicate activation */
   _processedAuraCasts: new Set(),
 
-  async _detectAuraCast(message, el) {
+  async _detectAuraCast(message) {
     if (!game.user.isGM) return;
 
-    // De-duplicate: renderChatMessage can fire multiple times for the same message
+    // De-duplicate
     if (this._processedAuraCasts.has(message.id)) return;
     this._processedAuraCasts.add(message.id);
 
-    // Check if this message has an aura delivery tag
-    const deliveryTag = el.querySelector('[data-delivery-type="aura"]');
-    if (!deliveryTag) return;
+    // Check if this message has aura delivery (from message content string)
+    const content = message.content ?? "";
+    if (!content.includes('data-delivery-type="aura"')) return;
 
     // Get the caster from message flags
     const actorId = message.flags?.vagabond?.actorId;
@@ -678,15 +789,14 @@ export const AuraManager = {
     const existing = actor.getFlag(MODULE_ID, "activeAura");
     if (existing) return;
 
-    // Parse radius from delivery text (e.g., "10' Aura" or "15' Aura")
-    const deliveryText = deliveryTag.dataset.deliveryText || "";
-    const radiusMatch = deliveryText.match(/(\d+)'/);
+    // Parse radius from content (e.g., data-delivery-text="10' Aura")
+    const radiusMatch = content.match(/data-delivery-text="(\d+)'/);
     const radius = radiusMatch ? parseInt(radiusMatch[1]) : 10;
 
     // Store the spell ID so we can track focus
     log("AuraManager", `Auto-detected ${spell.name} cast as ${radius}' Aura by ${actor.name}`);
 
-    // Activate the aura
+    // Activate the aura (for Bless, mode defaults to "allies" — player can change via chat card)
     await AuraManager.activate(actor, spellKey, radius);
 
     // Store the focused spell ID for focus tracking

@@ -49,6 +49,88 @@ export const BlessManager = {
       }, 50);
     });
 
+    // GM: handle Bless requests from players via chat message flags
+    Hooks.on("createChatMessage", async (message) => {
+      if (!game.user.isGM) return;
+      const flags = message.flags?.[MODULE_ID];
+      if (!flags) return;
+
+      // Aura mode selection: player chose allies/weapons for their Bless aura
+      if (flags.blessAuraMode) {
+        const caster = game.actors.get(flags.casterId);
+        if (caster) await this._setBlessAuraMode(caster, flags.blessMode);
+        return;
+      }
+
+      // Non-aura Bless request: player wants to apply Bless directly
+      if (flags.blessRequest) {
+        const caster = game.actors.get(flags.casterId);
+        if (!caster) return;
+        const mode = flags.blessMode;
+        const targets = flags.targets || [];
+        const targetNames = targets.map(t => t.actorName).join(", ");
+        const modeLabel = mode === "allies" ? "+d4 Saves" : "Silvered Weapons";
+
+        const confirmed = await Dialog.confirm({
+          title: "Bless Request",
+          content: `<p><strong>${caster.name}</strong> wants to cast Bless (${modeLabel}) on:</p>
+            <p><strong>${targetNames}</strong></p>
+            <p>Apply the effect?</p>`,
+          yes: () => true,
+          no: () => false,
+          defaultYes: true
+        });
+
+        if (confirmed) {
+          if (mode === "allies") await this._applyBlessAllies(caster, targets);
+          else if (mode === "weapons") await this._applyBlessWeapons(caster, targets);
+        }
+      }
+    });
+
+    // Watch for Bless Silver AE deletion — restore weapon metals
+    Hooks.on("deleteActiveEffect", async (effect) => {
+      if (!effect.getFlag(MODULE_ID, BLESS_SILVER_FLAG)) return;
+      const actor = effect.parent;
+      if (!actor || actor.documentName !== "Actor") return;
+      if (!actor.isOwner && !game.user.isGM) return; // Only owner/GM can restore
+      try {
+        for (const weapon of actor.items) {
+          const origMetal = weapon.getFlag(MODULE_ID, "blessOrigMetal");
+          if (origMetal === undefined) continue;
+          await weapon.update({
+            "system.metal": origMetal || "",
+            [`flags.${MODULE_ID}.-=blessOrigMetal`]: null
+          });
+          log("Bless", `Restored ${weapon.name} metal to "${origMetal}" on ${actor.name}`);
+        }
+      } catch (e) {
+        log("Bless", `Could not restore weapons on ${actor.name}: ${e.message}`);
+      }
+    });
+
+    // Also watch for Bless AE deletion from Aura Effects module (fromAura flag)
+    Hooks.on("deleteActiveEffect", async (effect) => {
+      if (!effect.flags?.auraeffects?.fromAura) return;
+      if (!effect.name?.includes("Silvered")) return;
+      const actor = effect.parent;
+      if (!actor || actor.documentName !== "Actor") return;
+      if (!actor.isOwner && !game.user.isGM) return;
+      try {
+        for (const weapon of actor.items) {
+          const origMetal = weapon.getFlag(MODULE_ID, "blessOrigMetal");
+          if (origMetal === undefined) continue;
+          await weapon.update({
+            "system.metal": origMetal || "",
+            [`flags.${MODULE_ID}.-=blessOrigMetal`]: null
+          });
+          log("Bless", `Restored ${weapon.name} metal to "${origMetal}" on ${actor.name} (aura effect removed)`);
+        }
+      } catch (e) {
+        log("Bless", `Could not restore weapons on ${actor.name}: ${e.message}`);
+      }
+    });
+
     // Round change: remove Bless AEs if caster is NOT focusing on Bless
     Hooks.on("updateCombat", async (combat, changes) => {
       if (!("round" in changes)) return;
@@ -106,8 +188,11 @@ export const BlessManager = {
    * @param {object} ctx - { actor, saveType }
    */
   async onPreRollSave(ctx) {
+    // Check for Bless buff from: direct cast, our aura, or Aura Effects module propagation
     const blessAE = ctx.actor.effects.find(e =>
-      e.getFlag(MODULE_ID, BLESS_AE_FLAG) || e.getFlag(MODULE_ID, "auraSpell") === "Bless"
+      e.getFlag(MODULE_ID, BLESS_AE_FLAG)
+      || e.getFlag(MODULE_ID, "auraSpell") === "Bless"
+      || (e.flags?.auraeffects?.fromAura && e.name?.includes("Bless") && !e.name?.includes("Silver"))
     );
     if (!blessAE || blessAE.disabled) return;
 
@@ -165,18 +250,21 @@ export const BlessManager = {
 
     const targets = message.flags?.vagabond?.targetsAtRollTime || [];
     const targetsJson = JSON.stringify(targets).replace(/"/g, "&quot;");
+    const isAura = content.includes('data-delivery-type="aura"');
 
     const btnHtml = `<div class="vce-bless-actions" style="margin-top:0.5rem; text-align:center;">
       <div class="save-buttons-row">
-        <button class="vagabond-save-button" data-vagabond-button="true"
+        <button class="vce-bless-btn" data-vagabond-button="true"
           data-action="vce-bless-mode" data-mode="allies"
-          data-actor-id="${actorId}" data-targets="${targetsJson}">
+          data-actor-id="${actorId}" data-targets="${targetsJson}" data-is-aura="${isAura}"
+          style="padding:4px 12px; margin:2px; border-radius:4px; cursor:pointer;">
           <i class="fas fa-shield-alt" style="color:#87CEEB;"></i> Bless Allies (+d4 Saves)
         </button>
-        <button class="vagabond-save-button" data-vagabond-button="true"
+        <button class="vce-bless-btn" data-vagabond-button="true"
           data-action="vce-bless-mode" data-mode="weapons"
-          data-actor-id="${actorId}" data-targets="${targetsJson}">
-          <i class="fas fa-sword" style="color:#C0C0C0;"></i> Bless Weapons (Silvered)
+          data-actor-id="${actorId}" data-targets="${targetsJson}" data-is-aura="${isAura}"
+          style="padding:4px 12px; margin:2px; border-radius:4px; cursor:pointer;">
+          <i class="fas fa-hammer" style="color:#C0C0C0;"></i> Bless Weapons (Silvered)
         </button>
       </div>
     </div>`;
@@ -191,8 +279,12 @@ export const BlessManager = {
       newContent = content + btnHtml;
     }
 
-    await message.update({ content: newContent });
-    log("Bless", `Injected Bless mode buttons for ${actor.name}`);
+    try {
+      await message.update({ content: newContent });
+      log("Bless", `Injected Bless mode buttons for ${actor.name}`);
+    } catch {
+      // Player may not have permission to update the chat message
+    }
   },
 
   /* -------------------------------------------- */
@@ -200,21 +292,73 @@ export const BlessManager = {
   /* -------------------------------------------- */
 
   _attachHandlers(el) {
-    el.querySelectorAll('[data-action="vce-bless-mode"]').forEach(btn => {
+    el.querySelectorAll('.vce-bless-btn[data-action="vce-bless-mode"]').forEach(btn => {
       if (btn._vceHandled) return;
       btn._vceHandled = true;
       btn.addEventListener("click", async (ev) => {
         ev.preventDefault();
         const mode = btn.dataset.mode;
         const actorId = btn.dataset.actorId;
+        const isAura = btn.dataset.isAura === "true";
         const targets = JSON.parse(btn.dataset.targets?.replace(/&quot;/g, '"') || "[]");
         const actor = game.actors.get(actorId);
         if (!actor) return;
 
-        if (mode === "allies") {
-          await this._applyBlessAllies(actor, targets);
-        } else if (mode === "weapons") {
-          await this._applyBlessWeapons(actor, targets);
+        if (isAura) {
+          // AURA: set mode on activeAura flag → aura system handles range-based application
+          // Send request to GM who has permission to update the flag and rescan
+          const modeLabel = mode === "allies" ? "+d4 Saves" : "Silvered Weapons";
+          await ChatMessage.create({
+            content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+              <div class="card-body"><section class="content-body">
+                <div class="card-description" style="text-align:center;">
+                  <strong>${actor.name}</strong> chooses Bless Aura: <strong>${modeLabel}</strong>
+                  <br><span style="font-size:0.8em; opacity:0.7;">${game.user.isGM ? "Applied." : "Waiting for GM…"}</span>
+                </div>
+              </section></div>
+            </div>`,
+            speaker: ChatMessage.getSpeaker({ actor }),
+            flags: {
+              [MODULE_ID]: {
+                blessAuraMode: true,
+                blessMode: mode,
+                casterId: actorId
+              }
+            }
+          });
+          // If GM, apply immediately
+          if (game.user.isGM) {
+            await this._setBlessAuraMode(actor, mode);
+          }
+        } else {
+          // NON-AURA (Touch/Remote): apply directly or request GM
+          if (game.user.isGM) {
+            if (mode === "allies") await this._applyBlessAllies(actor, targets);
+            else if (mode === "weapons") await this._applyBlessWeapons(actor, targets);
+          } else {
+            const targetNames = targets.map(t => t.actorName).join(", ");
+            const modeLabel = mode === "allies" ? "+d4 Saves" : "Silvered Weapons";
+            await ChatMessage.create({
+              content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+                <div class="card-body"><section class="content-body">
+                  <div class="card-description" style="text-align:center;">
+                    <strong>${actor.name}</strong> requests Bless (${modeLabel}) on: <strong>${targetNames}</strong>
+                    <br><span style="font-size:0.8em; opacity:0.7;">Waiting for GM…</span>
+                  </div>
+                </section></div>
+              </div>`,
+              speaker: ChatMessage.getSpeaker({ actor }),
+              flags: {
+                [MODULE_ID]: {
+                  blessRequest: true,
+                  blessMode: mode,
+                  casterId: actorId,
+                  targets
+                }
+              }
+            });
+            ui.notifications.info("Bless request sent to GM.");
+          }
         }
 
         // Disable both buttons
@@ -228,6 +372,35 @@ export const BlessManager = {
         }
       });
     });
+  },
+
+  /* -------------------------------------------- */
+  /*  Aura Mode Setting                             */
+  /* -------------------------------------------- */
+
+  /**
+   * Set the Bless aura mode on the caster's activeAura flag.
+   * Removes existing aura buffs and triggers a rescan so the aura system
+   * applies the correct buff type based on range.
+   */
+  async _setBlessAuraMode(caster, mode) {
+    const { AuraManager } = await import("../aura/aura-manager.mjs");
+
+    // Update the mode in the activeAura flag
+    await caster.setFlag(MODULE_ID, "activeAura.blessMode", mode);
+
+    // Remove all existing aura buffs (will be re-applied with new mode on rescan)
+    await AuraManager._removeAllBuffs(caster);
+
+    // Trigger a rescan so buffs are re-applied with the new mode
+    const auraState = caster.getFlag(MODULE_ID, "activeAura");
+    const token = AuraManager._getCasterToken(caster);
+    if (token && auraState) {
+      await AuraManager._applyBuffsInRange(caster, token, auraState.spellKey, auraState.radius);
+    }
+
+    const modeLabel = mode === "allies" ? "+d4 Saves" : "Silvered Weapons";
+    log("Bless", `Bless aura mode set to ${modeLabel} for ${caster.name}`);
   },
 
   /* -------------------------------------------- */
@@ -247,25 +420,31 @@ export const BlessManager = {
       : [];
 
     for (const target of targetActors) {
+      // Skip actors we don't have permission to modify
+      if (!target.isOwner && !game.user.isGM) continue;
       // Skip if already blessed
       if (target.effects.find(e => e.getFlag(MODULE_ID, BLESS_AE_FLAG))) continue;
 
-      await target.createEmbeddedDocuments("ActiveEffect", [{
-        name: `Bless (${caster.name})`,
-        icon: "icons/magic/holy/prayer-hands-glowing-yellow.webp",
-        origin: `Actor.${caster.id}`,
-        changes: [],
-        disabled: false,
-        transfer: true,
-        flags: {
-          [MODULE_ID]: {
-            managed: true,
-            [BLESS_AE_FLAG]: true,
-            blessCasterId: caster.id
+      try {
+        await target.createEmbeddedDocuments("ActiveEffect", [{
+          name: `Bless (${caster.name})`,
+          icon: "icons/magic/holy/prayer-hands-glowing-yellow.webp",
+          origin: `Actor.${caster.id}`,
+          changes: [],
+          disabled: false,
+          transfer: true,
+          flags: {
+            [MODULE_ID]: {
+              managed: true,
+              [BLESS_AE_FLAG]: true,
+              blessCasterId: caster.id
+            }
           }
-        }
-      }]);
-      affected.push(target.name);
+        }]);
+        affected.push(target.name);
+      } catch (e) {
+        log("Bless", `Could not bless ${target.name} (permission): ${e.message}`);
+      }
     }
 
     if (affected.length > 0) {
@@ -298,12 +477,19 @@ export const BlessManager = {
       : [];
 
     for (const target of targetActors) {
+      // Skip actors we don't have permission to modify
+      if (!target.isOwner && !game.user.isGM) {
+        log("Bless", `Skipping ${target.name} — no permission (not owner)`);
+        continue;
+      }
+
       // Find equipped weapons
       const weapons = target.items.filter(i => {
         const isWeapon = i.type === "weapon" || (i.type === "equipment" && i.system.equipmentType === "weapon");
         return isWeapon && i.system.equipped;
       });
 
+      try {
       for (const weapon of weapons) {
         // Skip if already blessed
         if (weapon.effects?.find(e => e.getFlag(MODULE_ID, BLESS_SILVER_FLAG))) continue;
@@ -336,6 +522,9 @@ export const BlessManager = {
             }
           }
         }]);
+      }
+      } catch (e) {
+        log("Bless", `Could not silver ${target.name}'s weapons (permission): ${e.message}`);
       }
     }
 

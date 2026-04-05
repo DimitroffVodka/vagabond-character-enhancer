@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.1.8
+
+### Major Fixes
+- **Silver/Metal Weakness Overhaul:** Completely reworked how silvered weapon bonus damage works across all code paths (character sheet, Crawler, auto-roll, manual button). Fixed system gap where typeless weapons never triggered metal weakness.
+  - Extra weakness die now visible in the damage roll (not silently added at apply time)
+  - `_weaknessPreRolled` flag prevents double-counting between roll-time and apply-time
+  - Armor bypass for silvered weapons on typeless damage in `calculateFinalDamage`
+  - Target stashing in `rollAttack` ensures correct target detection regardless of timing
+  - Works with both "Roll Damage With Check" ON and OFF settings
+- **Bless Aura — GM Confirmation Flow:** Player choices (Allies/Weapons mode) now route through GM confirmation for permission-safe application. Aura mode stored in `activeAura` flag for persistent range tracking.
+- **Bless Aura — Self-Buff:** Caster now receives their own aura buff (previously excluded).
+- **Bless Aura — Weapon Restoration on Leave:** Silvered weapons properly restored when tokens leave aura range or aura deactivates.
+- **Aura Expiry Without Focus:** Unfocused auras now expire after 1 round (checked on combat round change).
+- **Focusing Status Race Condition:** No longer tries to remove Focusing status ourselves — let the system handle removal to avoid "does not exist" errors.
+- **Sequencer FX Fix:** `endEffects` uses string name instead of regex (Sequencer requires string).
+- **Chat Message Permission:** Bless button injection wrapped in try/catch for player permission errors.
+
+### Documentation
+- **`docs/silver-weakness-system.md`**: Comprehensive technical documentation of all silver weakness code paths, system gaps, module fixes, and gotchas. Essential reading for future development.
+
 ## v0.1.7
 
 ### New Features — Witch Class

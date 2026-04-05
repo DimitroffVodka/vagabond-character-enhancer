@@ -369,10 +369,13 @@ export const FocusManager = {
     const totalCount = this.getTotalFocusCount(actor);
     const hasFocusingStatus = actor.statuses?.has("focusing");
 
+    // Only ADD focusing status if features hold focus but system removed it.
+    // Don't REMOVE it — let the system handle removal to avoid race conditions
+    // where both our code and the system try to delete the same AE.
     if (totalCount > 0 && !hasFocusingStatus) {
-      await actor.toggleStatusEffect("focusing", { active: true });
-    } else if (totalCount === 0 && hasFocusingStatus) {
-      await actor.toggleStatusEffect("focusing", { active: false });
+      try {
+        await actor.toggleStatusEffect("focusing", { active: true });
+      } catch { /* already being toggled */ }
     }
   },
 

@@ -279,6 +279,9 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched calculateFinalDamage.`);
 
+    // Silver weakness: extra die is added in item.rollDamage() pre-hook (Crawler + auto-roll).
+    // Armor bypass is in calculateFinalDamage. No rollDamageFromButton patch needed.
+
     // --- shouldRollDamage: Force auto-roll for consumable weapons ---
     const origShouldRoll = VagabondDamageHelper.shouldRollDamage;
     VagabondDamageHelper.shouldRollDamage = function (isHit) {
@@ -300,6 +303,10 @@ Hooks.once("ready", async () => {
           item: this, actor, features: getFeatures(actor), favorHinder,
           VagabondDamageHelper
         };
+
+        // Stash current targets on the weapon for rollDamage to use
+        // (game.user.targets may be cleared by the time rollDamage fires on hit)
+        this._vceAttackTargets = Array.from(game.user.targets);
 
         // Pre-roll handlers (order matters)
         await BarbarianFeatures.onPreRollAttack(ctx);   // auto-berserk
@@ -365,25 +372,31 @@ Hooks.once("ready", async () => {
           }
         }
 
-        // Silver/metal weakness: add extra damage die if target is weak to weapon's metal
+        // Silver/metal weakness: add extra die if the targeted enemy is weak to weapon's metal.
+        // item.rollDamage() never checks weakness — it's only checked in rollDamageFromButton
+        // and handleApplyDirect. We add the die here so it's visible in the roll.
+        // Also flag the item so handleApplyDirect doesn't double-add.
         let silverOrigDamage;
         if (this.system?.metal && this.system.metal !== "none" && this.system.metal !== "common") {
-          const targets = Array.from(game.user.targets);
-          const weakTarget = targets.find(t => {
-            const weaknesses = t.actor?.system?.weaknesses || [];
-            return weaknesses.includes(this.system.metal);
-          });
-          if (weakTarget) {
+          const targets = this._vceAttackTargets || Array.from(game.user.targets);
+          const hasWeakTarget = targets.some(t =>
+            t.actor?.system?.weaknesses?.includes(this.system.metal)
+          );
+          if (hasWeakTarget) {
             const formula = this.system.currentDamage || "d6";
             const dieSize = VagabondDamageHelper._extractDieSize?.(formula) || 6;
             silverOrigDamage = this.system.currentDamage;
             this.system.currentDamage = `${formula} + 1d${dieSize}`;
-            log("Bless", `${actor.name}: +1d${dieSize} weakness die vs ${weakTarget.name} (${this.system.metal})`);
           }
         }
 
         try {
-          return await origRollDamage.call(this, actor, isCritical, statKey);
+          const damageRoll = await origRollDamage.call(this, actor, isCritical, statKey);
+          // Flag the roll as weakness-pre-rolled so handleApplyDirect doesn't add another die
+          if (silverOrigDamage !== undefined && damageRoll) {
+            damageRoll._weaknessPreRolled = true;
+          }
+          return damageRoll;
         } finally {
           // Restore silver-modified damage
           if (silverOrigDamage !== undefined) {
@@ -401,6 +414,7 @@ Hooks.once("ready", async () => {
             this.system.currentDamage = ctx.origDamage;
           }
           this._vceRangedCrit = false;
+          delete this._vceAttackTargets;
         }
       };
       console.log(`${MODULE_ID} | Patched rollDamage.`);
@@ -535,21 +549,25 @@ Hooks.once("ready", async () => {
       if (saveAction?.attackType?.startsWith('cast')) _saveSourceAttackType = saveAction.attackType;
 
       // Bless d4: apply BEFORE origHandleSaveRoll reads the difficulty
-      // Resolve target actors from button's stored targets
-      const targetsData = button.dataset.targets ? JSON.parse(button.dataset.targets) : [];
-      const saveType = button.dataset.saveType;
       const _blessContexts = [];
-      for (const t of targetsData) {
-        const targetActor = t.actorId ? game.actors.get(t.actorId) : null;
-        if (!targetActor) continue;
-        const ctx = { actor: targetActor, saveType };
-        await BlessManager.onPreRollSave(ctx);
-        if (ctx._blessApplied) _blessContexts.push(ctx);
-      }
+      try {
+        const targetsRaw = button.dataset.targets;
+        if (targetsRaw) {
+          const targetsData = JSON.parse(targetsRaw);
+          const saveType = button.dataset.saveType;
+          for (const t of targetsData) {
+            const targetActor = t.actorId ? game.actors.get(t.actorId) : null;
+            if (!targetActor) continue;
+            const ctx = { actor: targetActor, saveType };
+            await BlessManager.onPreRollSave(ctx);
+            if (ctx._blessApplied) _blessContexts.push(ctx);
+          }
+        }
+      } catch (e) { /* Don't let Bless code crash the save flow */ }
 
       try { return await origHandleSaveRoll.call(this, button, event); }
       finally {
-        for (const ctx of _blessContexts) BlessManager.onPostRollSave(ctx);
+        for (const ctx of _blessContexts) await BlessManager.onPostRollSave(ctx);
         _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
       }
     };
