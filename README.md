@@ -381,6 +381,9 @@ Ancestry traits are automatically detected from compendium items on the characte
 - **Alchemy Cookbook** — Full crafting UI with search, cost calculation, and craft buttons
 - **Countdown Dice Overlay** — Visual overlay for tracking countdown dice on effects
 - **NPC Ability Automation** — With Vagabond Crawler module: morale checks, NPC abilities, and combat AI
+- **Weapon Range Enforcement** — Blocks out-of-range attacks with distance warnings. Auto-hinders Ranged weapons at Close range (unless Akimbo Trigger perk) and Thrown weapons at Far range. Supports Long (+5ft), Near (max 30ft), and all standard range bands. World setting, on by default.
+- **Cleave Damage** — Cleave weapons deal half damage to all targets (ceil to first, floor to rest; minimum 1). Works with both direct damage and save-based damage paths.
+- **Target Count Enforcement** — Non-Cleave weapons limited to 1 target. Cleave weapons limited to 2 targets. Spin-to-Win perk removes the Cleave target cap.
 - **Perk Detection** — Auto-detects perks from character items and applies relevant AEs
 - **Treads Lightly** — Nullifies walk-type region movement costs for characters with this perk
 - **Manual Rolls** - Apply damage or healing from just standard dice rolls in chat by right clicking the result

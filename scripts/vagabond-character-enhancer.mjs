@@ -67,6 +67,7 @@ import { DrakenFeatures } from "./ancestry-features/draken.mjs";
 import { ImbueManager } from "./spell-features/imbue-manager.mjs";
 import { BlessManager } from "./spell-features/bless-manager.mjs";
 import { SummonerFeatures } from "./class-features/summoner.mjs";
+import { RangeValidator } from "./range-validator.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -132,6 +133,15 @@ Hooks.once("init", () => {
     config: true,
     type: Boolean,
     default: false
+  });
+
+  game.settings.register(MODULE_ID, "enforceWeaponRange", {
+    name: "Enforce Weapon Range",
+    hint: "Block attacks on out-of-range targets. Auto-applies Hinder for Ranged weapons at Close range and Thrown weapons at Far range. Respects Akimbo Trigger perk.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
   });
 
   game.settings.register(MODULE_ID, "alchemistCookbook", {
@@ -361,6 +371,9 @@ Hooks.once("ready", async () => {
         }
 
         // Pre-roll handlers (order matters)
+        // Range validation FIRST — blocks attack if target is out of range
+        if (RangeValidator.onPreRollAttack(ctx)) return null;
+
         await BarbarianFeatures.onPreRollAttack(ctx);   // auto-berserk
         BardFeatures.onPreRollAttack(ctx);               // Virtuoso Valor
         FighterFeatures.onPreRollAttack(ctx);             // Momentum
@@ -658,8 +671,43 @@ Hooks.once("ready", async () => {
         }
       } catch (e) { /* Don't let Bless code crash the save flow */ }
 
-      try { return await origHandleSaveRoll.call(this, button, event); }
-      finally {
+      try {
+        // Fix Cleave save path: all targets take half damage (RAW: "half damage to two targets")
+        const cleaveSaveSource = game.actors.get(button.dataset.actorId);
+        const cleaveSaveItem = cleaveSaveSource?.items.get(button.dataset.itemId);
+        const hasCleaveS = cleaveSaveItem?.system?.properties?.includes('Cleave');
+        let cleaveSaveTargets;
+        try { cleaveSaveTargets = JSON.parse((button.dataset.targets || '[]').replace(/&quot;/g, '"')); } catch { cleaveSaveTargets = []; }
+
+        if (hasCleaveS && cleaveSaveTargets.length > 1) {
+          const fullDmg = parseInt(button.dataset.damageAmount);
+          const halfDmg = Math.floor(fullDmg / 2);
+
+          // Copy dataset explicitly (DOMStringMap spread can be unreliable)
+          const baseSaveData = {};
+          for (const key in button.dataset) baseSaveData[key] = button.dataset[key];
+
+          // Cleave = "half damage to two targets" — all targets get half.
+          // Odd damage: first target gets ceil, rest get floor (e.g., 7 → 4 + 3)
+          // Minimum 1 damage per target (1 damage Cleave = 1 to each)
+          const ceilHalfS = Math.max(1, Math.ceil(fullDmg / 2));
+          const floorHalfS = Math.max(1, Math.floor(fullDmg / 2));
+
+          // First target: ceiling half
+          const firstSaveMock = { dataset: { ...baseSaveData, targets: JSON.stringify([cleaveSaveTargets[0]]), damageAmount: String(ceilHalfS) } };
+          await origHandleSaveRoll.call(this, firstSaveMock, event);
+
+          // Remaining targets: floor half
+          for (let i = 1; i < cleaveSaveTargets.length; i++) {
+            const mock = { dataset: { ...baseSaveData, targets: JSON.stringify([cleaveSaveTargets[i]]), damageAmount: String(floorHalfS) } };
+            await origHandleSaveRoll.call(this, mock, event);
+          }
+          log("Cleave", `Save path: ${ceilHalfS} to first, ${floorHalfS} to ${cleaveSaveTargets.length - 1} others`);
+          return;
+        }
+
+        return await origHandleSaveRoll.call(this, button, event);
+      } finally {
         for (const ctx of _blessContexts) await BlessManager.onPostRollSave(ctx);
         _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
         VagabondDamageHelper._vceRemoveDiceCount = 0;
@@ -680,7 +728,7 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched handleSaveRoll + handleSaveReminderRoll.`);
 
-    // --- handleApplyDirect: Track damage source actor + original attack type ---
+    // --- handleApplyDirect: Track damage source + fix Cleave split (full/half, not even) ---
     const origHandleApplyDirect = VagabondDamageHelper.handleApplyDirect;
     VagabondDamageHelper.handleApplyDirect = async function (button) {
       _damageSourceActorId = button.dataset.actorId || null;
@@ -690,8 +738,45 @@ Hooks.once("ready", async () => {
       const directAction = (directActionIdx !== '' && directActionIdx != null)
         ? directSourceActor?.system?.actions?.[parseInt(directActionIdx)] : null;
       _directSourceAttackType = directAction?.attackType || null;
-      try { return await origHandleApplyDirect.call(this, button); }
-      finally { _damageSourceActorId = null; _directSourceAttackType = null; }
+
+      try {
+        // Fix Cleave: system splits evenly, RAW is full to first + half to rest
+        const sourceItem = directSourceActor?.items.get(button.dataset.itemId);
+        const hasCleave = sourceItem?.system?.properties?.includes('Cleave');
+        let targets;
+        try { targets = JSON.parse((button.dataset.targets || '[]').replace(/&quot;/g, '"')); } catch { targets = []; }
+
+        if (hasCleave && targets.length > 1) {
+          const fullDamage = parseInt(button.dataset.damageAmount);
+          const halfDamage = Math.floor(fullDamage / 2);
+
+          // Copy dataset explicitly (DOMStringMap spread can be unreliable)
+          const baseData = {};
+          for (const key in button.dataset) baseData[key] = button.dataset[key];
+
+          // Cleave = "half damage to two targets" — all targets get half.
+          // Odd damage: first target gets ceil, rest get floor (e.g., 7 → 4 + 3)
+          // Minimum 1 damage per target (1 damage Cleave = 1 to each)
+          const ceilHalf = Math.max(1, Math.ceil(fullDamage / 2));
+          const floorHalf = Math.max(1, Math.floor(fullDamage / 2));
+
+          console.warn(`${MODULE_ID} | Cleave: ceil=${ceilHalf}, floor=${floorHalf}, targets=${targets.length}`);
+
+          // First target: ceiling half
+          const firstMock = { dataset: { ...baseData, targets: JSON.stringify([targets[0]]), damageAmount: String(ceilHalf) } };
+          await origHandleApplyDirect.call(this, firstMock);
+
+          // Remaining targets: floor half
+          for (let i = 1; i < targets.length; i++) {
+            const mock = { dataset: { ...baseData, targets: JSON.stringify([targets[i]]), damageAmount: String(floorHalf) } };
+            await origHandleApplyDirect.call(this, mock);
+          }
+          log("Cleave", `${sourceItem?.name}: ${ceilHalf} to first, ${floorHalf} to ${targets.length - 1} others`);
+          return;
+        }
+
+        return await origHandleApplyDirect.call(this, button);
+      } finally { _damageSourceActorId = null; _directSourceAttackType = null; }
     };
     console.log(`${MODULE_ID} | Patched handleApplyDirect.`);
 

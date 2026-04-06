@@ -849,9 +849,18 @@ export const PERK_REGISTRY = {
   // Prerequisite: Stat: MIT 4+ | Trained: Melee
   // When you attack with a Melee Cleave Weapon, you can deal half its damage
   // to any viable Targets, rather than just one extra Being.
+  // MODULE: Managed AE adds +98 to cleaveTargets, making cleaveMaxTargets = 100 (effectively unlimited).
+  //   The system's roll-handler.mjs already enforces cleaveMaxTargets for target count.
   "spin-to-win": {
     flag: "perk_spinToWin",
-    description: "Melee Cleave attacks can deal half damage to all viable Targets, not just one extra."
+    description: "Melee Cleave attacks can deal half damage to all viable Targets, not just one extra.",
+    effects: [{
+      label: "Spin-to-Win",
+      icon: "icons/skills/melee/strike-sword-slashing-red.webp",
+      changes: [
+        { key: "system.cleaveTargets", mode: 2, value: "98" }
+      ]
+    }]
   },
 
   // Steady Aim

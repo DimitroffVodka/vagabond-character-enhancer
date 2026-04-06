@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.2.1
+
+### New Features — Weapon Range Enforcement
+- **Range Validation:** Blocks attacks on out-of-range targets with a warning showing weapon max range vs target distance. Supports Close (5ft), Near (30ft), Far (unlimited) range bands plus Long (+5ft), Ranged, Thrown, and Near weapon properties. World setting (`enforceWeaponRange`), on by default.
+- **Auto-Hinder:** Ranged weapons at Close range (≤5ft) automatically apply Hinder (unless character has Akimbo Trigger perk). Thrown weapons at Far range (>30ft) also auto-Hinder.
+- **Target Count Enforcement:** Non-Cleave weapons can only target 1 enemy. Cleave weapons limited to 2. Spin-to-Win perk removes the cap. Monk Martial Arts grants implicit Cleave on Finesse weapons (2 targets).
+
+### New Features — Cleave Damage Fix
+- **Half Damage to All Targets:** Cleave now correctly deals half damage to all targets (not full to first, half to rest). Odd damage rounds up for the first target, down for the rest (e.g., 7 → 4 + 3). Minimum 1 damage per target.
+- **Both Damage Paths:** Works through both direct damage (`handleApplyDirect`) and save-based damage (`handleSaveRoll`).
+- **Monk Martial Arts Cleave:** Also updated to half damage to both targets (primary retroactively adjusted).
+
+### New Features — Spin-to-Win Perk
+- **Unlimited Cleave Targets:** Managed AE sets `cleaveMaxTargets` to 100, bypassing the normal 2-target Cleave limit.
+
+### Bug Fixes
+- **Managed AE Sync:** `_syncManagedEffects` now runs on every scan, not just when feature flags change. Fixes perk AEs (like Spin-to-Win) not being created on actors that were already scanned before perk AE support was added.
+- **Monk Finesse Cleave Blocked:** Range validator no longer blocks 2-target attacks with Finesse weapons when the Monk has Martial Arts.
+
 ## v0.2.0
 
 ### New Features — Monk Class

@@ -329,12 +329,26 @@ export const MonkFeatures = {
     const fullDamage = parseInt(totalMatch[1]);
     if (isNaN(fullDamage) || fullDamage <= 0) return;
 
-    const halfDamage = Math.floor(fullDamage / 2);
-    if (halfDamage <= 0) return;
+    // Cleave = "half damage to two targets" — both get half, minimum 1
+    // Odd damage: primary gets ceil, secondary gets floor (e.g., 7 → 4 + 3)
+    const ceilHalf = Math.max(1, Math.ceil(fullDamage / 2));
+    const floorHalf = Math.max(1, Math.floor(fullDamage / 2));
 
-    // Apply half damage to the Cleave target
+    // Retroactively fix primary target: system applied full damage, reduce to ceil-half
+    // The primary target already took fullDamage, so undo the excess
+    const primaryTarget = game.user.targets.first();
+    if (primaryTarget?.actor) {
+      const excessDamage = fullDamage - ceilHalf;
+      if (excessDamage > 0) {
+        const primaryHp = primaryTarget.actor.system.health?.value ?? 0;
+        await primaryTarget.actor.update({ "system.health.value": primaryHp + excessDamage });
+        log("Monk", `Martial Arts Cleave: Restored ${excessDamage} HP to primary target ${primaryTarget.name} (full ${fullDamage} → half ${ceilHalf})`);
+      }
+    }
+
+    // Apply floor-half damage to the Cleave (secondary) target
     const currentHp = cleaveActor.system.health?.value ?? 0;
-    const newHp = Math.max(0, currentHp - halfDamage);
+    const newHp = Math.max(0, currentHp - floorHalf);
     await cleaveActor.update({ "system.health.value": newHp });
 
     // Post Cleave notification
@@ -356,7 +370,7 @@ export const MonkFeatures = {
           </header>
           <section class="content-body">
             <div class="card-description" style="text-align:center;">
-              ${actor.name}'s strike cleaves into <strong>${cleaveActor.name}</strong> for <strong>${halfDamage}</strong> damage!
+              ${actor.name}'s strike cleaves into <strong>${cleaveActor.name}</strong> for <strong>${floorHalf}</strong> damage!
             </div>
           </section>
         </div>
@@ -364,7 +378,7 @@ export const MonkFeatures = {
       speaker: ChatMessage.getSpeaker({ actor }),
     });
 
-    log("Monk", `Martial Arts: Cleave — ${halfDamage} damage to ${cleaveActor.name}`);
+    log("Monk", `Martial Arts: Cleave — ${ceilHalf} to primary, ${floorHalf} to ${cleaveActor.name}`);
   },
 
   /* -------------------------------------------- */

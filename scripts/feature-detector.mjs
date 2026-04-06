@@ -227,9 +227,13 @@ export const FeatureDetector = {
     if (changed) {
       await actor.unsetFlag(MODULE_ID, "features");
       await actor.setFlag(MODULE_ID, "features", features);
-      // --- Manage Active Effects (only when features changed) ---
-      await this._syncManagedEffects(actor, features, oldFeatures);
     }
+
+    // --- Always sync managed Active Effects ---
+    // Run even when features haven't changed, because new AE definitions
+    // (e.g., perk effects added in a module update) need to be created for
+    // actors whose feature flags were already set in a previous scan.
+    await this._syncManagedEffects(actor, features, oldFeatures);
 
     // Always fire postScan so modules can sync item-level data (e.g., spell explosion)
     Hooks.callAll(`${MODULE_ID}.postScan`, actor, features);
@@ -249,6 +253,7 @@ export const FeatureDetector = {
     // Use the class item's UUID as origin so the effects panel shows the class name as "Source"
     const classUuid = features._classUuid || null;
 
+    // Check class feature registry
     for (const [featureName, featureDef] of Object.entries(CLASS_FEATURE_REGISTRY)) {
       if (!features[featureDef.flag]) continue;
       if (!featureDef.effects) continue;
@@ -262,6 +267,27 @@ export const FeatureDetector = {
             [MODULE_ID]: {
               managed: true,
               featureFlag: featureDef.flag,
+              effectKey: key
+            }
+          }
+        });
+      }
+    }
+
+    // Check perk feature registry
+    for (const [perkName, perkDef] of Object.entries(PERK_FEATURE_REGISTRY)) {
+      if (!features[perkDef.flag]) continue;
+      if (!perkDef.effects) continue;
+
+      for (const effectDef of perkDef.effects) {
+        const key = `${perkDef.flag}_${effectDef.label}`;
+        desiredEffects.set(key, {
+          ...effectDef,
+          origin: `${MODULE_ID}.${perkDef.flag}`,
+          flags: {
+            [MODULE_ID]: {
+              managed: true,
+              featureFlag: perkDef.flag,
               effectKey: key
             }
           }
