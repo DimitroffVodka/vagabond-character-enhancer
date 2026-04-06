@@ -219,10 +219,10 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 | Fisticuffs    | 1     | 🔲 Partial | Brawl d4 minimum — needs verification |
 | Rope-a-Dope   | 1     | 📝 Flavor  | Perk grant                            |
 | Beat Rush     | 2     | 📝 Flavor  | Action economy                        |
-| Prowess       | 4     | 🔲 Todo    | Block ignores 2 highest dice          |
-| Haymaker      | 6     | 🔲 Todo    | Pass brawl by 10+ → Dazed             |
+| Prowess       | 4     | ✅ Module   | Chat reminder + removes 2 highest dice on passed Block |
+| Haymaker      | 6     | ✅ Module   | Pass brawl by 10+ → applies Dazed     |
 | Impact        | 8     | ✅ AE       | brawlDamageDieSizeBonus +2 (d4→d6)    |
-| Haymaker (8+) | 10    | 🔲 Todo    | Lower Haymaker threshold              |
+| Haymaker (8+) | 10    | ✅ Module   | Haymaker threshold lowered to 8+       |
 
 ---
 
@@ -308,6 +308,18 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 | Manifold Mind (3) | 8     | ✅ AE     | Additional focus.maxBonus +1 (total +2) |
 | Archwizard        | 10    | ✅ AE     | Additional deliveryManaCostReduction +1 |
 
+### Monk
+
+| Feature           | Level | Status      | What's Automated                                          |
+|-------------------|-------|-------------|-----------------------------------------------------------|
+| Martial Arts      | 1     | ✅ Module    | 1 target → Keen (crit -1). 2 targets → Cleave (half dmg). Die escalation per round. |
+| Fleet of Foot     | 1     | ✅ System    | System AE: reflexCritBonus scaling + Treads Lightly perk   |
+| Fluid Motion      | 2     | 📝 Flavor   | Walk on walls/water (narrative)                            |
+| Impetus           | 4     | ✅ Module    | Chat reminder: Dodge ignores 2 highest dice                |
+| Flurry of Blows   | 6     | 📝 Flavor   | Extra Finesse attack (player-tracked)                      |
+| Empowered Strikes | 8     | ✅ AE        | finesseDamageDieSizeBonus +2 (d4→d6)                      |
+| Flurry of Blows   | 10    | 📝 Flavor   | Up to 3 extra Finesse attacks (player-tracked)             |
+
 ---
 
 ## Ancestry Traits
@@ -370,4 +382,5 @@ Ancestry traits are automatically detected from compendium items on the characte
 - **Countdown Dice Overlay** — Visual overlay for tracking countdown dice on effects
 - **NPC Ability Automation** — With Vagabond Crawler module: morale checks, NPC abilities, and combat AI
 - **Perk Detection** — Auto-detects perks from character items and applies relevant AEs
+- **Treads Lightly** — Nullifies walk-type region movement costs for characters with this perk
 - **Manual Rolls** - Apply damage or healing from just standard dice rolls in chat by right clicking the result

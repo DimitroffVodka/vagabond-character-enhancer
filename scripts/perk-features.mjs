@@ -930,9 +930,10 @@ export const PERK_REGISTRY = {
 
   // Treads Lightly
   // Prerequisite: Stat: DEX 4+
-  // Granted by: Dancer (Fleet of Foot, L1)
+  // Granted by: Dancer (Fleet of Foot, L1), Monk (Fleet of Foot, L1)
   // Your Speed isn't impeded by nonmagical Difficult Terrain, and you don't
   // trigger traps by walking on them.
+  // MODULE: Nullifies walk-type modifyMovementCost region behaviors.
   "treads lightly": {
     flag: "perk_treadsLightly",
     description: "Nonmagical Difficult Terrain doesn't impede Speed. Don't trigger traps by walking on them."

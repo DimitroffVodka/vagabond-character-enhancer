@@ -260,11 +260,10 @@ export const PugilistFeatures = {
     if (!hasFeature(actor, "pugilist_prowess")) return;
 
     // Check if it's an Endure save (Block)
-    // The save type isn't always in the HTML, but Block uses Endure
-    // We check for "Endure" in the skill label
-    const skillMatch = content.match(/roll-skill-label[^<]*>([^<]+)/);
-    const skill = skillMatch?.[1]?.trim()?.toLowerCase();
-    if (skill !== "endure") return;
+    // The save card uses header-title "Endure Save"
+    const titleMatch = content.match(/header-title[^>]*>([^<]+)/);
+    const title = titleMatch?.[1]?.trim()?.toLowerCase();
+    if (!title?.includes("endure")) return;
 
     ChatMessage.create({
       content: `<div class="vagabond-chat-card-v2" data-card-type="prowess">

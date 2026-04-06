@@ -78,7 +78,7 @@ export const DANCER_REGISTRY = {
   // and you ignore two of a Dodged attack's damage dice on a passed Save,
   // rather than one.
   //
-  // STATUS: module (hinder immunity only; double dodge ignore is TODO)
+  // STATUS: module (hinder immunity + two dice reminder on passed Reflex)
   //
   // MODULE HANDLES:
   //   - Patches _rollSave and RollHandler.roll to strip hinder from Reflex saves.
@@ -170,6 +170,13 @@ export const DancerFeatures = {
     this._registerFlashOfBeautyHooks();
     this._registerCombatExpiryHooks();
     this._patchStepUpSheet();
+
+    // Evasive: post reminder on passed Reflex save about ignoring 2 dice
+    Hooks.on("createChatMessage", (message) => {
+      if (!game.user.isGM) return;
+      this._checkEvasive(message);
+    });
+
     log("Dancer","Dancer hooks registered.");
   },
 
@@ -286,6 +293,50 @@ export const DancerFeatures = {
   /* -------------------------------------------- */
   /*  Fleet of Foot: Dynamic Reflex Crit Bonus    */
   /* -------------------------------------------- */
+
+  /* -------------------------------------------- */
+  /*  Evasive (L2) — Two dice reminder             */
+  /* -------------------------------------------- */
+
+  /**
+   * Detect passed Reflex saves from dancers and post a reminder
+   * about ignoring 2 highest damage dice instead of 1.
+   */
+  async _checkEvasive(message) {
+    const content = message.content || "";
+
+    // Must be a save card with PASS
+    if (!content.includes("save-roll") || !content.includes("PASS")) return;
+
+    // Check if it's a Reflex save
+    const titleMatch = content.match(/header-title[^>]*>([^<]+)/);
+    const title = titleMatch?.[1]?.trim()?.toLowerCase();
+    if (!title?.includes("reflex")) return;
+
+    // Get the actor
+    const speakerActorId = message.speaker?.actor;
+    if (!speakerActorId) return;
+    const actor = game.actors.get(speakerActorId);
+    if (!actor || actor.type !== "character") return;
+
+    if (!actor.getFlag(MODULE_ID, "features")?.dancer_evasive) return;
+
+    ChatMessage.create({
+      content: `<div class="vagabond-chat-card-v2" data-card-type="evasive">
+        <div class="card-body">
+          <section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <i class="fas fa-feather-alt"></i> <strong>Evasive:</strong>
+              ${actor.name} ignores <strong>two</strong> highest damage dice (not just one).
+            </div>
+          </section>
+        </div>
+      </div>`,
+      speaker: ChatMessage.getSpeaker({ actor }),
+    });
+
+    log("Dancer", `Evasive: ${actor.name} passed Reflex — ignore 2 highest dice`);
+  },
 
   /**
    * The managed AE is created by the FeatureDetector with a static value of "-1".

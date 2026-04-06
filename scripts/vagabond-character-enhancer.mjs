@@ -48,6 +48,7 @@ import { HunterFeatures } from "./class-features/hunter.mjs";
 import { LuminaryFeatures } from "./class-features/luminary.mjs";
 import { MagusFeatures } from "./class-features/magus.mjs";
 import { MerchantFeatures } from "./class-features/merchant.mjs";
+import { MonkFeatures } from "./class-features/monk.mjs";
 import { PugilistFeatures } from "./class-features/pugilist.mjs";
 import { RevelatorFeatures } from "./class-features/revelator.mjs";
 import { RogueFeatures } from "./class-features/rogue.mjs";
@@ -279,6 +280,40 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched calculateFinalDamage.`);
 
+    // --- _removeHighestDie: Evasive / Impetus remove 2 dice instead of 1 ---
+    // The system's _removeHighestDie always removes exactly 1 highest die on a
+    // passed Dodge save. Dancer Evasive (L2) and Monk Impetus (L4) upgrade this
+    // to 2 dice. We patch the method to remove N dice based on a module-level
+    // flag set by the handleSaveRoll wrapper.
+    const origRemoveHighestDie = VagabondDamageHelper._removeHighestDie;
+    VagabondDamageHelper._removeHighestDie = function (rollTermsData) {
+      const count = VagabondDamageHelper._vceRemoveDiceCount || 1;
+      if (count <= 1) return origRemoveHighestDie.call(this, rollTermsData);
+
+      // Remove N highest dice
+      let total = rollTermsData.total;
+      const allResults = [];
+      for (const term of rollTermsData.terms) {
+        if (term.type === "Die" && term.results) {
+          for (const result of term.results) {
+            allResults.push(result.result);
+          }
+        }
+      }
+
+      // If dice count <= remove count, save completely negates damage
+      if (allResults.length <= count) return 0;
+
+      // Sort descending and remove the N highest
+      allResults.sort((a, b) => b - a);
+      let reduction = 0;
+      for (let i = 0; i < count; i++) {
+        reduction += allResults[i];
+      }
+      return Math.max(0, total - reduction);
+    };
+    console.log(`${MODULE_ID} | Patched _removeHighestDie.`);
+
     // Silver weakness: extra die is added in item.rollDamage() pre-hook (Crawler + auto-roll).
     // Armor bypass is in calculateFinalDamage. No rollDamageFromButton patch needed.
 
@@ -319,6 +354,12 @@ Hooks.once("ready", async () => {
           VagabondDamageHelper._vceForceRollDamage = true;
         }
 
+        // Force auto-roll damage for Monk Finesse attacks so die escalation
+        // goes through our patched item.rollDamage() instead of rollDamageFromButton()
+        if (this.system?.weaponSkill === "finesse" && getFeatures(actor)?.monk_martialArts) {
+          VagabondDamageHelper._vceForceRollDamage = true;
+        }
+
         // Pre-roll handlers (order matters)
         await BarbarianFeatures.onPreRollAttack(ctx);   // auto-berserk
         BardFeatures.onPreRollAttack(ctx);               // Virtuoso Valor
@@ -328,6 +369,7 @@ Hooks.once("ready", async () => {
         RevelatorFeatures.onPreRollAttack(ctx);           // Holy Diver favor
         BarbarianFeatures.onPreRollAttackBloodthirsty(ctx); // Bloodthirsty
         AlchemistFeatures.onPreRollAttack(ctx);           // Consumable weapon flag
+        await MonkFeatures.onPreRollAttack(ctx);            // Martial Arts: Keen/Cleave
         BrawlIntent.onPreRollAttack(ctx);                 // Bully Favor for Grapple/Shove
 
         // Stash actor for Climax/Choreographer in buildAndEvaluateD20WithRollData
@@ -341,6 +383,7 @@ Hooks.once("ready", async () => {
           await GunslingerFeatures.onPostRollAttack(ctx);
           await HunterFeatures.onPostRollAttack(ctx);
           BrawlIntent.onPostRollAttack(ctx);              // Stash meta for button injection
+          await MonkFeatures.onPostRollAttack(ctx);         // Martial Arts: Keen cleanup
           await ImbueManager.onPostRollAttack(ctx);        // Consume imbue after attack
 
           return result;
@@ -359,6 +402,7 @@ Hooks.once("ready", async () => {
       VagabondItem.prototype.rollDamage = async function (actor, isCritical = false, statKey = null) {
         const ctx = { item: this, actor, features: getFeatures(actor), isCritical };
         GunslingerFeatures.onPreRollDamage(ctx);
+        await MonkFeatures.onPreRollDamage(ctx);           // Martial Arts: die escalation
 
         // Exalt: +1 per damage die (+2 vs Undead/Hellspawn) — added to roll formula
         let exaltOrigDamage;
@@ -577,13 +621,33 @@ Hooks.once("ready", async () => {
         ? saveSourceActor?.system?.actions?.[parseInt(saveActionIdx)] : null;
       if (saveAction?.attackType?.startsWith('cast')) _saveSourceAttackType = saveAction.attackType;
 
+      // Evasive / Impetus: set remove-dice count for Reflex saves
+      // Check ALL targets for the feature (single-target saves are most common)
+      const saveType = button.dataset.saveType;
+      if (saveType === "reflex") {
+        try {
+          const targetsRaw = button.dataset.targets;
+          if (targetsRaw) {
+            const targetsData = JSON.parse(targetsRaw);
+            for (const t of targetsData) {
+              const targetActor = t.actorId ? game.actors.get(t.actorId) : null;
+              if (!targetActor) continue;
+              const feats = targetActor.getFlag(MODULE_ID, "features");
+              if (feats?.monk_impetus || feats?.dancer_evasive) {
+                VagabondDamageHelper._vceRemoveDiceCount = 2;
+                break;
+              }
+            }
+          }
+        } catch (e) { /* Don't crash the save flow */ }
+      }
+
       // Bless d4: apply BEFORE origHandleSaveRoll reads the difficulty
       const _blessContexts = [];
       try {
         const targetsRaw = button.dataset.targets;
         if (targetsRaw) {
           const targetsData = JSON.parse(targetsRaw);
-          const saveType = button.dataset.saveType;
           for (const t of targetsData) {
             const targetActor = t.actorId ? game.actors.get(t.actorId) : null;
             if (!targetActor) continue;
@@ -598,6 +662,7 @@ Hooks.once("ready", async () => {
       finally {
         for (const ctx of _blessContexts) await BlessManager.onPostRollSave(ctx);
         _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
+        VagabondDamageHelper._vceRemoveDiceCount = 0;
       }
     };
     const origHandleSaveReminderRoll = VagabondDamageHelper.handleSaveReminderRoll;
@@ -943,6 +1008,7 @@ Hooks.once("ready", async () => {
   LuminaryFeatures.registerHooks();
   MagusFeatures.registerHooks();
   MerchantFeatures.registerHooks();
+  MonkFeatures.registerHooks();
   PugilistFeatures.registerHooks();
   RevelatorFeatures.registerHooks();
   RogueFeatures.registerHooks();
@@ -956,6 +1022,23 @@ Hooks.once("ready", async () => {
   ImbueManager.registerHooks();
   BlessManager.registerHooks();
   SummonerFeatures.registerHooks();
+
+  // Patch modifyMovementCost to ignore walk difficulty for Treads Lightly
+  const moveCostModel = CONFIG.RegionBehavior?.dataModels?.modifyMovementCost;
+  if (moveCostModel?.prototype?._getTerrainEffects) {
+    const origGetTerrainEffects = moveCostModel.prototype._getTerrainEffects;
+    moveCostModel.prototype._getTerrainEffects = function(token, segment) {
+      // Only nullify walk action (not fly, swim, burrow)
+      if (segment.action === "walk" || segment.action === undefined) {
+        const actor = token.actor;
+        if (actor?.type === "character" && actor.getFlag(MODULE_ID, "features")?.perk_treadsLightly) {
+          return [];
+        }
+      }
+      return origGetTerrainEffects.call(this, token, segment);
+    };
+    log("Ready", "Patched modifyMovementCost for Treads Lightly.");
+  }
 
   // Patch character sheet for Beast Form panel injection
   PolymorphSheet.patchSheet();

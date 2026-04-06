@@ -1,5 +1,27 @@
 # Changelog
 
+## v0.2.0
+
+### New Features — Monk Class
+- **Martial Arts (L1):** Full automation — 1 target applies Keen (finesseCritBonus -1 via temp AE), 2 targets applies Cleave (half damage to second target). Damage die escalates per Finesse attack each round (d4→d6→d8→d10→d12, capped). Forces auto-roll damage to ensure escalation applies.
+- **Fleet of Foot (L1):** System-handled via class item AE (reflexCritBonus scaling). Flag detection only.
+- **Fluid Motion (L2):** Flavor (walk on walls/water).
+- **Impetus (L4):** Passed Reflex saves now remove the **two** highest damage dice instead of one. Patched `_removeHighestDie` to support removing N dice.
+- **Flurry of Blows (L6):** Flavor (player-tracked action economy).
+- **Empowered Strikes (L8):** Managed AE — `finesseDamageDieSizeBonus +2` (d4→d6).
+
+### New Features — Treads Lightly Perk
+- **Region Movement Cost Bypass:** Characters with the Treads Lightly perk (Monks, Dancers, or anyone who takes it) ignore walk-type `modifyMovementCost` region behaviors. Patches both Foundry's `_getTerrainEffects` and Vagabond Crawler's `_getTerrainDifficulty`.
+
+### New Features — Evasive / Impetus (Two Dice on Dodge)
+- **Dancer Evasive (L2):** Now posts a chat reminder AND removes 2 highest dice on passed Reflex saves (was TODO for the dice removal).
+- **Monk Impetus (L4):** Same mechanic — removes 2 highest dice on passed Reflex saves.
+- **Implementation:** Patched `VagabondDamageHelper._removeHighestDie` to accept a configurable count. `handleSaveRoll` wrapper sets count to 2 when target has `dancer_evasive` or `monk_impetus`.
+
+### Bug Fixes
+- **Save Card Parsing:** Fixed Impetus, Prowess, and Evasive chat reminder hooks to parse `header-title` instead of nonexistent `roll-skill-label` in save chat cards. All three were silently failing to detect saves.
+- **Pugilist Prowess:** Now correctly triggers on passed Endure (Block) saves.
+
 ## v0.1.9
 
 ### Bug Fixes
