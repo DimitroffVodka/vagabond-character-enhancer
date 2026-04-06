@@ -290,6 +290,28 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched calculateFinalDamage.`);
 
+    // --- _getDamageSourceDieSize: Fix weakness die not accounting for weapon skill die size bonus ---
+    // System bug: for weapons, _getDamageSourceDieSize returns the raw formula die size without
+    // adding rangedDamageDieSizeBonus / meleeDamageDieSizeBonus etc. This means the silver weakness
+    // extra die ignores Marksmanship and similar perks. Spells correctly add spellDamageDieSizeBonus.
+    const origGetDamageSourceDieSize = VagabondDamageHelper._getDamageSourceDieSize;
+    VagabondDamageHelper._getDamageSourceDieSize = function (sourceItem, actionIdx, sourceActor) {
+      const baseSize = origGetDamageSourceDieSize.call(this, sourceItem, actionIdx, sourceActor);
+      // Only fix weapon items (spells are already handled correctly by the system)
+      if (sourceItem && sourceItem.type !== "spell" && sourceActor?.type === "character") {
+        const skillKey = sourceItem.system?.weaponSkill;
+        if (skillKey) {
+          const bonus = sourceActor.system[`${skillKey}DamageDieSizeBonus`] || 0;
+          if (bonus) {
+            log("Silver", `_getDamageSourceDieSize: d${baseSize}→d${baseSize + bonus} (${skillKey} bonus +${bonus})`);
+            return baseSize + bonus;
+          }
+        }
+      }
+      return baseSize;
+    };
+    console.log(`${MODULE_ID} | Patched _getDamageSourceDieSize (weakness die size fix).`);
+
     // --- _removeHighestDie: Evasive / Impetus remove 2 dice instead of 1 ---
     // The system's _removeHighestDie always removes exactly 1 highest die on a
     // passed Dodge save. Dancer Evasive (L2) and Monk Impetus (L4) upgrade this
@@ -452,9 +474,14 @@ Hooks.once("ready", async () => {
           );
           if (hasWeakTarget) {
             const formula = this.system.currentDamage || "d6";
-            const dieSize = VagabondDamageHelper._extractDieSize?.(formula) || 6;
+            const baseDieSize = VagabondDamageHelper._extractDieSize?.(formula) || 6;
+            // Account for weapon skill die size bonus (e.g. Marksmanship +2 for ranged)
+            const skillKey = this.system?.weaponSkill;
+            const dieSizeBonus = skillKey ? (actor.system[`${skillKey}DamageDieSizeBonus`] || 0) : 0;
+            const dieSize = baseDieSize + dieSizeBonus;
             silverOrigDamage = this.system.currentDamage;
             this.system.currentDamage = `${formula} + 1d${dieSize}`;
+            if (dieSizeBonus) log("Silver", `Weakness die upgraded d${baseDieSize}→d${dieSize} (${skillKey}DamageDieSizeBonus +${dieSizeBonus})`);
           }
         }
 

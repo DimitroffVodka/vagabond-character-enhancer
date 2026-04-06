@@ -376,14 +376,57 @@ Ancestry traits are automatically detected from compendium items on the characte
 
 ---
 
+## Perk Automation
+
+Perks are auto-detected from character items. Some have built-in system AEs, some are automated by VCE, and the rest are tracked for future automation.
+
+> Full reference with all 104 perks: [`docs/perk-automation-reference.md`](docs/perk-automation-reference.md)
+
+### Currently Automated Perks
+
+| Perk | Status | What's Automated |
+|------|--------|------------------|
+| Tough | ✅ System AE | `hpPerLevel` +1 — Max HP increases by Level |
+| Pack Mule | ✅ System AE | `inventory.bonusSlots` +2 — Gain +2 Item Slots |
+| Secret of Mana | ✅ System AE | `mana.bonus` = `@lvl` — +1 Mana per Level |
+| Marksmanship | ✅ System AE | `rangedDamageDieSizeBonus` +2 — Ranged damage dice one size larger |
+| Metamagic | ✅ System AE | `mana.castingMaxBonus` +1 — Max Mana per Spell +1 |
+| Magical Secret | ✅ System AE | `isSpellcaster` = true — Grants spellcaster flag |
+| Gish | ✅ System AE | `isSpellcaster` = true — Grants spellcaster flag |
+| Second Wind | ✅ System AE | Placeholder AE (no changes) |
+| Spin-to-Win | ✅ Module | Managed AE: `cleaveMaxTargets` = 100, removes Cleave target cap |
+| Treads Lightly | ✅ Module | Runtime hook: nullifies region movement costs (Foundry + Crawler) |
+| Akimbo Trigger | ✅ Module | Range validator skips Ranged-at-Close hinder |
+| Bully | ✅ Module | Favor on Grapple/Shove vs smaller targets |
+| Full Swing | ✅ Module | Auto-shove on Melee beat-by-10+ |
+
+---
+
+## Spell Automation
+
+Spells in the Vagabond system have no built-in Active Effects. VCE automates select spells via runtime hooks.
+
+> Full reference with all 59 spells: [`docs/spell-automation-reference.md`](docs/spell-automation-reference.md)
+
+### Currently Automated Spells
+
+| Spell | What's Automated |
+|-------|------------------|
+| Bless | Full aura system — d4 save bonus AE on allies, silvered weapons, mode buttons in chat |
+| Exalt | +1 per damage die (+2 vs Undead/Hellspawn), applied via focus/aura |
+| Imbue | Spell damage dice added to weapon formula, single armor application |
+
+---
+
 ## Other Automation
 
 - **Alchemy Cookbook** — Full crafting UI with search, cost calculation, and craft buttons
 - **Countdown Dice Overlay** — Visual overlay for tracking countdown dice on effects
 - **NPC Ability Automation** — With Vagabond Crawler module: morale checks, NPC abilities, and combat AI
-- **Weapon Range Enforcement** — Blocks out-of-range attacks with distance warnings. Auto-hinders Ranged weapons at Close range (unless Akimbo Trigger perk) and Thrown weapons at Far range. Supports Long (+5ft), Near (max 30ft), and all standard range bands. World setting, on by default.
+- **Weapon Range Enforcement** — Blocks out-of-range attacks with distance warnings. Auto-hinders Ranged at Close (unless Akimbo Trigger) and Thrown at Far. World setting, on by default.
 - **Cleave Damage** — Cleave weapons deal half damage to all targets (ceil to first, floor to rest; minimum 1). Works with both direct damage and save-based damage paths.
 - **Target Count Enforcement** — Non-Cleave weapons limited to 1 target. Cleave weapons limited to 2 targets. Spin-to-Win perk removes the Cleave target cap.
+- **Silver Weakness Die Fix** — Silver/metal weakness extra die now accounts for weapon skill die size bonuses (e.g., Marksmanship upgrades the weakness die from d6→d8 for Ranged weapons).
 - **Perk Detection** — Auto-detects perks from character items and applies relevant AEs
 - **Treads Lightly** — Nullifies walk-type region movement costs for characters with this perk
-- **Manual Rolls** - Apply damage or healing from just standard dice rolls in chat by right clicking the result
+- **Manual Rolls** — Apply damage or healing from just standard dice rolls in chat by right clicking the result

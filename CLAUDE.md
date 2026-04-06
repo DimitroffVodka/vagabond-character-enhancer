@@ -155,10 +155,18 @@ saves.reflex.bonus, saves.endure.bonus, saves.will.bonus
 - `scripts/polymorph/` — Druid beast form system (dialog, manager, sheet injection, beast cache)
 - `scripts/alchemy/` — Alchemist cookbook UI and crafting helpers
 - `scripts/ancestry-features/` — One file per ancestry with trait registries
-- `scripts/perk-features.mjs` — Perk automation registry
+- `scripts/perk-features.mjs` — Perk automation registry (all 104 perks with flags)
+- `scripts/spell-features/` — Spell automation (bless-manager.mjs, imbue-manager.mjs)
+- `scripts/range-validator.mjs` — Weapon range enforcement, target count limits, auto-hinder
 - `scripts/status-effects.mjs` — Custom status effect definitions
 - `scripts/focus/` — Focus tracking + Feature FX system (see `docs/feature-fx-system.md`)
 - `packs/vce-beasts/` — LevelDB compendium of 72 modified beast actors for Druid polymorph
+
+### Reference Documents
+- `docs/perk-automation-reference.md` — All 104 perks with automation status, descriptions, and implementation notes. **Read this before working on perk automation.**
+- `docs/spell-automation-reference.md` — All 59 spells with automation status, damage types, and implementation notes. **Read this before working on spell automation.**
+- `docs/feature-fx-system.md` — Feature FX / Sequencer animation system reference
+- `docs/silver-weakness-system.md` — Silver/metal weakness damage system reference
 
 ### Feature FX System
 `scripts/focus/focus-manager.mjs` + `scripts/focus/feature-fx-config.mjs` — Configurable Sequencer animations for class features, monster attacks, and status effects. Full reference: **`docs/feature-fx-system.md`**
