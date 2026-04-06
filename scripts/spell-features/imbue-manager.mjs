@@ -68,66 +68,25 @@ export const ImbueManager = {
     if (ctx.item?.id !== imbue.weaponId) return;
 
     if (ctx.rollResult.isHit && imbue.damageDice > 0) {
-      // HIT: Roll imbue spell damage separately with the spell's damage type
+      // HIT: Imbue dice were already added to the weapon damage formula by the
+      // rollDamage patch (same pattern as Exalt/Silver weakness). Just notify.
       const dieSize = imbue.dieSize || 6;
-      const formula = `${imbue.damageDice}d${dieSize}`;
-      const roll = new Roll(formula);
-      await roll.evaluate();
-      const total = roll.total;
-
       const typeLabel = imbue.damageType !== "-"
         ? imbue.damageType.charAt(0).toUpperCase() + imbue.damageType.slice(1) : "";
 
-      // Build targets JSON from current targets
-      const targets = Array.from(game.user.targets).map(t => ({
-        tokenId: t.id, sceneId: t.scene?.id,
-        actorId: t.actor?.id, actorName: t.name,
-        actorImg: t.document?.texture?.src
-      }));
-      const targetsJson = JSON.stringify(targets).replace(/"/g, "&quot;");
-
-      // Create a chat card with the imbue damage and its own Apply Direct button
-      await ChatMessage.create({
-        content: `<div class="vagabond-chat-card-v2" data-card-type="generic">
-          <div class="card-body">
-            <header class="card-header">
-              <div class="header-icon">
-                <img src="${imbue.spellImg || "icons/magic/light/explosion-star-glow-yellow.webp"}" alt="${imbue.spellName}" />
-              </div>
-              <div class="header-info">
-                <h3 class="header-title">${imbue.spellName} (Imbue)</h3>
-                <div class="metadata-tags-row">
-                  <div class="meta-tag tag-damage">
-                    <span>${formula} = ${total} ${typeLabel}</span>
-                  </div>
-                </div>
-              </div>
-            </header>
-            <section class="content-body">
-              <div class="card-description" style="text-align:center;">
-                <em>${imbue.spellName}</em> delivered via <strong>${imbue.weaponName}</strong>
-              </div>
-            </section>
-            <div class="action-buttons-container">
-              <button class="vagabond-apply-direct-button"
-                data-damage-amount="${total}"
-                data-damage-type="${imbue.damageType}"
-                data-actor-id="${ctx.actor.id}"
-                data-item-id="${imbue.spellId}"
-                data-action-index=""
-                data-is-critical="false"
-                data-weakness-pre-rolled="false"
-                data-targets="${targetsJson}">
-                Apply Direct
-              </button>
+      ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+          <div class="card-body"><section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <em>${imbue.spellName}</em> delivered via <strong>${imbue.weaponName}</strong>
+              (+${imbue.damageDice}d${dieSize} ${typeLabel})
             </div>
-          </div>
+          </section></div>
         </div>`,
-        rolls: [roll],
         speaker: ChatMessage.getSpeaker({ actor: ctx.actor })
       });
 
-      log("Imbue", `${ctx.actor.name} delivered ${imbue.spellName}: ${formula} = ${total} ${typeLabel}`);
+      log("Imbue", `${ctx.actor.name} delivered ${imbue.spellName}: +${imbue.damageDice}d${dieSize} ${typeLabel} (combined with weapon roll)`);
     } else if (!ctx.rollResult.isHit) {
       // MISS: Just notify
       const typeLabel = imbue.damageType !== "-"

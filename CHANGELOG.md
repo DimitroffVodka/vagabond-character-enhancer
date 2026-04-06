@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.9
+
+### Bug Fixes
+- **Focusing Status Triple-Apply:** Fixed race condition where focusing a spell created 3 "Focusing" Active Effects instead of 1. The module's `_syncFocusingStatus` now checks embedded effects directly (not the laggy derived `statuses` Set) and only runs when feature focus is active — the system handles spell-only focus.
+- **Bless Aura Duplicate on Allies:** Fixed `_setBlessAuraMode` being called twice (direct call + createChatMessage hook) causing a race condition that applied duplicate Bless buff AEs to allies. Removed the redundant direct call.
+- **Bless Aura Cleanup:** `_removeAllBuffs` now uses `filter()` instead of `find()` to remove all matching buff AEs, not just the first — prevents stale effects lingering after aura deactivation.
+- **Bless Player Console Errors:** Added permission check before attempting to inject Bless mode buttons into chat messages, preventing "lacks permission to update ChatMessage" errors on player clients.
+- **Aura Radius Always 10ft:** Fixed regex that parsed aura radius from chat cards. The system outputs `"Aura 15' radius"` but the regex expected digits at the start of the attribute value, so it always fell back to 10ft.
+- **Imbue Double Armor:** Imbue spell damage is now combined into the weapon's damage formula (same pattern as Exalt/Silver weakness) instead of rolling as a separate chat card. Armor is applied once to the combined total instead of twice. Forces auto-roll when imbued to ensure the patched `rollDamage` path is used.
+
 ## v0.1.8
 
 ### Major Fixes

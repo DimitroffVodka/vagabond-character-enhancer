@@ -308,6 +308,17 @@ Hooks.once("ready", async () => {
         // (game.user.targets may be cleared by the time rollDamage fires on hit)
         this._vceAttackTargets = Array.from(game.user.targets);
 
+        // Stash imbue data on the item for rollDamage to use.
+        // rollDamage is called AFTER rollAttack returns (roll-handler.mjs:303),
+        // but onPostRollAttack clears the imbue flag — so we capture it here.
+        // Also force auto-roll so damage goes through our patched item.rollDamage()
+        // instead of rollDamageFromButton() which bypasses our formula injection.
+        const imbueState = actor.getFlag(MODULE_ID, "imbue");
+        if (imbueState && this.id === imbueState.weaponId) {
+          this._vceImbue = imbueState;
+          VagabondDamageHelper._vceForceRollDamage = true;
+        }
+
         // Pre-roll handlers (order matters)
         await BarbarianFeatures.onPreRollAttack(ctx);   // auto-berserk
         BardFeatures.onPreRollAttack(ctx);               // Virtuoso Valor
@@ -390,6 +401,19 @@ Hooks.once("ready", async () => {
           }
         }
 
+        // Imbue: add spell damage dice to weapon formula.
+        // Imbue data was stashed on the item by the rollAttack patch (this._vceImbue)
+        // because the imbue flag is cleared by onPostRollAttack before rollDamage runs.
+        let imbueOrigDamage;
+        const imbue = this._vceImbue;
+        if (imbue && imbue.damageDice > 0) {
+          const formula = this.system.currentDamage || "d6";
+          const dieSize = imbue.dieSize || 6;
+          imbueOrigDamage = this.system.currentDamage;
+          this.system.currentDamage = `${formula} + ${imbue.damageDice}d${dieSize}`;
+          log("Imbue", `${actor.name}: +${imbue.damageDice}d${dieSize} (${imbue.spellName}) added to ${formula}`);
+        }
+
         try {
           const damageRoll = await origRollDamage.call(this, actor, isCritical, statKey);
           // Flag the roll as weakness-pre-rolled so handleApplyDirect doesn't add another die
@@ -398,6 +422,11 @@ Hooks.once("ready", async () => {
           }
           return damageRoll;
         } finally {
+          // Restore imbue-modified damage + clean up stashed state
+          if (imbueOrigDamage !== undefined) {
+            this.system.currentDamage = imbueOrigDamage;
+          }
+          delete this._vceImbue;
           // Restore silver-modified damage
           if (silverOrigDamage !== undefined) {
             this.system.currentDamage = silverOrigDamage;

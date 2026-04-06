@@ -279,11 +279,13 @@ export const BlessManager = {
       newContent = content + btnHtml;
     }
 
+    // Only the message author or GM can update chat messages
+    if (!message.isAuthor && !game.user.isGM) return;
     try {
       await message.update({ content: newContent });
       log("Bless", `Injected Bless mode buttons for ${actor.name}`);
     } catch {
-      // Player may not have permission to update the chat message
+      // Permission issue — buttons will be added via renderChatMessage handler instead
     }
   },
 
@@ -326,10 +328,9 @@ export const BlessManager = {
               }
             }
           });
-          // If GM, apply immediately
-          if (game.user.isGM) {
-            await this._setBlessAuraMode(actor, mode);
-          }
+          // GM: the createChatMessage hook (line 53) handles _setBlessAuraMode
+          // for the flagged message above — no need to call it directly here,
+          // which would cause a duplicate race condition.
         } else {
           // NON-AURA (Touch/Remote): apply directly or request GM
           if (game.user.isGM) {

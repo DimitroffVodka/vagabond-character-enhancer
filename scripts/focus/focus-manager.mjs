@@ -137,7 +137,12 @@ export const FocusManager = {
       if (changes.system?.focus?.spellIds !== undefined) {
         // Defer to let the system's own status toggle complete first
         setTimeout(() => {
-          this._syncFocusingStatus(actor);
+          // Only sync focusing status if features hold focus — the system
+          // already manages the "focusing" status for spell-only focus.
+          // Calling it unconditionally races with the system's toggleStatusEffect.
+          if (this._getFeatureFocus(actor).length > 0) {
+            this._syncFocusingStatus(actor);
+          }
           this._syncFocusFX(actor);
           this._syncLightFocus(actor);
         }, 0);
@@ -367,12 +372,13 @@ export const FocusManager = {
    */
   async _syncFocusingStatus(actor) {
     const totalCount = this.getTotalFocusCount(actor);
-    const hasFocusingStatus = actor.statuses?.has("focusing");
+    // Check embedded effects directly — the derived `statuses` Set may lag behind
+    const hasFocusingEffect = actor.effects.some(e => e.statuses?.has("focusing"));
 
     // Only ADD focusing status if features hold focus but system removed it.
     // Don't REMOVE it — let the system handle removal to avoid race conditions
     // where both our code and the system try to delete the same AE.
-    if (totalCount > 0 && !hasFocusingStatus) {
+    if (totalCount > 0 && !hasFocusingEffect) {
       try {
         await actor.toggleStatusEffect("focusing", { active: true });
       } catch { /* already being toggled */ }

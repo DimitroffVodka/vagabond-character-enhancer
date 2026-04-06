@@ -596,18 +596,19 @@ export const AuraManager = {
     for (const actor of game.actors) allActors.add(actor);
 
     for (const actor of allActors) {
-      const auraBuff = actor.effects.find(e =>
+      const auraBuffs = actor.effects.filter(e =>
         e.getFlag(MODULE_ID, "auraBuff") === casterActor.id
       );
-      if (!auraBuff) continue;
+      if (auraBuffs.length === 0) continue;
 
-      // Restore silvered weapons before deleting the buff AE
-      if (auraBuff.getFlag(MODULE_ID, "blessSilverAE")) {
+      // Restore silvered weapons before deleting the buff AEs
+      if (auraBuffs.some(e => e.getFlag(MODULE_ID, "blessSilverAE"))) {
         await AuraManager._restoreSilveredWeapons(actor);
       }
 
-      try { await auraBuff.delete(); } catch { /* already deleted */ }
-      log("AuraManager", `Removed ${casterActor.name}'s aura buff from ${actor.name}`);
+      const ids = auraBuffs.map(e => e.id);
+      try { await actor.deleteEmbeddedDocuments("ActiveEffect", ids); } catch { /* already deleted */ }
+      log("AuraManager", `Removed ${casterActor.name}'s aura buff(s) from ${actor.name}`);
     }
   },
 
@@ -789,8 +790,8 @@ export const AuraManager = {
     const existing = actor.getFlag(MODULE_ID, "activeAura");
     if (existing) return;
 
-    // Parse radius from content (e.g., data-delivery-text="10' Aura")
-    const radiusMatch = content.match(/data-delivery-text="(\d+)'/);
+    // Parse radius from content (e.g., data-delivery-text="Aura 10' radius")
+    const radiusMatch = content.match(/data-delivery-text="[^"]*?(\d+)'/);
     const radius = radiusMatch ? parseInt(radiusMatch[1]) : 10;
 
     // Store the spell ID so we can track focus
