@@ -242,6 +242,11 @@ Hooks.once("ready", async () => {
         }
       }
 
+      // Sneak Attack: armor penetration (reduce armor by sneak dice count)
+      const sneakCtx = { actor, result, damage };
+      RogueFeatures.onCalculateFinalDamage(sneakCtx);
+      result = sneakCtx.result;
+
       const features = getFeatures(actor);
 
       // Apex Predator: check if this target is marked by the hunter dealing the damage
@@ -417,6 +422,8 @@ Hooks.once("ready", async () => {
           ctx.rollResult = result;
           await GunslingerFeatures.onPostRollAttack(ctx);
           await HunterFeatures.onPostRollAttack(ctx);
+          RogueFeatures.onPostRollAttack(ctx);              // Sneak Attack: stash dice on item
+          if (this._vceSneakAttack) VagabondDamageHelper._vceForceRollDamage = true; // Force auto-roll for sneak dice
           BrawlIntent.onPostRollAttack(ctx);              // Stash meta for button injection
           await MonkFeatures.onPostRollAttack(ctx);         // Martial Arts: Keen cleanup
           await ImbueManager.onPostRollAttack(ctx);        // Consume imbue after attack
@@ -438,6 +445,7 @@ Hooks.once("ready", async () => {
         const ctx = { item: this, actor, features: getFeatures(actor), isCritical };
         GunslingerFeatures.onPreRollDamage(ctx);
         await MonkFeatures.onPreRollDamage(ctx);           // Martial Arts: die escalation
+        RogueFeatures.onPreRollDamage(ctx);                // Sneak Attack: inject d4s
 
         // Exalt: +1 per damage die (+2 vs Undead/Hellspawn) — added to roll formula
         let exaltOrigDamage;
@@ -504,8 +512,14 @@ Hooks.once("ready", async () => {
           if (silverOrigDamage !== undefined && damageRoll) {
             damageRoll._weaknessPreRolled = true;
           }
+          // Sneak Attack: post-roll cleanup + chat notification
+          RogueFeatures.onPostRollDamage(ctx);
           return damageRoll;
         } finally {
+          // Restore Sneak Attack-modified damage
+          if (ctx.sneakOrigDamage !== undefined) {
+            this.system.currentDamage = ctx.sneakOrigDamage;
+          }
           // Restore imbue-modified damage + clean up stashed state
           if (imbueOrigDamage !== undefined) {
             this.system.currentDamage = imbueOrigDamage;
@@ -673,7 +687,7 @@ Hooks.once("ready", async () => {
               const targetActor = t.actorId ? game.actors.get(t.actorId) : null;
               if (!targetActor) continue;
               const feats = targetActor.getFlag(MODULE_ID, "features");
-              if (feats?.monk_impetus || feats?.dancer_evasive) {
+              if (feats?.monk_impetus || feats?.dancer_evasive || feats?.rogue_evasive) {
                 VagabondDamageHelper._vceRemoveDiceCount = 2;
                 break;
               }

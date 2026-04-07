@@ -215,7 +215,7 @@ export const DancerFeatures = {
    */
   async onPreRollSave(ctx) {
     // Evasive: Reflex saves can't be hindered
-    if (ctx.saveType === "reflex" && ctx.features?.dancer_evasive && !ctx.actor.statuses?.has("incapacitated")) {
+    if (ctx.saveType === "reflex" && (ctx.features?.dancer_evasive || ctx.features?.rogue_evasive) && !ctx.actor.statuses?.has("incapacitated")) {
       ctx.isHindered = false;
       ctx.ctrlKey = false;
       if (ctx.attackerModifier === "hinder") ctx.attackerModifier = "none";
@@ -259,7 +259,7 @@ export const DancerFeatures = {
    */
   async onPreSheetRoll(ctx) {
     // Evasive: Reflex saves can't be hindered
-    if (ctx.saveKey === "reflex" && ctx.features?.dancer_evasive && !ctx.actor.statuses?.has("incapacitated")) {
+    if (ctx.saveKey === "reflex" && (ctx.features?.dancer_evasive || ctx.features?.rogue_evasive) && !ctx.actor.statuses?.has("incapacitated")) {
       ctx.stripHinder("Evasive");
     }
 
@@ -319,8 +319,10 @@ export const DancerFeatures = {
     const actor = game.actors.get(speakerActorId);
     if (!actor || actor.type !== "character") return;
 
-    if (!actor.getFlag(MODULE_ID, "features")?.dancer_evasive) return;
+    const feats = actor.getFlag(MODULE_ID, "features");
+    if (!feats?.dancer_evasive && !feats?.rogue_evasive) return;
 
+    const className = feats?.dancer_evasive ? "Dancer" : "Rogue";
     ChatMessage.create({
       content: `<div class="vagabond-chat-card-v2" data-card-type="evasive">
         <div class="card-body">
@@ -335,7 +337,7 @@ export const DancerFeatures = {
       speaker: ChatMessage.getSpeaker({ actor }),
     });
 
-    log("Dancer", `Evasive: ${actor.name} passed Reflex — ignore 2 highest dice`);
+    log(className, `Evasive: ${actor.name} passed Reflex — ignore 2 highest dice`);
   },
 
   /**

@@ -582,7 +582,7 @@ export const RevelatorFeatures = {
 
     const aeData = {
       name: "Holy Diver",
-      icon: "icons/magic/holy/projectiles-blades-702702-yellow.webp",
+      icon: "icons/magic/light/beam-rays-yellow.webp",
       origin: `Actor.${actor.id}`,
       disabled: false,
       flags: {

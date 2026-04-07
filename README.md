@@ -242,15 +242,15 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 
 ### Rogue
 
-| Feature                | Level | Status    | What's Automated                          |
-|------------------------|-------|-----------|-------------------------------------------|
-| Sneak Attack           | 1     | 🔲 Todo   | Extra d4s on favored attacks + armor pen  |
-| Infiltrator            | 1     | 📝 Flavor | Perk grant + narrative bonuses            |
-| Unflinching Luck       | 2     | 🔲 Todo   | Luck refund die (d12)                     |
-| Evasive                | 4     | 🔲 Todo   | Ignore hinder on Reflex + extra dodge die |
-| Lethal Weapon          | 6     | 🔲 Todo   | Sneak Attack on all favored attacks       |
-| Unflinching Luck (d10) | 8     | 🔲 Todo   | Upgrade refund die                        |
-| Waylay                 | 10    | 🔲 Todo   | Kill → extra action                       |
+| Feature                | Level | Status     | What's Automated                                       |
+|------------------------|-------|------------|--------------------------------------------------------|
+| Sneak Attack           | 1     | ✅ Module   | Extra d4s on favored hit + armor pen. Scales per level |
+| Infiltrator            | 1     | 📝 Flavor  | Perk grant + narrative bonuses                         |
+| Unflinching Luck       | 2     | 📝 Flavor  | Luck refund die (d12) — player-tracked                 |
+| Evasive                | 4     | ✅ Module   | Ignore Reflex hinder + remove 2 Dodge dice             |
+| Lethal Weapon          | 6     | ✅ Module   | Sneak Attack on all favored attacks per turn           |
+| Unflinching Luck (d10) | 8     | 📝 Flavor  | Upgrade refund die — player-tracked                    |
+| Waylay                 | 10    | 📝 Flavor  | Kill → extra action — player-tracked                   |
 
 ---
 

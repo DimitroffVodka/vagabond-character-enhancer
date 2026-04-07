@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.3
+
+### New Features — Rogue Class
+- **Sneak Attack (L1):** Favored attacks that hit deal bonus d4 damage and ignore Armor equal to the number of bonus dice. Scales: 1d4 at L1, 2d4 at L4, 3d4 at L7, 4d4 at L10. Bonus dice injected into the damage roll formula. Armor penetration applied in `calculateFinalDamage`. Chat notification on trigger.
+- **Evasive (L4):** Ignore Hinder on Reflex Saves while not Incapacitated. Remove two highest Dodge damage dice instead of one on passed saves. Shares infrastructure with Dancer Evasive.
+- **Lethal Weapon (L6):** Removes the "first attack only" restriction from Sneak Attack — all favored hits on a turn trigger Sneak Attack.
+
+### Bug Fixes
+- **Feature Name Collision:** Feature detector now correctly resolves features that share names across classes (e.g., "Evasive" in both Rogue and Dancer, "Fleet of Foot" in both Monk and Dancer). Previously the last-registered class always won, causing Rogues to get `dancer_evasive` instead of `rogue_evasive`. New multi-map lookup matches by actor's class.
+- **Holy Diver Icon:** Replaced missing `projectiles-blades-702702-yellow.webp` with valid `beam-rays-yellow.webp`.
+
 ## v0.2.2
 
 ### New Features — Revelator Class

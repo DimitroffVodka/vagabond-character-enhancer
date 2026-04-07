@@ -45,29 +45,44 @@ import { ORC_TRAITS } from "./ancestry-features/orc.mjs";
  * Each class file exports its own registry, merged here via spread.
  * Keys are lowercase feature names matching the class compendium's levelFeatures.
  * The `effects` field (optional) defines managed Active Effects to create.
+ *
+ * NOTE: Some feature names collide across classes (e.g. "evasive" exists in
+ * both Dancer and Rogue). The flat spread below means the last entry wins.
+ * To handle collisions, _CLASS_FEATURE_MULTI maps each name to an array of
+ * all entries, and _lookupFeature picks the one matching the actor's class.
  */
-const CLASS_FEATURE_REGISTRY = {
-  ...BARBARIAN_REGISTRY,
-  ...ROGUE_REGISTRY,
-  ...BARD_REGISTRY,
-  ...DANCER_REGISTRY,
-  ...ALCHEMIST_REGISTRY,
-  ...FIGHTER_REGISTRY,
-  ...VANGUARD_REGISTRY,
-  ...PUGILIST_REGISTRY,
-  ...HUNTER_REGISTRY,
-  ...GUNSLINGER_REGISTRY,
-  ...SORCERER_REGISTRY,
-  ...WIZARD_REGISTRY,
-  ...WITCH_REGISTRY,
-  ...DRUID_REGISTRY,
-  ...LUMINARY_REGISTRY,
-  ...MAGUS_REGISTRY,
-  ...REVELATOR_REGISTRY,
-  ...MERCHANT_REGISTRY,
-  ...MONK_REGISTRY,
-  ...SUMMONER_REGISTRY
-};
+const _CLASS_REGISTRIES = [
+  BARBARIAN_REGISTRY, ROGUE_REGISTRY, BARD_REGISTRY, DANCER_REGISTRY,
+  ALCHEMIST_REGISTRY, FIGHTER_REGISTRY, VANGUARD_REGISTRY, PUGILIST_REGISTRY,
+  HUNTER_REGISTRY, GUNSLINGER_REGISTRY, SORCERER_REGISTRY, WIZARD_REGISTRY,
+  WITCH_REGISTRY, DRUID_REGISTRY, LUMINARY_REGISTRY, MAGUS_REGISTRY,
+  REVELATOR_REGISTRY, MERCHANT_REGISTRY, MONK_REGISTRY, SUMMONER_REGISTRY
+];
+
+// Flat registry (last-wins) — still used for managed AE sync and legacy lookups
+const CLASS_FEATURE_REGISTRY = Object.assign({}, ..._CLASS_REGISTRIES);
+
+// Multi-map: featureName → [entry, entry, ...] — handles name collisions
+const _CLASS_FEATURE_MULTI = {};
+for (const registry of _CLASS_REGISTRIES) {
+  for (const [name, entry] of Object.entries(registry)) {
+    if (!_CLASS_FEATURE_MULTI[name]) _CLASS_FEATURE_MULTI[name] = [];
+    _CLASS_FEATURE_MULTI[name].push(entry);
+  }
+}
+
+/**
+ * Look up a feature by name, preferring the entry whose `class` matches className.
+ * Falls back to the first entry if no class match (shouldn't happen normally).
+ */
+function _lookupFeature(featureName, className) {
+  const entries = _CLASS_FEATURE_MULTI[featureName];
+  if (!entries || entries.length === 0) return null;
+  if (entries.length === 1) return entries[0];
+  // Multiple entries — pick the one matching the actor's class
+  const classMatch = entries.find(e => e.class === className);
+  return classMatch || entries[0];
+}
 
 // Import perk registry
 import { PERK_REGISTRY } from "./perk-features.mjs";
@@ -183,7 +198,7 @@ export const FeatureDetector = {
       for (const feature of levelFeatures) {
         if (feature.level > level) continue;
         const featureName = feature.name.toLowerCase().trim();
-        const registered = CLASS_FEATURE_REGISTRY[featureName];
+        const registered = _lookupFeature(featureName, className);
         if (registered) {
           features[registered.flag] = true;
           log("FeatureDetector",`Detected: ${feature.name} (${registered.class}) on ${actor.name}`);
