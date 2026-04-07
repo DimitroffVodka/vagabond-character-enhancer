@@ -91,7 +91,7 @@ Reference for all 104 Vagabond RPG perks and their automation status in the `vag
 | Peerless Athlete | 📝 Flavor | Stand from Prone at start of Turn (no Action); can Rush and Jump with the same Action. | Action economy; no simple automation |
 | Perfect Parry | 🔲 Automatable | If you Crit to Block, attacker is Vulnerable until end of your next Turn. | Hook: detect crit Block result, apply Vulnerable to attacker |
 | Poisoner | 📝 Flavor | Coat your Equipped Weapon with a poison when you attack with it. | Item interaction; manual poison selection |
-| Protector | 📝 Flavor | Can Block on behalf of an Ally that fails their Save against a Close Enemy's attack. | Reactive; requires ally save failure detection |
+| Protector | ✅ Module | Can Block on behalf of an Ally that fails their Save against a Close Enemy's attack. | Auto-rolls Endure save when ally fails; heals ally for highest die on pass. Checks Protector is Close (5ft) to attacker via `measureDistance`. |
 | Provoker | 📝 Flavor | Use Action to goad Enemy; Allies' Saves against that Enemy have Favor. | Social/tactical; requires target marking |
 | Rally | 📝 Flavor | Once per Shift, use an Action to grant Allies 1 Luck and end Charmed or Frightened on them. | Action-based buff; could be a macro but involves Luck economy |
 | Reanimator | 📝 Flavor | 10-minute Ritual to raise a corpse as an Undead under your control for one Shift. | Ritual/summoning; manual |

@@ -38,9 +38,11 @@ const RANGE_FAR = Infinity;
 /**
  * Measure Chebyshev distance between two tokens in game units (ft).
  * Chebyshev: diagonal movement costs the same as cardinal (D&D-style).
+ * Accounts for token size — measures closest-square-to-closest-square
+ * distance between the two token footprints.
  * Rounds to nearest 5ft increment.
  */
-function _measureDistance(attackerToken, targetToken) {
+export function measureDistance(attackerToken, targetToken) {
   const scene = canvas.scene;
   if (!scene) return 0;
 
@@ -51,16 +53,28 @@ function _measureDistance(attackerToken, targetToken) {
   const aDoc = attackerToken.document ?? attackerToken;
   const tDoc = targetToken.document ?? targetToken;
 
-  const ax = aDoc.x;
-  const ay = aDoc.y;
+  // Convert to inclusive grid square ranges
+  const aMinX = Math.round(aDoc.x / gridSize);
+  const aMinY = Math.round(aDoc.y / gridSize);
+  const aMaxX = aMinX + (aDoc.width ?? 1) - 1;
+  const aMaxY = aMinY + (aDoc.height ?? 1) - 1;
 
-  const tx = tDoc.x;
-  const ty = tDoc.y;
+  const tMinX = Math.round(tDoc.x / gridSize);
+  const tMinY = Math.round(tDoc.y / gridSize);
+  const tMaxX = tMinX + (tDoc.width ?? 1) - 1;
+  const tMaxY = tMinY + (tDoc.height ?? 1) - 1;
 
-  // Center-to-center distance in grid squares (Chebyshev)
-  const dx = Math.abs(ax - tx) / gridSize;
-  const dy = Math.abs(ay - ty) / gridSize;
-  const gridSquares = Math.max(dx, dy);
+  // Gap in grid squares on each axis (0 if overlapping on that axis)
+  let gapX = 0;
+  if (aMaxX < tMinX) gapX = tMinX - aMaxX;
+  else if (tMaxX < aMinX) gapX = aMinX - tMaxX;
+
+  let gapY = 0;
+  if (aMaxY < tMinY) gapY = tMinY - aMaxY;
+  else if (tMaxY < aMinY) gapY = aMinY - tMaxY;
+
+  // Chebyshev distance: max of the two axis gaps
+  const gridSquares = Math.max(gapX, gapY);
   const distance = Math.round(gridSquares * gridDist / 5) * 5;
 
   return distance;
@@ -152,7 +166,7 @@ export const RangeValidator = {
     const weaponName = ctx.item.name;
 
     for (const targetToken of targets) {
-      const distance = _measureDistance(attackerToken, targetToken);
+      const distance = measureDistance(attackerToken, targetToken);
       const targetName = targetToken.name || targetToken.document?.name || "target";
 
       // --- Out of range check ---

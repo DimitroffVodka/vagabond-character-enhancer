@@ -643,8 +643,9 @@ export const PERK_REGISTRY = {
   // Protector
   // Prerequisite: Stat: MIT 4+ | Trained: Melee
   // Granted by: Vanguard (Stalwart, L1)
-  // You can Block on behalf of an Ally that fails their Save against the
-  // attack of an Enemy that is Close to you.
+  // STATUS: module — Detects ally failed saves, checks Protector is Close to
+  // attacker, offers Block button. Auto-rolls Endure save and heals ally for
+  // highest damage die on success.
   "protector": {
     flag: "perk_protector",
     description: "Block on behalf of an Ally that fails their Save against a Close Enemy's attack."

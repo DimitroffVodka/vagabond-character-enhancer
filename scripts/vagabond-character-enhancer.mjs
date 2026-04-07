@@ -249,6 +249,35 @@ Hooks.once("ready", async () => {
 
       const features = getFeatures(actor);
 
+      // Indestructible (Vanguard L10): Immune to attack damage while not
+      // Incapacitated and Armor >= 1. Only negates melee/ranged attack damage —
+      // cast (spell) damage and environmental damage still applies.
+      if (features?.vanguard_indestructible) {
+        const atkType = _directSourceAttackType || _saveSourceAttackType;
+        const isMeleeOrRanged = atkType === "melee" || atkType === "ranged";
+        if (isMeleeOrRanged) {
+          const armor = actor.system?.armor ?? 0;
+          const isIncapacitated = actor.statuses?.has("incapacitated")
+            || actor.statuses?.has("unconscious")
+            || actor.statuses?.has("paralyzed");
+          if (!isIncapacitated && armor >= 1) {
+            log("Vanguard", `Indestructible: ${actor.name} immune to ${atkType} damage (Armor ${armor})`);
+            ChatMessage.create({
+              content: `<div class="vagabond-chat-card-v2" data-card-type="indestructible">
+                <div class="card-body"><section class="content-body">
+                  <div class="card-description" style="text-align:center;">
+                    <i class="fas fa-shield-halved"></i> <strong>${actor.name}</strong> — <em>Indestructible</em><br>
+                    Immune to attack damage! (Armor: ${armor})
+                  </div>
+                </section></div>
+              </div>`,
+              speaker: ChatMessage.getSpeaker({ actor })
+            });
+            return 0;
+          }
+        }
+      }
+
       // Apex Predator: check if this target is marked by the hunter dealing the damage
       const apexCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
       HunterFeatures.onCalculateFinalDamage(apexCtx);
@@ -397,6 +426,22 @@ Hooks.once("ready", async () => {
           VagabondDamageHelper._vceForceRollDamage = true;
         }
 
+        // Brawl/Shield intent dialog — show BEFORE the roll so Favor from
+        // Shove/Grapple intent (Bully, Beefy) can modify the attack.
+        // This runs at the item.rollAttack level so it works from BOTH the
+        // character sheet AND the vagabond-crawler action strip.
+        const isBrawlOrShield = this.system?.properties?.some(p =>
+          ["brawl", "shield"].includes(p.toLowerCase()));
+        if (isBrawlOrShield) {
+          const { TargetHelper } = await import("/systems/vagabond/module/helpers/target-helper.mjs");
+          const targetsAtRollTime = TargetHelper.captureCurrentTargets();
+          if (targetsAtRollTime.length > 0) {
+            const dialogResult = await BrawlIntent.showIntentDialog(actor, this, targetsAtRollTime, ctx.features);
+            if (dialogResult === null) return null; // cancelled
+            setBrawlIntent({ ...dialogResult, targetsAtRollTime });
+          }
+        }
+
         // Pre-roll handlers (order matters)
         // Range validation FIRST — blocks attack if target is out of range
         if (RangeValidator.onPreRollAttack(ctx)) return null;
@@ -424,7 +469,7 @@ Hooks.once("ready", async () => {
           await HunterFeatures.onPostRollAttack(ctx);
           RogueFeatures.onPostRollAttack(ctx);              // Sneak Attack: stash dice on item
           if (this._vceSneakAttack) VagabondDamageHelper._vceForceRollDamage = true; // Force auto-roll for sneak dice
-          BrawlIntent.onPostRollAttack(ctx);              // Stash meta for button injection
+          await BrawlIntent.onPostRollAttack(ctx);        // Auto-execute Grapple/Shove on hit
           await MonkFeatures.onPostRollAttack(ctx);         // Martial Arts: Keen cleanup
           await ImbueManager.onPostRollAttack(ctx);        // Consume imbue after attack
 
@@ -908,35 +953,11 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched RollHandler.roll.`);
 
-    // --- RollHandler.rollWeapon: Brawl/Shield intent dialog ---
-    const origRollWeapon = RollHandler.prototype.rollWeapon;
-    RollHandler.prototype.rollWeapon = async function (event, target) {
-      const element = target || event.currentTarget;
-      const itemId = element.dataset.itemId || element.closest("[data-item-id]")?.dataset.itemId;
-      const item = this.actor.items.get(itemId);
-
-      if (item) {
-        const isBrawlOrShield = item.system.properties?.some(p =>
-          ["brawl", "shield"].includes(p.toLowerCase()));
-        if (isBrawlOrShield) {
-          const { TargetHelper } = await import("/systems/vagabond/module/helpers/target-helper.mjs");
-          const targetsAtRollTime = TargetHelper.captureCurrentTargets();
-          if (targetsAtRollTime.length > 0) {
-            const features = getFeatures(this.actor);
-            const result = await BrawlIntent.showIntentDialog(this.actor, item, targetsAtRollTime, features);
-            if (result === null) return; // cancelled
-            setBrawlIntent({ ...result, targetsAtRollTime });
-          }
-        }
-      }
-
-      try {
-        return await origRollWeapon.call(this, event, target);
-      } finally {
-        resetBrawlIntent();
-      }
-    };
-    console.log(`${MODULE_ID} | Patched RollHandler.rollWeapon.`);
+    // --- RollHandler.rollWeapon: passthrough ---
+    // NOTE: Brawl/Shield intent dialog has been moved to item.rollAttack() so it
+    // works from BOTH the character sheet AND the vagabond-crawler action strip.
+    // See the rollAttack patch above. Cleanup is in brawl-intent._injectButtons().
+    console.log(`${MODULE_ID} | RollHandler.rollWeapon — brawl intent now handled at rollAttack level.`);
 
     // --- SpellHandler.castSpell: Stash _currentRollActor + Imbue delivery bypass ---
     const { SpellHandler } = await import("/systems/vagabond/module/sheets/handlers/spell-handler.mjs");

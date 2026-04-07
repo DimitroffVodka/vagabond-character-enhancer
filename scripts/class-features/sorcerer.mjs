@@ -18,9 +18,9 @@ export const SORCERER_REGISTRY = {
   },
 
   // L1: Tap — Metamagic Perk + reduce Max HP to regain Mana
-  // STATUS: todo — needs custom UI for HP→Mana conversion
+  // STATUS: flavor — needs custom UI for HP→Mana conversion
   "tap": {
-    class: "sorcerer", level: 1, flag: "sorcerer_tap", status: "todo",
+    class: "sorcerer", level: 1, flag: "sorcerer_tap", status: "flavor",
     description: "Gain Metamagic Perk. Reduce Max HP to regain Mana (2× the reduction). Restores on Rest."
   },
 
@@ -47,16 +47,16 @@ export const SORCERER_REGISTRY = {
   },
 
   // L6: Arcane Anomaly — half damage from magic sources
-  // STATUS: todo — needs incoming damage hook for magic detection
+  // STATUS: flavor — needs incoming damage hook for magic detection
   "arcane anomaly": {
-    class: "sorcerer", level: 6, flag: "sorcerer_arcaneAnomaly", status: "todo",
+    class: "sorcerer", level: 6, flag: "sorcerer_arcaneAnomaly", status: "flavor",
     description: "Reduce damage from magic-based sources by half."
   },
 
   // L8: Spell Twinning — 2nd cast of same spell is Favored
-  // STATUS: todo — needs turn-based spell tracking
+  // STATUS: flavor — needs turn-based spell tracking
   "spell twinning": {
-    class: "sorcerer", level: 8, flag: "sorcerer_spellTwinning", status: "todo",
+    class: "sorcerer", level: 8, flag: "sorcerer_spellTwinning", status: "flavor",
     description: "If you Cast the same Spell twice on a Turn, the second Cast Check is Favored."
   },
 

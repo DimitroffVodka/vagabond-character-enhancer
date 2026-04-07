@@ -148,10 +148,13 @@ export const BrawlIntent = {
 
     if (!intent) return null; // cancelled
 
-    // Bully perk: Favor on Grapple/Shove vs strictly smaller targets
+    // Apply Favor for Grapple/Shove intents:
+    // - Orc Beefy: Favor on all Grapple/Shove checks
+    // - Bully perk: Favor on Grapple/Shove vs strictly smaller targets
     let favorModified = false;
-    if (intent !== "damage" && features?.perk_bully && targetSize < actorSize) {
-      favorModified = true;
+    if (intent !== "damage") {
+      if (features?.orc_beefy) favorModified = true;
+      if (features?.perk_bully && targetSize < actorSize) favorModified = true;
     }
 
     return { intent, favorModified };
@@ -173,9 +176,11 @@ export const BrawlIntent = {
 
   /**
    * Stash attack metadata for post-card button injection.
+   * If the player chose Grapple/Shove intent and the attack hit,
+   * auto-execute the intent immediately (no extra button click needed).
    * Called from the rollAttack post-handler chain.
    */
-  onPostRollAttack(ctx) {
+  async onPostRollAttack(ctx) {
     if (!ctx.rollResult) return;
     const result = ctx.rollResult;
     _lastAttackMeta = {
@@ -186,6 +191,45 @@ export const BrawlIntent = {
       margin: result.roll ? result.roll.total - result.difficulty : 0,
       targetsAtRollTime: _brawlIntent?.targetsAtRollTime ?? null
     };
+
+    // Auto-execute Grapple/Shove intent on hit
+    if (_brawlIntent && result.isHit && _brawlIntent.intent !== "damage") {
+      const targets = _brawlIntent.targetsAtRollTime || [];
+      const targetIds = targets.map(t => t.tokenId);
+      const attackerToken = ctx.actor.getActiveTokens()?.[0];
+
+      if (_brawlIntent.intent === "grapple" && targetIds.length > 0) {
+        // Call system's handleGrapple with a mock button
+        const mockButton = {
+          dataset: {
+            actorId: ctx.actor.id,
+            targets: JSON.stringify(targets)
+          }
+        };
+        const { VagabondDamageHelper: DH } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
+        await DH.handleGrapple(mockButton);
+        log("BrawlIntent", `Auto-grapple: ${ctx.actor.name} grapples ${targets.map(t => t.actorName).join(", ")}`);
+      } else if (_brawlIntent.intent === "shove" && targetIds.length > 0 && attackerToken) {
+        // Show Push/Prone choice dialog immediately
+        const choice = await foundry.applications.api.DialogV2.wait({
+          window: { title: "Shove Effect" },
+          content: "<p>Choose the shove effect:</p>",
+          buttons: [
+            { action: "push", label: "Push 5'", icon: "fas fa-arrow-right" },
+            { action: "prone", label: "Prone", icon: "fas fa-person-falling" }
+          ],
+          close: () => null
+        });
+        if (choice === "push") {
+          await this._executePush(targetIds, attackerToken.id, ctx.actor.id);
+        } else if (choice === "prone") {
+          await this._executeProne(targetIds, ctx.actor.id);
+        }
+      }
+
+      // Clear intent — already consumed
+      _brawlIntent = null;
+    }
   },
 
   /* -------------------------------------------- */
@@ -290,8 +334,9 @@ export const BrawlIntent = {
       footer.prepend(wrapper);
     }
 
-    // Clear stashed meta (consumed)
+    // Clear stashed state (consumed)
     _lastAttackMeta = null;
+    _brawlIntent = null;
   },
 
   /* -------------------------------------------- */
@@ -356,8 +401,17 @@ export const BrawlIntent = {
       btn.addEventListener("click", (ev) => this._onBullyWeapon(ev));
     });
 
-    // Note: vagabond-grapple-button is handled by the system's existing click handler
-    // in vagabond.mjs which calls VagabondDamageHelper.handleGrapple(button)
+    // Grapple — the system binds this in renderChatMessageHTML, but our buttons
+    // are injected during renderChatMessage which may fire in a different order.
+    // Bind our own handler to ensure it works regardless of hook ordering.
+    el.querySelectorAll(".vagabond-grapple-button").forEach(btn => {
+      btn.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        btn.disabled = true;
+        const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
+        VagabondDamageHelper.handleGrapple(btn);
+      });
+    });
   },
 
   /**

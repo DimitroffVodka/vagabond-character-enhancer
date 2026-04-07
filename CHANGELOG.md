@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.2.4
+
+### New Features — Vanguard Class
+- **Stalwart / Protector Perk (L1):** When an ally fails a save, auto-rolls an Endure (Block) save for any Protector within 5ft of the attacker. On pass, heals the ally for the highest damage die (retroactive block). Works for both GM and the Protector's owning player.
+- **Guard (L1):** Two triggers — enemy enters Close range or Vanguard passes a Block save. Posts a prompt card with a "Shove" button. On click, rolls a Brawl check (with Orc Beefy and Bully perk Favor) and offers Push 5' / Prone on pass. Once per round, cleared on combat turn change.
+- **Wall (L4/L8):** Fixed feature detection — registry keys now match compendium names ("Wall (Large)" / "Wall (Huge)"). Managed AE + shove size override lets Vanguards shove Large/Huge targets via brawl-intent system.
+- **Indestructible (L10):** Immune to melee/ranged attack damage while Armor ≥ 1 and not Incapacitated. Spell/cast damage still applies. Posts "Indestructible" chat card when triggered.
+
+### New Features — Brawl Intent Improvements
+- **Brawl Intent Dialog moved to rollAttack level:** The Damage/Grapple/Shove intent dialog now works from BOTH the character sheet AND the vagabond-crawler action strip. Previously only triggered from the character sheet.
+- **Auto-execute on hit:** Grapple auto-applies Restrained/Grappling statuses on hit. Shove shows Push/Prone dialog immediately on hit. No extra chat card button clicks needed.
+- **Orc Beefy Favor:** Orc ancestry Beefy trait now grants Favor on Grapple/Shove attack checks (was previously only tracked for Bully perk).
+- **Grapple button click handler:** Module now wires its own click handler for Grapple buttons, fixing hook ordering issues with the system's renderChatMessageHTML.
+
+### New Features — Sorcerer Class
+- **Tap, Arcane Anomaly, Spell Twinning:** Changed from Todo to Flavor (player-tracked, no automation needed).
+
+### Bug Fixes
+- **measureDistance token size:** Distance calculation now accounts for Large/Huge/Colossal token footprints. Uses grid-square gap instead of corner-to-corner pixels, so a Medium token adjacent to a 3x3 Huge token correctly reads 5ft from any angle.
+- **Wall (Large) icon 404:** Replaced missing `wall-shield.webp` with valid `heater-crystal-blue.webp`.
+- **Protector icon 404:** Replaced missing `heater-steel-sword-blue.webp` with valid `heater-crystal-blue.webp`.
+- **Protector attacker detection:** `_saveSourceActorId` is cleared before createChatMessage fires. Added fallback that parses attacker from the preceding damage card in chat.
+- **Protector HP field:** Fixed `system.hp.value` → `system.health.value` (Vagabond uses `health`, not `hp`).
+
+### Architecture
+- **Dual Code Path Documentation:** Added CLAUDE.md table documenting which patch levels work from both the character sheet and the crawler strip. Rule: always patch at `VagabondItem.prototype.rollAttack` / `rollDamage` or lower, never rely on `RollHandler`.
+- **Exported measureDistance:** `range-validator.mjs` now exports `measureDistance` for use by other modules (Guard, Protector distance checks).
+
 ## v0.2.3
 
 ### New Features — Rogue Class

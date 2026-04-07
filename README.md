@@ -259,26 +259,26 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 | Feature        | Level | Status    | What's Automated                               |
 |----------------|-------|-----------|------------------------------------------------|
 | Glamour        | 1     | ✅ System  | Casting handled by base system                 |
-| Tap            | 1     | 🔲 Todo   | Reduce Max HP → regain Mana                    |
+| Tap            | 1     | 📝 Flavor | Reduce Max HP → regain Mana (player-tracked)   |
 | Spell-Slinger  | 2     | ✅ AE      | castCritBonus -1 + spellDamageDieSize 8        |
 | Quickening     | 4     | 📝 Flavor | Skip move to cast                              |
-| Arcane Anomaly | 6     | 🔲 Todo   | Half magic damage                              |
-| Spell Twinning | 8     | 🔲 Todo   | 2nd same-spell cast favored                    |
+| Arcane Anomaly | 6     | 📝 Flavor | Half magic damage (player-tracked)             |
+| Spell Twinning | 8     | 📝 Flavor | 2nd same-spell cast favored (player-tracked)   |
 | Overpowered    | 10    | ✅ AE      | Additional castCritBonus -1 (total crit on 18) |
 
 ---
 
 ### Vanguard
 
-| Feature        | Level | Status     | What's Automated                         |
-|----------------|-------|------------|------------------------------------------|
-| Stalwart       | 1     | 📝 Flavor  | Perk grant + Hold extension              |
-| Guard          | 1     | 📝 Flavor  | Reaction shove                           |
-| Rampant Charge | 2     | 📝 Flavor  | Push during movement                     |
-| Wall (Large)   | 4     | 🔲 Partial | AE stub — no system field for shove size |
-| Unstoppable    | 6     | 📝 Flavor  | Chain shoves                             |
-| Wall (Huge)    | 8     | 🔲 Partial | AE stub — no system field                |
-| Indestructible | 10    | 🔲 Todo    | Immune to attack damage with Armor ≥ 1   |
+| Feature        | Level | Status     | What's Automated                                                                                   |
+|----------------|-------|------------|----------------------------------------------------------------------------------------------------|
+| Stalwart       | 1     | ✅ Module   | Protector perk automated — auto-rolls Block on ally failed save, heals for highest die on pass     |
+| Guard          | 1     | ✅ Module   | Prompt card on Block pass or enemy entering Close range. Brawl check with Beefy/Bully favor, Push/Prone on pass |
+| Rampant Charge | 2     | 📝 Flavor  | Push during movement (player-tracked)                                                               |
+| Wall (Large)   | 4     | ✅ Module   | Managed AE + shove size override — treated as Large for Shoves via brawl-intent                    |
+| Unstoppable    | 6     | 📝 Flavor  | Chain shoves (player-tracked)                                                                       |
+| Wall (Huge)    | 8     | ✅ Module   | Managed AE + shove size override — treated as Huge for Shoves via brawl-intent                     |
+| Indestructible | 10    | ✅ Module   | Immune to melee/ranged attack damage while Armor ≥ 1 and not Incapacitated. Spells still apply.    |
 
 ---
 
@@ -399,6 +399,7 @@ Perks are auto-detected from character items. Some have built-in system AEs, som
 | Akimbo Trigger | ✅ Module | Range validator skips Ranged-at-Close hinder |
 | Bully | ✅ Module | Favor on Grapple/Shove vs smaller targets |
 | Full Swing | ✅ Module | Auto-shove on Melee beat-by-10+ |
+| Protector | ✅ Module | Auto-rolls Endure save when ally fails a save near attacker; heals for highest die on pass |
 
 ---
 

@@ -124,6 +124,22 @@ Each class has `scripts/class-features/{class}.mjs` exporting:
 
 **Chat card integration**: Use `Hooks.on("createChatMessage")` to detect system chat cards and inject buttons/effects. Example: Bard Song of Rest, Fighter Momentum.
 
+### Dual Code Paths: Character Sheet vs Crawler Strip
+**CRITICAL**: The `vagabond-crawler` companion module has its own action strip UI that calls system methods directly, bypassing the character sheet's `RollHandler`. When patching attack/damage flows, you MUST patch at the correct level:
+
+| Patch Level | Character Sheet | Crawler Strip | Use For |
+|---|---|---|---|
+| `RollHandler.prototype.rollWeapon` | ✅ | ❌ | **DO NOT USE** — crawler bypasses this |
+| `RollHandler.prototype.roll` | ✅ | ❌ | **DO NOT USE** — crawler bypasses this |
+| `VagabondItem.prototype.rollAttack` | ✅ | ✅ | Pre/post attack hooks, dialogs, favor |
+| `VagabondItem.prototype.rollDamage` | ✅ | ✅ | Damage modification, bonus dice |
+| `VagabondDamageHelper._rollSave` | ✅ | ✅ | Save modifications |
+| `VagabondDamageHelper.calculateFinalDamage` | ✅ | ✅ | Damage reduction |
+| `Hooks.on("createChatMessage")` | ✅ | ✅ | Reactive features (detect results) |
+| `Hooks.on("renderChatMessage")` | ✅ | ✅ | Button injection into chat cards |
+
+**Rule of thumb**: Always patch at `VagabondItem.prototype.rollAttack` / `rollDamage` or lower. Never rely on `RollHandler` for features that must work from the crawler strip. If a feature intercepts before the attack roll (e.g., intent dialogs), it MUST go in `rollAttack`, not `rollWeapon`.
+
 ### Key System Fields for Active Effects
 ```
 # Crit thresholds (negative = lower threshold, e.g., -1 means crit on 19+)
