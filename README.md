@@ -228,15 +228,15 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 
 ### Revelator
 
-| Feature        | Level | Status   | What's Automated                               |
-|----------------|-------|----------|------------------------------------------------|
-| Righteous      | 1     | ✅ System | Casting handled by base system                 |
-| Selfless       | 1     | 🔲 Todo  | Take damage for ally                           |
-| Lay on Hands   | 2     | 🔲 Todo  | d6+level healing, 2 uses/rest                  |
-| Paragon's Aura | 4     | ✅ AE     | focus.maxBonus +1                              |
-| Divine Resolve | 6     | ✅ AE     | statusImmunities: blinded, paralyzed, sickened |
-| Holy Diver     | 8     | 🔲 Todo  | After Selfless → favor + Presence damage       |
-| Sacrosanct     | 10    | ✅ AE     | saves.reflex/endure/will.bonus +2              |
+| Feature        | Level | Status    | What's Automated                                          |
+|----------------|-------|-----------|-----------------------------------------------------------|
+| Righteous      | 1     | ✅ System  | Casting handled by base system                            |
+| Selfless       | 1     | ✅ Module  | Prompt to redirect ally damage; raw pre-armor amount      |
+| Lay on Hands   | 2     | ✅ Module  | Sheet button + chat card heal (d6+Level), 2 uses/rest     |
+| Paragon's Aura | 4     | ⚠️ Partial | +1 Focus AE + AuraManager. Free Aura Mana not enforced   |
+| Divine Resolve | 6     | ✅ AE      | statusImmunities: blinded, paralyzed, sickened            |
+| Holy Diver     | 8     | 🔲 Todo   | After Selfless → favor + Presence damage (no turn expiry) |
+| Sacrosanct     | 10    | ✅ AE      | saves.reflex/endure/will.bonus +2                         |
 
 ---
 

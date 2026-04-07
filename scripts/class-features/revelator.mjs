@@ -70,10 +70,13 @@ export const REVELATOR_REGISTRY = {
   // RULES: It doesn't cost you Mana to Cast a Spell as a 10' Aura, and
   // you can Focus on a Spell as Aura and one as Imbue simultaneously.
   //
-  // STATUS: module — Managed AE for +1 Focus max. AuraManager handles
+  // STATUS: partial — Managed AE for +1 Focus max. AuraManager handles
   // persistent aura template + ally buff application.
+  // TODO: Free Aura delivery (0 Mana for 10' Aura) not enforced — system
+  // still deducts delivery Mana. Would need to intercept SpellHandler to
+  // detect Aura delivery and zero out that cost for Revelators.
   "paragon's aura": {
-    class: "revelator", level: 4, flag: "revelator_paragonsAura", status: "module",
+    class: "revelator", level: 4, flag: "revelator_paragonsAura", status: "partial",
     description: "Free Aura spell delivery (no Mana). Focus on Aura + Imbue simultaneously.",
     effects: [{
       label: "Paragon's Aura",
@@ -98,7 +101,9 @@ export const REVELATOR_REGISTRY = {
       label: "Divine Resolve",
       icon: "icons/magic/holy/barrier-shield-winged-cross.webp",
       changes: [
-        { key: "system.statusImmunities", mode: 2, value: "blinded,paralyzed,sickened" }
+        { key: "system.statusImmunities", mode: 2, value: "blinded" },
+        { key: "system.statusImmunities", mode: 2, value: "paralyzed" },
+        { key: "system.statusImmunities", mode: 2, value: "sickened" }
       ]
     }]
   },
@@ -109,10 +114,13 @@ export const REVELATOR_REGISTRY = {
   // RULES: After taking damage for an ally with Selfless, your next attack
   // before end of next Turn has Favor and adds Presence to damage.
   //
-  // STATUS: module — Grants a "Holy Diver" buff AE after Selfless triggers.
-  // onPreRollAttack consumes the buff for Favor.
+  // STATUS: todo — Grants a "Holy Diver" buff AE after Selfless triggers.
+  // onPreRollAttack consumes the buff for Favor + Presence damage.
+  // TODO: Buff currently persists until consumed. Should auto-expire at
+  // end of next Turn (needs combat turn tracking). Also depends on
+  // Selfless triggering correctly.
   "holy diver": {
-    class: "revelator", level: 8, flag: "revelator_holyDiver", status: "module",
+    class: "revelator", level: 8, flag: "revelator_holyDiver", status: "todo",
     description: "After Selfless, next attack has Favor and adds Presence to damage."
   },
 
@@ -127,7 +135,7 @@ export const REVELATOR_REGISTRY = {
     description: "+2 bonus to all Saves.",
     effects: [{
       label: "Sacrosanct",
-      icon: "icons/magic/holy/saint-glass-portrait-halo-yellow.webp",
+      icon: "icons/magic/holy/chalice-glowing-gold.webp",
       changes: [
         { key: "system.saves.reflex.bonus", mode: 2, value: "2" },
         { key: "system.saves.endure.bonus", mode: 2, value: "2" },
@@ -184,6 +192,59 @@ export const RevelatorFeatures = {
       }
     });
 
+    // Inject "Use" button into Lay on Hands feature on the character sheet
+    // Foundry v13 ApplicationV2 fires "renderApplicationV2", not "renderActorSheet".
+    Hooks.on("renderApplicationV2", (app, html) => {
+      const actor = app.actor || app.document;
+      if (!actor || actor.type !== "character") return;
+      if (!hasFeature(actor, "revelator_layOnHands")) return;
+
+      const el = html instanceof HTMLElement ? html : html[0];
+      // Find all feature entries and look for "Lay on Hands"
+      const featureHeaders = el.querySelectorAll(".feature-header");
+      for (const header of featureHeaders) {
+        const nameEl = header.querySelector(".feature-name");
+        if (!nameEl || nameEl.textContent.trim() !== "Lay on Hands") continue;
+
+        // Get the accordion content (description) for this feature
+        const featureLi = header.closest(".feature");
+        if (!featureLi) continue;
+        const descEl = featureLi.querySelector(".feature-description");
+        if (!descEl) continue;
+
+        // Don't inject twice
+        if (descEl.querySelector(".vce-lay-on-hands-btn")) continue;
+
+        const uses = actor.getFlag(MODULE_ID, "layOnHandsUses") ?? 2;
+        const level = actor.system.attributes?.level?.value ?? 1;
+
+        const btnContainer = document.createElement("div");
+        btnContainer.style.cssText = "margin-top: 0.5rem; text-align: center;";
+        btnContainer.innerHTML = `
+          <button class="vce-lay-on-hands-btn" style="
+            background: linear-gradient(135deg, #4a3728, #2a1f14);
+            border: 1px solid #8b7355;
+            color: #f0e6d2;
+            padding: 4px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            width: 100%;
+          ">
+            <i class="fas fa-hand-holding-heart"></i>
+            Heal (d6 + ${level}) — ${uses}/2 uses
+          </button>
+        `;
+        descEl.appendChild(btnContainer);
+
+        btnContainer.querySelector(".vce-lay-on-hands-btn").addEventListener("click", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          this.useLayOnHands(actor);
+        });
+      }
+    });
+
     log("Revelator", "Hooks registered.");
   },
 
@@ -214,9 +275,46 @@ export const RevelatorFeatures = {
   async _checkSelflessTrigger(message) {
     const content = message.content || "";
     // Only trigger on actual damage application results, not attack/action cards.
-    // The system's applyResult() posts cards with data-card-type="apply-result"
-    // and the note "damage applied — HP:".
+    // The system posts damage results in two formats:
+    //   - "damage applied — HP: 20 → 14" (chat-card.mjs direct damage)
+    //   - "damage applied to {name}'s HP" (damage-helper.mjs save path)
     if (!content.includes("damage applied")) return;
+    // Skip "no damage applied" cards
+    if (content.includes("no damage applied")) return;
+
+    // Parse RAW damage (pre-armor, pre-save) from the card.
+    // Selfless takes the full unmitigated damage — "can't be reduced in any way."
+    //
+    // The system's damage cards have a damage-component with title "Damage" or
+    // "Total Damage" showing the raw roll total before armor/reductions.
+    // Fallback to damage-final (post-armor) if the raw component isn't found.
+    let damageAmount = 0;
+    const rawMatch = content.match(/damage-component[^>]*title="(?:Total )?Damage"[^>]*>[\s\S]*?(\d+)/);
+    if (rawMatch) {
+      damageAmount = parseInt(rawMatch[1]);
+    }
+    if (!damageAmount) {
+      // Fallback: HP change "HP: 20 → 14"
+      const hpMatch = content.match(/HP:\s*(\d+)\s*→\s*(\d+)/);
+      if (hpMatch) damageAmount = parseInt(hpMatch[1]) - parseInt(hpMatch[2]);
+    }
+    if (!damageAmount) {
+      // Fallback: damage-final (post-armor, but better than nothing)
+      const finalMatch = content.match(/damage-final[^>]*>\s*(\d+)/);
+      if (finalMatch) damageAmount = parseInt(finalMatch[1]);
+    }
+    if (!damageAmount || damageAmount <= 0) return;
+
+    // Also parse the final (post-armor) damage that was actually applied to the ally,
+    // so we know exactly how much HP to restore.
+    let appliedDamage = 0;
+    const appliedMatch = content.match(/damage-final[^>]*>\s*(\d+)/);
+    if (appliedMatch) appliedDamage = parseInt(appliedMatch[1]);
+    if (!appliedDamage) {
+      const hpMatch2 = content.match(/HP:\s*(\d+)\s*→\s*(\d+)/);
+      if (hpMatch2) appliedDamage = parseInt(hpMatch2[1]) - parseInt(hpMatch2[2]);
+    }
+    if (!appliedDamage) appliedDamage = damageAmount; // fallback to raw
 
     // Find revelators with Selfless in active combat
     if (!game.combat) return;
@@ -231,12 +329,6 @@ export const RevelatorFeatures = {
       if (!speakerActorId || speakerActorId === actor.id) continue;
       const damagedActor = game.actors.get(speakerActorId);
       if (!damagedActor || damagedActor.type !== "character") continue;
-
-      // Parse damage amount from the message
-      const dmgMatch = content.match(/(\d+)\s*(?:damage|Damage|HP)/);
-      if (!dmgMatch) continue;
-      const damageAmount = parseInt(dmgMatch[1]);
-      if (isNaN(damageAmount) || damageAmount <= 0) continue;
 
       // Offer Selfless
       ChatMessage.create({
@@ -265,6 +357,7 @@ export const RevelatorFeatures = {
                         data-revelator-id="${actor.id}"
                         data-target-id="${damagedActor.id}"
                         data-damage="${damageAmount}"
+                        data-applied-damage="${appliedDamage}"
                         class="card-button">
                   <i class="fas fa-shield-alt"></i> Take the Damage
                 </button>
@@ -285,21 +378,22 @@ export const RevelatorFeatures = {
     const btn = ev.currentTarget;
     const revelatorId = btn.dataset.revelatorId;
     const targetId = btn.dataset.targetId;
-    const damage = parseInt(btn.dataset.damage) || 0;
+    const damage = parseInt(btn.dataset.damage) || 0;           // Raw damage (Revelator takes this)
+    const appliedDamage = parseInt(btn.dataset.appliedDamage) || damage; // Post-armor damage (ally lost this)
 
     const revelator = game.actors.get(revelatorId);
     const target = game.actors.get(targetId);
     if (!revelator || !target || damage <= 0) return;
 
-    // Apply damage to revelator (unreducible)
+    // Apply raw damage to revelator (unreducible — bypasses armor/DR/everything)
     const currentHP = revelator.system?.health?.value ?? 0;
     const newHP = Math.max(0, currentHP - damage);
     await revelator.update({ "system.health.value": newHP });
 
-    // Restore the ally's HP (undo the damage)
+    // Restore the ally's HP (undo only the damage they actually took after armor)
     const targetCurrentHP = target.system?.health?.value ?? 0;
     const targetMaxHP = target.system?.health?.max ?? 0;
-    const restoredHP = Math.min(targetMaxHP, targetCurrentHP + damage);
+    const restoredHP = Math.min(targetMaxHP, targetCurrentHP + appliedDamage);
     await target.update({ "system.health.value": restoredHP });
 
     // Mark Selfless as used this turn

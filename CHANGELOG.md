@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.2
+
+### New Features — Revelator Class
+- **Selfless (L1):** When an ally takes damage, a prompt offers to redirect the damage to the Revelator. Uses raw pre-armor damage amount (can't be reduced). Once per turn.
+- **Lay on Hands (L2):** "Heal" button injected directly into the character sheet Features panel. Clicking posts a chat card with a Heal button — target a token and click to restore d6 + Level HP. 2 uses per Rest (auto-resets). Divine Resolve (L6) also cures Blinded/Paralyzed/Sickened on heal targets.
+- **Paragon's Aura (L4):** Status changed to partial — +1 Focus AE and AuraManager template tracking work, but free Aura Mana delivery is not enforced.
+
+### Bug Fixes
+- **Divine Resolve AE:** Status immunities were stored as a single comma-separated string (`"blinded,paralyzed,sickened"`) instead of three separate array entries. The system's `Array.includes()` check never matched. Now creates one AE change per status.
+- **Sacrosanct AE:** Save bonus keys were missing `system.` prefix and endure used `difficulty` instead of `bonus`. Fixed registry and recreated AEs.
+- **Sacrosanct Icon:** Replaced missing `saint-glass-portrait-halo-yellow.webp` with valid `chalice-glowing-gold.webp`.
+- **Summoner Soulbonder Immunities:** Same comma-separated string bug as Divine Resolve — `immunities.join(",")` now maps to separate AE changes.
+- **Sheet Injection Hook:** Lay on Hands button used `renderActorSheet` which never fires for Foundry v13 ApplicationV2 sheets. Changed to `renderApplicationV2`.
+
 ## v0.2.1
 
 ### New Features — Weapon Range Enforcement

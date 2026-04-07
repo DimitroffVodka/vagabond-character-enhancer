@@ -1243,7 +1243,7 @@ export const SummonerFeatures = {
         name: `Soulbonder: Immunities (${summonData.name})`,
         icon: "icons/magic/defensive/shield-barrier-deflect-gold.webp",
         origin: `${MODULE_ID}.soulbonder`,
-        changes: [{ key: "system.statusImmunities", mode: 2, value: immunities.join(",") }],
+        changes: immunities.map(s => ({ key: "system.statusImmunities", mode: 2, value: s })),
         disabled: false,
         transfer: true,
         flags: { [MODULE_ID]: { managed: true, [SOULBONDER_FLAG]: true } }
