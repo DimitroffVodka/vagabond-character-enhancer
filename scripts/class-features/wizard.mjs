@@ -176,10 +176,10 @@ export const WizardFeatures = {
 
     // Decrement studied dice
     const remaining = studiedDice - 1;
-    await actor.update({ "system.studiedDice": remaining });
 
-    // Update the damage card: increase displayed total and save button amounts
+    // Build updated damage card content
     const content = message.content;
+    let contentUpdate = null;
     const totalMatch = content.match(/class="damage-value">(\d+)</);
     if (totalMatch) {
       const oldTotal = parseInt(totalMatch[1]);
@@ -188,29 +188,32 @@ export const WizardFeatures = {
         /class="damage-value">(\d+)/,
         `class="damage-value">${newTotal}`
       );
-      // Update data-damage-amount on all save/apply buttons
       newContent = newContent.replace(
         /data-damage-amount="(\d+)"/g,
         (match, amt) => `data-damage-amount="${parseInt(amt) + bonus}"`
       );
-      await message.update({ content: newContent });
+      contentUpdate = message.update({ content: newContent });
     }
 
-    // Post notification
-    await ChatMessage.create({
-      content: `<div class="vagabond-chat-card-v2" data-card-type="page-master">
-        <div class="card-body"><section class="content-body">
-          <div class="card-description" style="text-align:center;">
-            <i class="fas fa-book-open" style="color:#3498db;"></i>
-            <strong>${actor.name}</strong> — <em>Page Master</em><br>
-            Spent a Studied die: +<strong>${bonus}</strong> damage (1d6).
-            <span style="font-size:0.8em; opacity:0.7;">(${remaining} remaining)</span>
-          </div>
-        </section></div>
-      </div>`,
-      speaker: ChatMessage.getSpeaker({ actor }),
-      rolls: [bonusRoll]
-    });
+    // Run all DB writes in parallel — they're independent
+    await Promise.all([
+      actor.update({ "system.studiedDice": remaining }),
+      contentUpdate,
+      ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2" data-card-type="page-master">
+          <div class="card-body"><section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <i class="fas fa-book-open" style="color:#3498db;"></i>
+              <strong>${actor.name}</strong> — <em>Page Master</em><br>
+              Spent a Studied die: +<strong>${bonus}</strong> damage (1d6).
+              <span style="font-size:0.8em; opacity:0.7;">(${remaining} remaining)</span>
+            </div>
+          </section></div>
+        </div>`,
+        speaker: ChatMessage.getSpeaker({ actor }),
+        rolls: [bonusRoll]
+      })
+    ]);
 
     log("Wizard", `Page Master: ${actor.name} +${bonus} damage (${remaining} remaining)`);
   }

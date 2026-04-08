@@ -324,14 +324,6 @@ Hooks.once("ready", async () => {
     };
     console.log(`${MODULE_ID} | Patched calculateFinalDamage.`);
 
-    // --- Page Master (Wizard): handled via renderChatMessage button injection in
-    // wizard.mjs. Injects a "+1d6 Studied Die" button on spell damage cards.
-    // Works from both character sheet and crawler strip.
-    // NOTE: The button updates the damage card total + save button amounts
-    // retroactively. Not as clean as pre-roll injection but reliable across
-    // all code paths (prototype patches, static method patches, and instance
-    // patches all failed due to Foundry v13 module isolation).
-    console.log(`${MODULE_ID} | Page Master: renderChatMessage button injection (wizard.mjs).`);
 
     // --- _getDamageSourceDieSize: Fix weakness die not accounting for weapon skill die size bonus ---
     // System bug: for weapons, _getDamageSourceDieSize returns the raw formula die size without

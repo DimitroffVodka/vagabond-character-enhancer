@@ -27,13 +27,13 @@ import { MODULE_ID, log, hasFeature, getFeatures, combineFavor } from "../utils.
 /*  Size Helpers                                 */
 /* -------------------------------------------- */
 
-const SIZE_ORDER = { small: 0, medium: 1, large: 2, huge: 3, giant: 4, colossal: 5 };
+export const SIZE_ORDER = { small: 0, medium: 1, large: 2, huge: 3, giant: 4, colossal: 5 };
 
 /**
  * Get an actor's numeric size index.
  * NPCs: system.size, Characters: system.attributes.size ?? ancestry fallback.
  */
-function getActorSize(actor) {
+export function getActorSize(actor) {
   if (!actor) return SIZE_ORDER.medium;
   const sizeStr = actor.type === "npc"
     ? (actor.system.size || "medium")
@@ -44,7 +44,7 @@ function getActorSize(actor) {
 /**
  * Get effective shove size, accounting for Vanguard Wall overrides.
  */
-function getEffectiveShoveSize(actor, features) {
+export function getEffectiveShoveSize(actor, features) {
   let size = getActorSize(actor);
   if (features?.vanguard_wallHuge) size = Math.max(size, SIZE_ORDER.huge);
   else if (features?.vanguard_wall) size = Math.max(size, SIZE_ORDER.large);

@@ -140,17 +140,7 @@ let _sneakAttackArmorPen = 0;
 export const RogueFeatures = {
 
   registerHooks() {
-    // Reset Sneak Attack tracking on combat turn change
-    Hooks.on("combatTurnChange", () => {
-      _sneakAttackUsedThisTurn.clear();
-    });
-
-    // Also reset on combat round change (safety net)
-    Hooks.on("combatRound", () => {
-      _sneakAttackUsedThisTurn.clear();
-    });
-
-    // Reset on updateCombat (covers both turn and round advances)
+    // Reset Sneak Attack tracking on combat turn/round change
     Hooks.on("updateCombat", (combat, changed) => {
       if ("turn" in changed || "round" in changed) {
         _sneakAttackUsedThisTurn.clear();

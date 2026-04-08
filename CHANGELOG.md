@@ -2,6 +2,15 @@
 
 ## v0.2.5
 
+### Code Cleanup
+- **Vanguard size logic:** Replaced inline `SIZE_ORDER` constant and size comparison logic in Guard Shove with shared helpers from brawl-intent.mjs (`getActorSize`, `getEffectiveShoveSize`).
+- **Rogue combat hooks:** Removed 2 redundant hooks (`combatTurnChange`, `combatRound`); the single `updateCombat` hook already covers both.
+- **Parallel DB writes:** Parallelized sequential `await` calls in Wizard Page Master, Vanguard `_clearGuardFlags`, and Vanguard Protector block rolls using `Promise.all()`.
+- **Revelator Selfless regex:** Eliminated duplicate regex executions — `damage-final` and `HP` patterns now parsed once and cached.
+- **Main module cleanup:** Removed noisy Page Master comment block and console.log from vagabond-character-enhancer.mjs.
+
+## v0.2.5 (initial)
+
 ### New Features — Wizard Class
 - **Page Master (L1):** "Spend Studied Die (+1d6)" button injected onto spell damage chat cards. Rolls 1d6, updates the damage total and all save/apply button amounts on the card, decrements studied dice. Works from both character sheet and crawler strip.
 - **Sculpt Spell (L2) / Archwizard (L10):** Changed from Module AE to System status — the Vagabond system already handles these via AEs on the class compendium item. Removed duplicate managed AEs that were double-dipping delivery mana cost reduction.

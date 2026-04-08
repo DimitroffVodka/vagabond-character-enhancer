@@ -288,33 +288,29 @@ export const RevelatorFeatures = {
     // The system's damage cards have a damage-component with title "Damage" or
     // "Total Damage" showing the raw roll total before armor/reductions.
     // Fallback to damage-final (post-armor) if the raw component isn't found.
+    // Parse damage values once — reuse matches for both raw and applied damage
+    const hpMatch = content.match(/HP:\s*(\d+)\s*→\s*(\d+)/);
+    const finalMatch = content.match(/damage-final[^>]*>\s*(\d+)/);
+
     let damageAmount = 0;
     const rawMatch = content.match(/damage-component[^>]*title="(?:Total )?Damage"[^>]*>[\s\S]*?(\d+)/);
     if (rawMatch) {
       damageAmount = parseInt(rawMatch[1]);
     }
-    if (!damageAmount) {
-      // Fallback: HP change "HP: 20 → 14"
-      const hpMatch = content.match(/HP:\s*(\d+)\s*→\s*(\d+)/);
-      if (hpMatch) damageAmount = parseInt(hpMatch[1]) - parseInt(hpMatch[2]);
+    if (!damageAmount && hpMatch) {
+      damageAmount = parseInt(hpMatch[1]) - parseInt(hpMatch[2]);
     }
-    if (!damageAmount) {
-      // Fallback: damage-final (post-armor, but better than nothing)
-      const finalMatch = content.match(/damage-final[^>]*>\s*(\d+)/);
-      if (finalMatch) damageAmount = parseInt(finalMatch[1]);
+    if (!damageAmount && finalMatch) {
+      damageAmount = parseInt(finalMatch[1]);
     }
     if (!damageAmount || damageAmount <= 0) return;
 
-    // Also parse the final (post-armor) damage that was actually applied to the ally,
-    // so we know exactly how much HP to restore.
+    // Parse post-armor damage actually applied to the ally (for HP restore).
+    // Reuse cached regex results from above.
     let appliedDamage = 0;
-    const appliedMatch = content.match(/damage-final[^>]*>\s*(\d+)/);
-    if (appliedMatch) appliedDamage = parseInt(appliedMatch[1]);
-    if (!appliedDamage) {
-      const hpMatch2 = content.match(/HP:\s*(\d+)\s*→\s*(\d+)/);
-      if (hpMatch2) appliedDamage = parseInt(hpMatch2[1]) - parseInt(hpMatch2[2]);
-    }
-    if (!appliedDamage) appliedDamage = damageAmount; // fallback to raw
+    if (finalMatch) appliedDamage = parseInt(finalMatch[1]);
+    if (!appliedDamage && hpMatch) appliedDamage = parseInt(hpMatch[1]) - parseInt(hpMatch[2]);
+    if (!appliedDamage) appliedDamage = damageAmount;
 
     // Find revelators with Selfless in active combat
     if (!game.combat) return;

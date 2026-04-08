@@ -6,6 +6,7 @@
 import { MODULE_ID, log, hasFeature, getFeatures, combineFavor } from "../utils.mjs";
 import { measureDistance } from "../range-validator.mjs";
 import { _saveSourceActorId } from "../vagabond-character-enhancer.mjs";
+import { SIZE_ORDER, getActorSize, getEffectiveShoveSize } from "../brawl/brawl-intent.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -314,16 +315,9 @@ export const VanguardFeatures = {
     if (!vanguardToken || !enemyToken || !targetActor) return;
 
     // --- Size check ---
-    const SIZE_ORDER = { small: 0, medium: 1, large: 2, huge: 3, giant: 4, colossal: 5 };
     const features = getFeatures(actor);
-    const targetSizeStr = targetActor.type === "npc"
-      ? (targetActor.system?.size || "medium")
-      : (targetActor.system?.attributes?.size || "medium");
-    const targetSize = SIZE_ORDER[targetSizeStr] ?? SIZE_ORDER.medium;
-
-    let effectiveSize = SIZE_ORDER[actor.system?.attributes?.size || "medium"] ?? SIZE_ORDER.medium;
-    if (features?.vanguard_wallHuge) effectiveSize = Math.max(effectiveSize, SIZE_ORDER.huge);
-    else if (features?.vanguard_wall) effectiveSize = Math.max(effectiveSize, SIZE_ORDER.large);
+    const targetSize = getActorSize(targetActor);
+    const effectiveSize = getEffectiveShoveSize(actor, features);
 
     if (targetSize > effectiveSize) {
       await ChatMessage.create({
@@ -341,7 +335,7 @@ export const VanguardFeatures = {
     // --- Determine Favor/Hinder ---
     // Orc Beefy: Favor on Grapple/Shove checks
     // Bully: Favor on Grapple/Shove vs smaller targets
-    const actorSize = SIZE_ORDER[actor.system?.attributes?.size || "medium"] ?? SIZE_ORDER.medium;
+    const actorSize = getActorSize(actor);
     let favorState = "none";
     if (features?.orc_beefy) favorState = combineFavor(favorState, "favor");
     if (features?.perk_bully && targetSize < actorSize) favorState = combineFavor(favorState, "favor");
@@ -426,11 +420,13 @@ export const VanguardFeatures = {
    * Clear the guard-used flag on all Vanguards at turn/round change.
    */
   async _clearGuardFlags() {
+    const promises = [];
     for (const actor of game.actors) {
       if (actor.type !== "character") continue;
       if (!actor.getFlag(MODULE_ID, "guardUsedThisRound")) continue;
-      await actor.unsetFlag(MODULE_ID, "guardUsedThisRound");
+      promises.push(actor.unsetFlag(MODULE_ID, "guardUsedThisRound"));
     }
+    if (promises.length) await Promise.all(promises);
   },
 
   /* ------------------------------------------ */
@@ -503,10 +499,10 @@ export const VanguardFeatures = {
 
     if (protectors.length === 0) return;
 
-    // Auto-roll Protector Block for each eligible Protector
-    for (const p of protectors) {
-      await this._rollProtectorBlock(p.actor, allyActor, highestDie);
-    }
+    // Auto-roll Protector Block for each eligible Protector (parallel)
+    await Promise.all(protectors.map(p =>
+      this._rollProtectorBlock(p.actor, allyActor, highestDie)
+    ));
   },
 
   /**
