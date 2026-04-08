@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.2.5
+
+### New Features — Wizard Class
+- **Page Master (L1):** "Spend Studied Die (+1d6)" button injected onto spell damage chat cards. Rolls 1d6, updates the damage total and all save/apply button amounts on the card, decrements studied dice. Works from both character sheet and crawler strip.
+- **Sculpt Spell (L2) / Archwizard (L10):** Changed from Module AE to System status — the Vagabond system already handles these via AEs on the class compendium item. Removed duplicate managed AEs that were double-dipping delivery mana cost reduction.
+- **Extracurricular (L6):** Changed from Todo to Flavor (player-tracked).
+
+### New Features — Brawl Intent
+- **Grapple auto-execute on hit:** Choosing Grapple from the intent dialog and hitting now automatically applies Restrained/Grappling statuses via the system's `handleGrapple`. No extra button click needed.
+- **Shove auto-execute on hit:** Choosing Shove and hitting shows the Push 5' / Prone dialog immediately.
+- **Orc Beefy favor:** Now correctly grants Favor on Grapple/Shove attack checks from the intent dialog.
+
+### Documentation
+- **Spell Damage Path Limitations:** Added comprehensive CLAUDE.md documentation on why static method patches, prototype patches, instance patches, and in-memory actor data modifications all fail for the spell damage path, and why `renderChatMessage` button injection is the only reliable approach.
+
+### Bug Fixes
+- **Wizard Sculpt Spell double-dip:** Removed managed AE that duplicated the system's built-in delivery mana cost reduction. Was giving -2 instead of -1 at level 2.
+
+### README Updates
+- Updated Wizard, Witch, and Vanguard sections to reflect current implementation status.
+
 ## v0.2.4
 
 ### New Features — Vanguard Class

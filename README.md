@@ -284,29 +284,29 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 
 ### Witch
 
-| Feature        | Level | Status    | What's Automated                      |
-|----------------|-------|-----------|---------------------------------------|
-| Occultist      | 1     | ✅ System  | Casting handled by base system        |
-| Hex            | 1     | 🔲 Todo   | Continual spell effects without focus |
-| Ritualism      | 2     | 📝 Flavor | Downtime ritual                       |
-| Things Betwixt | 4     | 🔲 Todo   | Invisible until next turn             |
-| Coventry       | 6     | 📝 Flavor | Cast allies' spells                   |
-| Widdershins    | 8     | 🔲 Todo   | Hex target weak to your damage        |
-| Ritualism (2)  | 10    | 📝 Flavor | Two rituals per shift                 |
+| Feature           | Level | Status    | What's Automated                                                                                   |
+|-------------------|-------|-----------|----------------------------------------------------------------------------------------------------|
+| Occultist         | 1     | ✅ System  | Casting handled by base system                                                                     |
+| Hex               | 1     | ✅ Module  | "Hex" button on spell cast cards. Tracks hexed targets with managed AE. Max slots = ceil(level/2). Oldest hex removed when over capacity. |
+| Ritualism         | 2     | 📝 Flavor | Downtime ritual (player-tracked)                                                                   |
+| Things Betwixt    | 4     | ✅ Module  | Applies Invisible status + consumes Focus slot. Once per scene. Auto-expires on round change.       |
+| Coventry          | 6     | 📝 Flavor | Cast allies' spells (player-tracked)                                                               |
+| Widdershins       | 8     | ✅ Module  | Hexed targets are Weak to witch's damage — armor bypassed in calculateFinalDamage. Does not bypass Immunity. |
+| Ritualism (2)     | 10    | 📝 Flavor | Two rituals per shift (player-tracked)                                                             |
 
 ---
 
 ### Wizard
 
-| Feature           | Level | Status   | What's Automated                        |
-|-------------------|-------|----------|-----------------------------------------|
-| Spellcaster       | 1     | ✅ System | Casting handled by base system          |
-| Page Master       | 1     | 🔲 Todo  | Studied die on damage/healing           |
-| Sculpt Spell      | 2     | ✅ AE     | deliveryManaCostReduction +1            |
-| Manifold Mind     | 4     | ✅ AE     | focus.maxBonus +1                       |
-| Extracurricular   | 6     | 🔲 Todo  | Studied die to cast unknown spell       |
-| Manifold Mind (3) | 8     | ✅ AE     | Additional focus.maxBonus +1 (total +2) |
-| Archwizard        | 10    | ✅ AE     | Additional deliveryManaCostReduction +1 |
+| Feature           | Level | Status    | What's Automated                                                                                |
+|-------------------|-------|-----------|-------------------------------------------------------------------------------------------------|
+| Spellcaster       | 1     | ✅ System  | Casting handled by base system                                                                  |
+| Page Master       | 1     | ✅ Module  | "+1d6 Studied Die" button on spell damage cards. Updates damage total + save amounts on click.   |
+| Sculpt Spell      | 2     | ✅ System  | deliveryManaCostReduction +1 (system AE on class item)                                          |
+| Manifold Mind     | 4     | ✅ AE      | focus.maxBonus +1                                                                               |
+| Extracurricular   | 6     | 📝 Flavor | Studied die to cast unknown spell (player-tracked)                                              |
+| Manifold Mind (3) | 8     | ✅ AE      | Additional focus.maxBonus +1 (total +2)                                                         |
+| Archwizard        | 10    | ✅ System  | Additional deliveryManaCostReduction +1 (system AE on class item)                               |
 
 ### Monk
 

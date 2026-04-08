@@ -140,6 +140,26 @@ Each class has `scripts/class-features/{class}.mjs` exporting:
 
 **Rule of thumb**: Always patch at `VagabondItem.prototype.rollAttack` / `rollDamage` or lower. Never rely on `RollHandler` for features that must work from the crawler strip. If a feature intercepts before the attack roll (e.g., intent dialogs), it MUST go in `rollAttack`, not `rollWeapon`.
 
+### Spell Damage Path — Known Limitations
+**CRITICAL**: The spell damage path is fundamentally different from the weapon damage path and has severe patching limitations:
+
+**Weapon damage** flows through `VagabondItem.prototype.rollDamage` — a prototype method that can be reliably monkey-patched. Both the character sheet and crawler call it.
+
+**Spell damage** flows through `VagabondDamageHelper.rollSpellDamage` — a **static class method**. Despite being patchable at the module level, the system's internal code (inside `_createSpellChatCard`) does its own `await import('../../helpers/damage-helper.mjs')` and calls the method via that fresh import. **Patching the static method on the class object does NOT affect calls made from within the system's own modules.** This appears to be a Foundry v13 ES module isolation behavior.
+
+**What DOESN'T work for spell damage:**
+- `VagabondDamageHelper.rollSpellDamage = ...` — static method patch is invisible to internal callers
+- `SpellHandler.prototype._createSpellChatCard = ...` — prototype patches don't work because the system creates a **new SpellHandler instance** per sheet render; the instance doesn't inherit runtime prototype changes
+- Instance-level patches via `renderApplicationV2` on `app.spellHandler._createSpellChatCard` — works for the character sheet but NOT the crawler strip
+- Modifying `actor.system.universalSpellDamageDice` in memory — gets wiped by `actor.update()` data re-derivation
+- Post-`_cast()` message counting in the crawler — `origCast` returns before async chat messages are created
+
+**What DOES work:**
+- **`Hooks.on("renderChatMessage")` button injection** — inject a button onto spell damage cards, update damage totals and `data-damage-amount` attributes retroactively on click. This is the **only reliable approach** that works from both the character sheet and the crawler strip.
+- **`state.damageDice` modification** before calling `origCreateCard` on an instance-patched `_createSpellChatCard` — works for the character sheet only (instance patch via `renderApplicationV2`). Used as a pre-roll approach when retroactive isn't acceptable.
+
+**Recommendation for new spell-related features:** Always use `renderChatMessage` button injection. Don't attempt to patch `rollSpellDamage` or `_createSpellChatCard` — it will not work across both code paths.
+
 ### Key System Fields for Active Effects
 ```
 # Crit thresholds (negative = lower threshold, e.g., -1 means crit on 19+)
