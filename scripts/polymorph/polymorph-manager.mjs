@@ -59,11 +59,11 @@ export const PolymorphManager = {
         });
     }
 
-    // Favorited beasts (for transform dropdown, always available for druids)
+    // Favorited beasts (for transform dropdown, available for any caster with Polymorph)
     const features = actor.getFlag(MODULE_ID, "features");
-    const isDruid = !!(features?.druid_feralShift || features?.druid_primalMystic);
+    const hasPolymorph = !!(features?.has_polymorph || features?.druid_feralShift || features?.druid_primalMystic);
     let favorites = [];
-    if (isDruid) {
+    if (hasPolymorph) {
       const favNames = actor.getFlag(MODULE_ID, "beastFavorites") || [];
       if (favNames.length > 0) {
         // Load from cache if available
@@ -86,7 +86,7 @@ export const PolymorphManager = {
       beastName: polyData?.beastName || null,
       actions: beastActions,
       favorites,
-      isDruid,
+      hasPolymorph,
     };
   },
 
@@ -128,8 +128,10 @@ export const PolymorphManager = {
   /* -------------------------------------------- */
 
   async applyBeastForm(actor, beastActor) {
-    // Play Beast Form FX on the druid
-    FocusManager.playFeatureFX(actor, "druid_feralShift");
+    // Play Beast Form FX on the caster (use Druid-specific FX if available, else generic)
+    const features = actor.getFlag(MODULE_ID, "features");
+    const fxKey = (features?.druid_feralShift || features?.druid_primalMystic) ? "druid_feralShift" : "polymorph_shift";
+    FocusManager.playFeatureFX(actor, fxKey);
 
     log("PolymorphManager",`Applying ${beastActor.name} form to ${actor.name}`);
 
@@ -509,7 +511,7 @@ export const PolymorphManager = {
         [MODULE_ID]: {
           managed: true,
           polymorphAE: true,
-          featureFlag: "druid_polymorph"
+          featureFlag: "polymorph"
         }
       }
     }]);

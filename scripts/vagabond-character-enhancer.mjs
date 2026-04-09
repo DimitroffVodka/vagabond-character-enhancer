@@ -493,29 +493,6 @@ Hooks.once("ready", async () => {
         await MonkFeatures.onPreRollDamage(ctx);           // Martial Arts: die escalation
         RogueFeatures.onPreRollDamage(ctx);                // Sneak Attack: inject d4s
 
-        // Exalt: +1 per damage die (+2 vs Undead/Hellspawn) — added to roll formula
-        let exaltOrigDamage;
-        const focusedIds = actor.system?.focus?.spellIds || [];
-        const hasExaltAura = !!actor.effects.find(e => e.getFlag(MODULE_ID, "auraSpell") === "Exalt");
-        const hasExaltFocus = focusedIds.some(id => actor.items.get(id)?.name?.toLowerCase() === "exalt");
-        if (hasExaltAura || hasExaltFocus) {
-          const formula = this.system.currentDamage || "d6";
-          const numDice = VagabondDamageHelper._countDiceInFormula(formula);
-          if (numDice > 0) {
-            // Check if any target is Undead or Hellspawn
-            const targets = Array.from(game.user.targets);
-            const isDoubled = targets.some(t => {
-              const bt = t.actor?.system?.beingType || "";
-              return ["Undead", "Hellspawn"].includes(bt);
-            });
-            const bonusPerDie = isDoubled ? 2 : 1;
-            const exaltBonus = numDice * bonusPerDie;
-            exaltOrigDamage = this.system.currentDamage;
-            this.system.currentDamage = `${formula} + ${exaltBonus}`;
-            log("Exalt", `${actor.name}: +${bonusPerDie} × ${numDice} dice = +${exaltBonus} added to ${formula}${isDoubled ? " (vs Undead/Hellspawn)" : ""}`);
-          }
-        }
-
         // Silver/metal weakness: add extra die if the targeted enemy is weak to weapon's metal.
         // item.rollDamage() never checks weakness — it's only checked in rollDamageFromButton
         // and handleApplyDirect. We add the die here so it's visible in the roll.
@@ -552,6 +529,30 @@ Hooks.once("ready", async () => {
           log("Imbue", `${actor.name}: +${imbue.damageDice}d${dieSize} (${imbue.spellName}) added to ${formula}`);
         }
 
+        // Exalt: +1 per damage die (+2 vs Undead/Hellspawn) — added to roll formula.
+        // Runs AFTER silver/imbue so bonus dice from those sources are counted.
+        let exaltOrigDamage;
+        const focusedIds = actor.system?.focus?.spellIds || [];
+        const hasExaltAura = !!actor.effects.find(e => e.getFlag(MODULE_ID, "auraSpell") === "Exalt");
+        const hasExaltFocus = focusedIds.some(id => actor.items.get(id)?.name?.toLowerCase() === "exalt");
+        if (hasExaltAura || hasExaltFocus) {
+          const formula = this.system.currentDamage || "d6";
+          const numDice = VagabondDamageHelper._countDiceInFormula(formula);
+          if (numDice > 0) {
+            // Check if any target is Undead or Hellspawn
+            const targets = this._vceAttackTargets || Array.from(game.user.targets);
+            const isDoubled = targets.some(t => {
+              const bt = t.actor?.system?.beingType || "";
+              return ["Undead", "Hellspawn"].includes(bt);
+            });
+            const bonusPerDie = isDoubled ? 2 : 1;
+            const exaltBonus = numDice * bonusPerDie;
+            exaltOrigDamage = this.system.currentDamage;
+            this.system.currentDamage = `${formula} + ${exaltBonus}`;
+            log("Exalt", `${actor.name}: +${bonusPerDie} × ${numDice} dice = +${exaltBonus} added to ${formula}${isDoubled ? " (vs Undead/Hellspawn)" : ""}`);
+          }
+        }
+
         try {
           const damageRoll = await origRollDamage.call(this, actor, isCritical, statKey);
           // Flag the roll as weakness-pre-rolled so handleApplyDirect doesn't add another die
@@ -562,9 +563,10 @@ Hooks.once("ready", async () => {
           RogueFeatures.onPostRollDamage(ctx);
           return damageRoll;
         } finally {
-          // Restore Sneak Attack-modified damage
-          if (ctx.sneakOrigDamage !== undefined) {
-            this.system.currentDamage = ctx.sneakOrigDamage;
+          // Restore in reverse order of application (last applied = first restored)
+          // Restore Exalt-modified damage
+          if (exaltOrigDamage !== undefined) {
+            this.system.currentDamage = exaltOrigDamage;
           }
           // Restore imbue-modified damage + clean up stashed state
           if (imbueOrigDamage !== undefined) {
@@ -575,9 +577,9 @@ Hooks.once("ready", async () => {
           if (silverOrigDamage !== undefined) {
             this.system.currentDamage = silverOrigDamage;
           }
-          // Restore Exalt-modified damage
-          if (exaltOrigDamage !== undefined) {
-            this.system.currentDamage = exaltOrigDamage;
+          // Restore Sneak Attack-modified damage
+          if (ctx.sneakOrigDamage !== undefined) {
+            this.system.currentDamage = ctx.sneakOrigDamage;
           }
           if (ctx.origCanExplode !== undefined) {
             this.system.canExplode = ctx.origCanExplode;

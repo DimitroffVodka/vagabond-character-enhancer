@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.2.6
+
+### New Features — Generic Polymorph Support
+- **Polymorph for any caster:** The Beast Form tab, focus-triggered transform, beast favorites, and beast action rolls now work for any character with the Polymorph spell — not just Druids. A Wizard, Sorcerer, or any caster who learns Polymorph gets full automation. Beast action rolls use the caster's own Cast Skill (Arcana for Wizards, Influence for Sorcerers, etc.).
+- **Polymorph Mana Drain:** 1 Mana is automatically deducted per round while focusing Polymorph in combat. Chat notification shows mana spent. If mana reaches 0, the polymorph auto-reverts with a warning. The Shapechanger perk correctly exempts from this cost (no Mana to Focus on self-Polymorph).
+- **Feature Detector spell scanning:** The feature detector now scans spell items. Adding/removing a Polymorph spell triggers an automatic rescan and updates the Beast Form tab visibility.
+- **Generic Polymorph FX:** Non-Druid casters get a separately configurable `polymorph_shift` animation in the Feature FX settings. Druids keep their existing `druid_feralShift` FX.
+
+### Bug Fixes — Exalt Spell
+- **Exalt +2 vs Undead/Hellspawn:** Fixed Exalt not applying the doubled bonus against Undead/Hellspawn targets. The target check now uses stashed attack targets (`_vceAttackTargets`) instead of `game.user.targets`, which could be cleared by the time `rollDamage` fires.
+- **Exalt bonus dice count:** Moved Exalt damage calculation to run after silver weakness and imbue dice injection, so bonus dice from those sources are counted toward Exalt's per-die bonus. Previously Exalt only counted base weapon dice.
+- **Exalt damage restore order:** Fixed formula restoration order in rollDamage (last applied = first restored) to prevent stale formulas leaking between rolls.
+
+### Bug Fixes — Aura Manager
+- **Exalt aura icon 404:** Fixed typo in Exalt aura icon path (`prayer-hands-glowing-yellow-light.webp` → `prayer-hands-glowing-yellow.webp`). Eliminates console 404 errors on every token movement near an Exalt aura.
+
+### Druid-Specific Changes
+- **Savagery +1 Armor:** Remains gated to Druid L8+ only — non-Druid casters don't get the armor bonus.
+- **Polymorph AE flag:** Changed from `druid_polymorph` to generic `polymorph` for class-agnostic tracking.
+
 ## v0.2.5
 
 ### Code Cleanup

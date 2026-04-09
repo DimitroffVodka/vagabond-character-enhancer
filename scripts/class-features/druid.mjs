@@ -164,6 +164,7 @@ export const DRUID_REGISTRY = {
 export const DruidFeatures = {
   registerHooks() {
     this._registerPolymorphHooks();
+    this._registerPolymorphManaDrain();
     this._registerForceOfNatureHooks();
     log("Druid","Druid hooks registered.");
   },
@@ -208,8 +209,8 @@ export const DruidFeatures = {
   /**
    * Unified hook for all Polymorph-related features.
    * Watches focus.spellIds for Polymorph and triggers:
-   * - Savagery AE toggle (if L8+)
-   * - PolymorphManager beast form apply/revert
+   * - Savagery AE toggle (Druid L8+ only)
+   * - PolymorphManager beast form apply/revert (any caster with Polymorph)
    */
   _registerPolymorphHooks() {
     Hooks.on("updateActor", async (actor, changes, options) => {
@@ -222,14 +223,15 @@ export const DruidFeatures = {
       const focusChanged = foundry.utils.hasProperty(changes, "system.focus.spellIds");
       if (!focusChanged) return;
 
-      // Must be a druid (check for any druid feature)
+      // Must have the Polymorph spell (any caster) or be a Druid
       const features = actor.getFlag(MODULE_ID, "features");
-      if (!features?.druid_feralShift && !features?.druid_primalMystic) return;
+      const hasPolymorph = !!(features?.has_polymorph || features?.druid_feralShift || features?.druid_primalMystic);
+      if (!hasPolymorph) return;
 
       const isFocusingPolymorph = this._isFocusingPolymorph(actor);
 
-      // --- Savagery: Toggle +1 Armor AE with Polymorph ---
-      if (features.druid_savagery) {
+      // --- Savagery: Toggle +1 Armor AE with Polymorph (Druid L8+ only) ---
+      if (features?.druid_savagery) {
         const ae = actor.effects.find(e =>
           e.getFlag(MODULE_ID, "managed") &&
           e.getFlag(MODULE_ID, "featureFlag") === "druid_savagery"
@@ -248,6 +250,78 @@ export const DruidFeatures = {
         await PolymorphManager.onPolymorphFocus(actor);
       } else {
         await PolymorphManager.onPolymorphUnfocus(actor);
+      }
+    });
+  },
+
+  /**
+   * Polymorph Mana Drain: deduct 1 Mana per round while focusing Polymorph.
+   * Per spell: "You must spend 1 Mana on your Turns to Focus on this Spell,
+   * even for willing Targets."
+   *
+   * Exemption: The Shapechanger perk waives Focus Mana cost when targeting self.
+   * Since our beast form automation is always self-polymorph, Shapechanger skips drain.
+   *
+   * If mana reaches 0, the polymorph reverts automatically.
+   */
+  _registerPolymorphManaDrain() {
+    Hooks.on("updateCombat", async (combat, changes) => {
+      if (!("round" in changes)) return;
+      // Only GM (or first active player if no GM) processes mana drain
+      if (!game.user.isGM && game.users.find(u => u.isGM && u.active)) return;
+
+      for (const combatant of combat.combatants) {
+        const actor = combatant.actor;
+        if (!actor || actor.type !== "character") continue;
+
+        // Must be focusing Polymorph
+        if (!this._isFocusingPolymorph(actor)) continue;
+
+        // Shapechanger perk: no Mana cost to Focus on self-Polymorph
+        const features = actor.getFlag(MODULE_ID, "features");
+        if (features?.perk_shapechanger) continue;
+
+        const current = actor.system?.mana?.current ?? 0;
+        if (current < 1) {
+          // Out of mana — revert polymorph
+          log("Polymorph", `${actor.name}: Out of Mana — reverting Polymorph`);
+          await ChatMessage.create({
+            content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+              <div class="card-body"><section class="content-body">
+                <div class="card-description" style="text-align:center;">
+                  <strong>${actor.name}</strong> — Out of Mana! Polymorph ends.
+                </div>
+              </section></div>
+            </div>`,
+            speaker: ChatMessage.getSpeaker({ actor })
+          });
+          await PolymorphManager.onPolymorphUnfocus(actor);
+          // Also clear the focus spell to clean up UI state
+          const focusedIds = actor.system.focus?.spellIds ?? [];
+          const nonPolyIds = focusedIds.filter(id => {
+            const spell = actor.items.get(id);
+            return !spell?.name?.toLowerCase().includes("polymorph");
+          });
+          if (nonPolyIds.length !== focusedIds.length) {
+            await actor.update({ "system.focus.spellIds": nonPolyIds }, { vcePolymorphRevert: true });
+          }
+          continue;
+        }
+
+        // Deduct 1 Mana
+        await actor.update({ "system.mana.current": current - 1 });
+        log("Polymorph", `${actor.name}: 1 Mana drained for Polymorph focus (${current} → ${current - 1})`);
+        await ChatMessage.create({
+          content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+            <div class="card-body"><section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                <strong>${actor.name}</strong> — 1 Mana spent to maintain Polymorph
+                (${current} → ${current - 1})
+              </div>
+            </section></div>
+          </div>`,
+          speaker: ChatMessage.getSpeaker({ actor })
+        });
       }
     });
   },

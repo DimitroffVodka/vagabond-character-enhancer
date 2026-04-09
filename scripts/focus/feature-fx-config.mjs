@@ -85,8 +85,25 @@ export const DEFAULT_FEATURE_FX = {
 
   // --- Druid ---
   druid_feralShift: {
-    label: "Beast Form",
+    label: "Beast Form (Druid)",
     class: "druid",
+    enabled: false,
+    target: "caster",
+    file: "modules/JB2A_DnD5e/Library/Generic/Nature/PlantGrowthRoundLoop03_01_Regular_GreenYellow_500x500.webm",
+    scale: 1.2,
+    opacity: 0.6,
+    persist: false,
+    fadeIn: 500,
+    fadeOut: 500,
+    belowToken: true,
+    sound: "",
+    soundVolume: 0.6
+  },
+
+  // --- Generic Polymorph (non-Druid casters) ---
+  polymorph_shift: {
+    label: "Polymorph",
+    class: "generic",
     enabled: false,
     target: "caster",
     file: "modules/JB2A_DnD5e/Library/Generic/Nature/PlantGrowthRoundLoop03_01_Regular_GreenYellow_500x500.webm",

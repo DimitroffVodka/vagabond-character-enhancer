@@ -120,20 +120,20 @@ export const FeatureDetector = {
   registerHooks() {
     // Rescan when items are added/removed
     Hooks.on("createItem", (item) => {
-      if (["class", "ancestry", "perk"].includes(item.type) && item.actor) {
+      if (["class", "ancestry", "perk", "spell"].includes(item.type) && item.actor) {
         this._debounceScan(item.actor);
       }
     });
 
     Hooks.on("deleteItem", (item) => {
-      if (["class", "ancestry", "perk"].includes(item.type) && item.actor) {
+      if (["class", "ancestry", "perk", "spell"].includes(item.type) && item.actor) {
         this._debounceScan(item.actor);
       }
     });
 
     // Rescan when items are updated (e.g., feature name changes)
     Hooks.on("updateItem", (item, changes) => {
-      if (["class", "ancestry", "perk"].includes(item.type) && item.actor) {
+      if (["class", "ancestry", "perk", "spell"].includes(item.type) && item.actor) {
         this._debounceScan(item.actor);
       }
     });
@@ -230,6 +230,15 @@ export const FeatureDetector = {
           features[registered.flag] = true;
           log("FeatureDetector",`Detected perk: ${item.name} on ${actor.name}`);
         }
+      }
+    }
+
+    // --- Scan spell items for automation-relevant spells ---
+    for (const item of actor.items.filter(i => i.type === "spell")) {
+      if (item.name.toLowerCase().trim() === "polymorph") {
+        features.has_polymorph = true;
+        log("FeatureDetector", `Detected Polymorph spell on ${actor.name}`);
+        break;
       }
     }
 

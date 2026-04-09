@@ -125,7 +125,7 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 | Savagery        | 8     | ✅ Module  | +1 Armor managed AE, toggles active only during polymorph                                   |
 | Force of Nature | 10    | ✅ Module  | Auto-rolls Awareness check on lethal damage, chat card with result                          |
 
-**Polymorph System** — Beast Form tab on character sheet with 72 beasts from compendium. Dialog selection, token swap, Mysticism cast checks, Roll Damage button, condition auto-apply, and size scaling.
+**Polymorph System** — Beast Form tab on character sheet with 72 beasts from compendium. Dialog selection, token swap, cast skill checks (uses caster's own skill), Roll Damage button, condition auto-apply, and size scaling. **Works for any caster with the Polymorph spell** — not just Druids. Druid-specific bonuses (Savagery +1 Armor) remain gated. Shapechanger perk correctly exempts from per-round Mana cost.
 
 ---
 
@@ -414,8 +414,9 @@ Spells in the Vagabond system have no built-in Active Effects. VCE automates sel
 | Spell | What's Automated |
 |-------|------------------|
 | Bless | Full aura system — d4 save bonus AE on allies, silvered weapons, mode buttons in chat |
-| Exalt | +1 per damage die (+2 vs Undead/Hellspawn), applied via focus/aura |
+| Exalt | +1 per damage die (+2 vs Undead/Hellspawn), counts all dice including silver/imbue bonus dice |
 | Imbue | Spell damage dice added to weapon formula, single armor application |
+| Polymorph | Beast Form tab, stat swap, token swap, beast action rolls, mana drain per round. Works for any caster. |
 
 ---
 

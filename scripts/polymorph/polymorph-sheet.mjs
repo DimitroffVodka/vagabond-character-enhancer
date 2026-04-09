@@ -87,12 +87,12 @@ export const PolymorphSheet = {
     const tabNav = windowContent.querySelector("nav.sheet-tabs");
     if (!tabNav) return;
 
-    // Check if this actor is a druid
+    // Check if this actor has the Polymorph spell (any caster) or is a Druid
     const features = actor.getFlag(MODULE_ID, "features");
-    const isDruid = !!(features?.druid_feralShift || features?.druid_primalMystic);
+    const hasPolymorph = !!(features?.has_polymorph || features?.druid_feralShift || features?.druid_primalMystic);
 
-    if (!isDruid) {
-      // Not a druid — clean up any stale beast form elements
+    if (!hasPolymorph) {
+      // No Polymorph spell — clean up any stale beast form elements
       windowContent.querySelector('section.tab[data-tab="vce-beast-form"]')?.remove();
       tabNav.querySelector('[data-tab="vce-beast-form"]')?.remove();
       return;
@@ -101,7 +101,7 @@ export const PolymorphSheet = {
     const polyData = actor.getFlag(MODULE_ID, "polymorphData");
     const actorSheet = actor.sheet;
 
-    // --- DRUID: Always show Beast Form tab ---
+    // --- Always show Beast Form tab for actors with Polymorph ---
 
     // Remove stale elements to avoid duplicates on re-render
     windowContent.querySelector('section.tab[data-tab="vce-beast-form"]')?.remove();

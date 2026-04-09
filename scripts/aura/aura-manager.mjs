@@ -32,7 +32,7 @@ import { MODULE_ID, log } from "../utils.mjs";
 const AURA_SPELLS = {
   exalt: {
     label: "Exalt",
-    icon: "icons/magic/holy/prayer-hands-glowing-yellow-light.webp",
+    icon: "icons/magic/holy/prayer-hands-glowing-yellow.webp",
     templateColor: "#FFD700",
     templateBorder: "#DAA520",
     description: "+1 per damage die (+2 vs Undead/Hellspawn), +1 Will Saves vs Frightened",
