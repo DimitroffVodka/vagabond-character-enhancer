@@ -176,6 +176,17 @@ export const PERK_REGISTRY = {
     description: "Failed Checks don't alert Beings to your presence or advance Progress Clocks."
   },
 
+  // Conjurer
+  // Prerequisite: Trained: Arcana, Influence, or Mysticism
+  // You can take the Cast Action to conjure a Summon (non-Humanlike Being you
+  // have previously defeated, HD ≤ your Level). Costs Mana = HD. Must Focus,
+  // spending 1 Mana per Turn. Banished at 0 HP, new summon, or dropped focus.
+  // Uses your Cast Skill for Checks and Saves.
+  "conjurer": {
+    flag: "perk_conjurer",
+    description: "Cast Action to conjure a Summon (HD ≤ Level, Mana = HD). Focus + 1 Mana/turn to maintain."
+  },
+
   // Combat Medic
   // Prerequisite: Stat: RSN 4+ | Trained: Medicine
   // As an Action, you can tend to a willing Being's injuries. Doing so removes
@@ -339,12 +350,12 @@ export const PERK_REGISTRY = {
     description: "Spend a Luck to pass a failed Influence, Leadership, or Performance Check."
   },
 
-  // Heightened Reason
+  // Heightened Intellect
   // Prerequisite: Stat: RSN 7
   // You can spend a Studied die to pass an Arcana, Craft, or Medicine Check
   // you fail.
-  "heightened reason": {
-    flag: "perk_heightenedReason",
+  "heightened intellect": {
+    flag: "perk_heightenedIntellect",
     description: "Spend a Studied die to pass a failed Arcana, Craft, or Medicine Check."
   },
 
@@ -671,15 +682,15 @@ export const PERK_REGISTRY = {
     description: "Once per Shift, Action to grant all Allies 1 Luck and end Charmed or Frightened."
   },
 
-  // Re-Animator
+  // Reanimator
   // Prerequisite: Trained: Craft & either Arcana or Mysticism
   // You can perform a 10-minute Ritual with the corpse of a non-Artificial or
   // Undead Being with HD no higher than your Level, raising it as an Undead as
   // per the Raise Spell. It is under your control for one Shift, or until you
   // perform this Ritual again. You can command it during your Turn (no Action),
   // and it uses your Craft Skill for Checks it makes.
-  "re-animator": {
-    flag: "perk_reAnimator",
+  "reanimator": {
+    flag: "perk_reanimator",
     description: "10-minute Ritual to raise a corpse as Undead (Raise Spell). Lasts one Shift. Uses Craft Skill."
   },
 
@@ -784,13 +795,14 @@ export const PERK_REGISTRY = {
     description: "Skip Move to reduce Ranged Crit roll needed by 1 this Turn."
   },
 
-  // Singer
-  // Prerequisite: Stat: PRS 4+ | Trained: Performance
-  // You can use your voice as a Musical Instrument. If you are capable of
-  // singing, you are considered to have a Musical Instrument Equipped.
-  "singer": {
-    flag: "perk_singer",
-    description: "Your voice counts as a Musical Instrument."
+  // Silver Tongued
+  // Prerequisite: Stat: PRS 4+ | Trained: Influence
+  // The roll required for you to Crit on Influence Checks made to deceive,
+  // intimidate, or persuade others is reduced by 1. You can take this Perk
+  // up to 4 times.
+  "silver tongued": {
+    flag: "perk_silverTongued",
+    description: "Influence crit threshold -1 for deceive/intimidate/persuade. Stackable up to 4 times."
   },
 
   // Situational Awareness

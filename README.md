@@ -256,6 +256,20 @@ The Gold Sink tab lets Merchants browse and buy from system compendiums (no Reli
 
 ---
 
+### Summoner
+
+| Feature          | Level | Status     | What's Automated                                                                                   |
+|------------------|-------|------------|----------------------------------------------------------------------------------------------------|
+| Arcanum          | 1     | 📝 Flavor  | Casting handled by base system                                                                     |
+| Creature Codex   | 1     | ✅ Module   | Summon tab with creature list, personal Codex management, conjure flow, mana cost, token placement  |
+| Soulbonder       | 2     | ✅ Module   | Copies summon's Armor + Immunities as managed AEs while conjured                                   |
+| Second Nature    | 4     | ✅ Module   | Cd4 countdown option instead of Focus (no mana drain per round)                                    |
+| Avatar Emergence | 6     | ✅ Module   | Once per Shift, conjure without Mana cost. Resets on rest.                                         |
+| Guardian Force   | 8     | ✅ Module   | Summoner 0 HP → summon persists on Cd4 countdown, revive at 1 HP (+1 Fatigue) on expiry            |
+| Ultimate Weapon  | 10    | ✅ Module   | Max summon HD cap increased by +5                                                                  |
+
+---
+
 ### Sorcerer
 
 | Feature        | Level | Status    | What's Automated                               |

@@ -14,6 +14,7 @@
 
 import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
+import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -903,17 +904,18 @@ export const SummonerFeatures = {
       await actor.update({ "system.mana.current": currentMana - cost });
     }
 
-    // Get or import the source actor
+    // Get or import the source actor (via GM relay if player)
     let sourceActorId = npcData.worldActorId;
     let importedFromCompendium = false;
 
     if (!sourceActorId && npcData.compendiumUuid) {
-      // Import from compendium to world
-      const doc = await fromUuid(npcData.compendiumUuid);
-      if (doc) {
-        const [imported] = await Actor.create([doc.toObject()], { renderSheet: false });
-        sourceActorId = imported.id;
+      try {
+        const result = await gmRequest("importActor", { uuid: npcData.compendiumUuid });
+        sourceActorId = result.actorId;
         importedFromCompendium = true;
+      } catch (e) {
+        ui.notifications.error(`Failed to import creature: ${e.message}`);
+        return;
       }
     }
 
@@ -922,7 +924,7 @@ export const SummonerFeatures = {
       return;
     }
 
-    // Place token on canvas
+    // Place token on canvas (via GM relay if player)
     const summonerToken = actor.getActiveTokens()?.[0];
     if (!summonerToken) {
       ui.notifications.warn("No summoner token on canvas.");
@@ -932,22 +934,26 @@ export const SummonerFeatures = {
     const gridSize = canvas.grid?.size ?? 100;
     const sizeMultiplier = SIZE_MAP[npcData.size?.toLowerCase()] ?? 1;
 
-    const [tokenDoc] = await canvas.scene.createEmbeddedDocuments("Token", [{
-      name: npcData.name,
-      actorId: sourceActorId,
-      texture: { src: npcData.img || "icons/svg/mystery-man.svg" },
-      x: summonerToken.document.x + gridSize,
-      y: summonerToken.document.y,
-      width: sizeMultiplier,
-      height: sizeMultiplier,
-      disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY
-    }]);
-
-    if (!tokenDoc) {
-      ui.notifications.error("Failed to place summon token. Does your player role have 'Create Token' permission?");
+    let tokenId;
+    try {
+      const result = await gmRequest("placeToken", {
+        sceneId: canvas.scene.id,
+        tokenData: {
+          name: npcData.name,
+          actorId: sourceActorId,
+          texture: { src: npcData.img || "icons/svg/mystery-man.svg" },
+          x: summonerToken.document.x + gridSize,
+          y: summonerToken.document.y,
+          width: sizeMultiplier,
+          height: sizeMultiplier,
+          disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY
+        }
+      });
+      tokenId = result.tokenId;
+    } catch (e) {
+      ui.notifications.error(`Failed to place summon token: ${e.message}`);
       if (importedFromCompendium) {
-        const imp = game.actors.get(sourceActorId);
-        if (imp) try { await imp.delete(); } catch { /* permission */ }
+        try { await gmRequest("deleteActor", { actorId: sourceActorId }); } catch { /* best effort */ }
       }
       return;
     }
@@ -975,10 +981,9 @@ export const SummonerFeatures = {
       );
       if (!acquired) {
         ui.notifications.warn("No focus slots available — summon cannot be maintained.");
-        await canvas.scene.deleteEmbeddedDocuments("Token", [tokenDoc.id]);
+        try { await gmRequest("removeToken", { sceneId: canvas.scene.id, tokenId }); } catch { /* best effort */ }
         if (importedFromCompendium) {
-          const imp = game.actors.get(sourceActorId);
-          if (imp) try { await imp.delete(); } catch { /* permission */ }
+          try { await gmRequest("deleteActor", { actorId: sourceActorId }); } catch { /* best effort */ }
         }
         return;
       }
@@ -987,7 +992,7 @@ export const SummonerFeatures = {
     // Store conjure state
     const conjureState = {
       summonActorId: sourceActorId,
-      summonTokenId: tokenDoc.id,
+      summonTokenId: tokenId,
       summonName: npcData.name,
       summonImg: npcData.img,
       summonHD: npcData.hd,
@@ -1031,23 +1036,17 @@ export const SummonerFeatures = {
     const conjure = actor.getFlag(MODULE_ID, FLAG_CONJURE);
     if (!conjure) return;
 
-    // Remove token from canvas
-    const scene = game.scenes.get(conjure.sceneId) || canvas.scene;
-    const tokenDoc = scene?.tokens?.get(conjure.summonTokenId);
-    if (tokenDoc) {
-      await scene.deleteEmbeddedDocuments("Token", [tokenDoc.id]);
+    // Remove token from canvas (via GM relay if player)
+    const sceneId = conjure.sceneId || canvas.scene?.id;
+    if (sceneId && conjure.summonTokenId) {
+      try { await gmRequest("removeToken", { sceneId, tokenId: conjure.summonTokenId }); }
+      catch (e) { log("Summoner", `Could not remove token: ${e.message}`); }
     }
 
-    // Delete imported actor if from compendium (skip if player lacks permission)
+    // Delete imported actor if from compendium (via GM relay if player)
     if (conjure.importedFromCompendium && conjure.summonActorId) {
-      const importedActor = game.actors.get(conjure.summonActorId);
-      if (importedActor) {
-        try {
-          await importedActor.delete();
-        } catch (e) {
-          log("Summoner", `Could not delete imported actor ${importedActor.name} (permission issue — GM can clean up)`);
-        }
-      }
+      try { await gmRequest("deleteActor", { actorId: conjure.summonActorId }); }
+      catch (e) { log("Summoner", `Could not delete imported actor: ${e.message}`); }
     }
 
     // Release focus
@@ -1145,9 +1144,7 @@ export const SummonerFeatures = {
     const hasDamage = action.rollDamage || action.flatDamage;
     if (isSuccess && hasDamage) {
       const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
-      const formula = action.rollDamage && action.flatDamage
-        ? `${action.rollDamage} + ${action.flatDamage}`
-        : (action.rollDamage || action.flatDamage || "0");
+      const formula = action.rollDamage || action.flatDamage || "0";
       damageRoll = new Roll(formula);
       await damageRoll.evaluate();
     }
@@ -1311,11 +1308,18 @@ export const SummonerFeatures = {
       seen.add(npc.name);
     }
 
-    // Bestiary compendium
+    // Bestiary compendium — must request system fields explicitly for remote servers
     const bestiary = game.packs.get("vagabond.bestiary");
     if (bestiary) {
-      for (const entry of bestiary.index.values()) {
+      const index = await bestiary.getIndex({ fields: [
+        "system.beingType", "system.hd", "system.size", "system.armor",
+        "system.speed", "system.speedTypes", "system.speedValues",
+        "system.actions", "system.abilities", "system.senses",
+        "system.immunities", "system.weaknesses"
+      ]});
+      for (const entry of index.values()) {
         if (seen.has(entry.name)) continue;
+        seen.add(entry.name);
         const bt = entry.system?.beingType || "";
         if (bt === "Humanlike") continue;
         if ((entry.system?.hd ?? 1) > maxHD) continue;

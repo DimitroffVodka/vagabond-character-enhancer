@@ -69,6 +69,8 @@ import { ImbueManager } from "./spell-features/imbue-manager.mjs";
 import { BlessManager } from "./spell-features/bless-manager.mjs";
 import { EffectOnlyHandler } from "./spell-features/effect-only-handler.mjs";
 import { SummonerFeatures } from "./class-features/summoner.mjs";
+import { FamiliarFeatures } from "./perk-features/familiar.mjs";
+import { registerSocketRelay } from "./socket-relay.mjs";
 import { RangeValidator } from "./range-validator.mjs";
 
 /* -------------------------------------------- */
@@ -1098,6 +1100,9 @@ Hooks.once("ready", async () => {
         useBanish: () => SummonerFeatures.banishSummon(actor, "Dismissed")
       };
     },
+    familiar: FamiliarFeatures,
+    conjureFamiliar: (actor) => FamiliarFeatures.showConjureDialog(actor),
+    banishFamiliar: (actor) => FamiliarFeatures.banishFamiliar(actor, "Dismissed"),
     rescan: (actor) => FeatureDetector.scan(actor),
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
@@ -1186,6 +1191,9 @@ Hooks.once("ready", async () => {
     }
   };
 
+  // Register socket relay for GM-proxied operations (token/actor create/delete)
+  registerSocketRelay();
+
   // Register feature detection hooks
   FeatureDetector.registerHooks();
 
@@ -1216,6 +1224,7 @@ Hooks.once("ready", async () => {
   BlessManager.registerHooks();
   EffectOnlyHandler.registerHooks();
   SummonerFeatures.registerHooks();
+  FamiliarFeatures.registerHooks();
 
   // Patch modifyMovementCost to ignore walk difficulty for Treads Lightly
   const moveCostModel = CONFIG.RegionBehavior?.dataModels?.modifyMovementCost;
