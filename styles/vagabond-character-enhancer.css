@@ -90,7 +90,8 @@ nav.sheet-tabs [data-tab="vce-beast-form"] {
 nav.sheet-tabs:has([data-tab="vce-beast-form"]),
 nav.sheet-tabs:has([data-tab="vce-cookbook"]),
 nav.sheet-tabs:has([data-tab="vce-virtuoso"]),
-nav.sheet-tabs:has([data-tab="vce-stepup"]) {
+nav.sheet-tabs:has([data-tab="vce-stepup"]),
+nav.sheet-tabs:has([data-tab="vce-gold-sink"]) {
   justify-content: center !important;
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -101,7 +102,8 @@ nav.sheet-tabs:has([data-tab="vce-stepup"]) {
 nav.sheet-tabs:has([data-tab="vce-beast-form"])::-webkit-scrollbar,
 nav.sheet-tabs:has([data-tab="vce-cookbook"])::-webkit-scrollbar,
 nav.sheet-tabs:has([data-tab="vce-virtuoso"])::-webkit-scrollbar,
-nav.sheet-tabs:has([data-tab="vce-stepup"])::-webkit-scrollbar {
+nav.sheet-tabs:has([data-tab="vce-stepup"])::-webkit-scrollbar,
+nav.sheet-tabs:has([data-tab="vce-gold-sink"])::-webkit-scrollbar {
   display: none; /* Chrome/Safari */
 }
 
@@ -109,7 +111,8 @@ nav.sheet-tabs:has([data-tab="vce-stepup"])::-webkit-scrollbar {
 nav.sheet-tabs:has([data-tab="vce-beast-form"]) [data-tab],
 nav.sheet-tabs:has([data-tab="vce-cookbook"]) [data-tab],
 nav.sheet-tabs:has([data-tab="vce-virtuoso"]) [data-tab],
-nav.sheet-tabs:has([data-tab="vce-stepup"]) [data-tab] {
+nav.sheet-tabs:has([data-tab="vce-stepup"]) [data-tab],
+nav.sheet-tabs:has([data-tab="vce-gold-sink"]) [data-tab] {
   flex-shrink: 0;
   white-space: nowrap;
 }
@@ -1612,4 +1615,208 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
   padding: 4px 12px;
   font-size: 12px;
   cursor: pointer;
+}
+
+/* -------------------------------------------- */
+/*  Gold Sink — Merchant Shop Tab               */
+/* -------------------------------------------- */
+
+nav.sheet-tabs [data-tab="vce-gold-sink"] {
+  white-space: nowrap;
+}
+
+.vce-gold-sink.active {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vce-gold-sink {
+  padding: 6px 8px;
+  color: var(--vagabond-c-text-primary);
+  font-family: "Paradigm", serif;
+}
+
+.vce-gs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: var(--vagabond-c-inset-2, rgba(0,0,0,0.15));
+  border-radius: 4px;
+}
+
+.vce-gs-wallet {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.vce-gs-wallet i {
+  color: #d4a843;
+}
+
+.vce-gs-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--vagabond-c-inset-2, rgba(0,0,0,0.1));
+  border-radius: 3px;
+}
+
+.vce-gs-search i {
+  opacity: 0.5;
+}
+
+.vce-gs-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.vce-gs-filters {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.vce-gs-filter-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.vce-gs-filter-btn.active {
+  opacity: 1;
+  background: var(--vagabond-c-inset-2, rgba(255,255,255,0.1));
+  border-color: #d4a843;
+}
+
+.vce-gs-filter-btn:hover {
+  opacity: 0.85;
+}
+
+.vce-gs-subfolder {
+  padding: 0 2px;
+}
+
+.vce-gs-folder-select {
+  width: 100%;
+  font-size: 12px;
+  padding: 3px 6px;
+  background: var(--vagabond-c-inset-2, rgba(0,0,0,0.15));
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 3px;
+  color: inherit;
+  font-family: inherit;
+}
+
+.vce-gs-shop-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vce-gs-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 3px;
+  transition: background 0.1s;
+}
+
+.vce-gs-item:hover {
+  background: var(--vagabond-c-inset-2, rgba(255,255,255,0.05));
+}
+
+.vce-gs-item.cant-afford {
+  opacity: 0.4;
+}
+
+.vce-gs-item-img {
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.vce-gs-item-name {
+  flex: 1;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vce-gs-item-cost {
+  font-size: 11px;
+  opacity: 0.7;
+  white-space: nowrap;
+  min-width: 50px;
+  text-align: right;
+}
+
+.vce-gs-buy-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.vce-gs-buy-btn:hover:not(:disabled) {
+  background: rgba(76, 175, 80, 0.3);
+}
+
+.vce-gs-buy-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.vce-gs-sell-all-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid #e74c3c;
+  border-radius: 3px;
+  background: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.vce-gs-sell-all-btn:hover {
+  background: rgba(231, 76, 60, 0.35);
+}
+
+/* Favorited items */
+.vce-gs-fav-icon {
+  color: #d4a843;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.vce-gs-empty {
+  padding: 12px;
+  text-align: center;
+  opacity: 0.5;
+  font-size: 12px;
 }

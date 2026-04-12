@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.2.7
+
+### New Features — Merchant Gold Sink
+- **Gold Sink tab:** New "Gold Sink" tab on Merchant character sheets. Browse and buy items from the Weapons, Armor, Gear, and Alchemical Items compendiums. Relics are excluded.
+- **Search & filters:** Text search, type filter toggles (Weapons/Armor/Gear/Alchemical), and gear subfolder dropdown for the 18 gear categories.
+- **Alchemical item prep:** Purchased alchemical items use the same conversion pipeline as Alchemist crafting — offensive items become throwable weapons, healing potions are marked as consumables, and alchemical effect flags are set.
+- **Sell Junk:** "Sell Junk" button in the tab header sells all items marked as junk (shared with vagabond-crawler's junk system). Configurable sell ratio via module setting (default 100%).
+- **Chat cards:** Buy and sell transactions post chat cards using the system's card format.
+- **Loot log integration:** Sold items are logged to vagabond-crawler's loot tracker when the crawler module is active.
+- **Favorites system:** Right-click shop items to favorite them (gold star). Favorites sort to the top of the shop list and appear as a "Gold Sink" tab in the vagabond-crawler combat action strip for quick purchasing during play.
+
+### Crawler Integration
+- **Gold Sink combat tab:** Merchants with favorited Gold Sink items get a "Gold Sink" tab in the crawler's combat dropdown. Clicking an item buys it instantly (deducts gold, creates item, posts chat card). Price shown in red if unaffordable.
+
 ## v0.2.6
 
 ### New Features — Generic Polymorph Support

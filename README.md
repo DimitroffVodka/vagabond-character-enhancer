@@ -202,13 +202,15 @@ Works through the charcter sheet tab Virtuoso or through the drop down menu on t
 
 | Feature                 | Level | Status    | What's Automated                                        |
 |-------------------------|-------|-----------|---------------------------------------------------------|
-| Gold Sink               | 1     | 🔲 Todo   | Item transmutation UI                                   |
+| Gold Sink               | 1     | ✅ Module  | Shop tab to buy/sell gear, weapons, armor, alchemical items. Favorites integrate with crawler combat strip. |
 | Deep Pockets            | 1     | ✅ AE      | inventory.bonusSlots = ceil(level/2), scales with level |
 | Bang for Your Buck      | 2     | 🔲 Todo   | Luck roll to not expend items                           |
 | Diamond Hands           | 4     | 📝 Flavor | Downtime relic modification                             |
 | Treasure Seeker         | 6     | 📝 Flavor | Narrative sense                                         |
 | Bang for Your Buck (d8) | 8     | 🔲 Todo   | Upgrade refund die                                      |
 | Top Shelf               | 10    | 📝 Flavor | Weekly relic pull                                       |
+
+The Gold Sink tab lets Merchants browse and buy from system compendiums (no Relics). Right-click items to favorite them — favorites appear at the top of the list and in the Vagabond Crawler combat dropdown for quick purchasing. Items marked as junk (via right-click on the inventory tab) can be sold in bulk with the "Sell Junk" button. Sell ratio is configurable in module settings (default 100%).
 
 ---
 

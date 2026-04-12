@@ -10,11 +10,11 @@ import { MODULE_ID, log, hasFeature } from "../utils.mjs";
 /* -------------------------------------------- */
 
 export const MERCHANT_REGISTRY = {
-  // L1: Gold Sink — Deft Hands Perk + item transmutation
-  // STATUS: todo — Gold Sink needs custom UI for item placement/retrieval
+  // L1: Gold Sink — Shop tab on character sheet
+  // STATUS: module — Gold Sink tab with buy/sell from compendium items
   "gold sink": {
-    class: "merchant", level: 1, flag: "merchant_goldSink", status: "todo",
-    description: "Gain Deft Hands Perk. Place nonmagical valuables in container → replace with Item of equal or lesser value."
+    class: "merchant", level: 1, flag: "merchant_goldSink", status: "module",
+    description: "Gain Deft Hands Perk. Shop tab to buy/sell gear, weapons, armor, and alchemical items."
   },
 
   // L1: Deep Pockets — Extra item slots

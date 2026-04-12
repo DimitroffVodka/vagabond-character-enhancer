@@ -61,11 +61,13 @@ import { AuraManager } from "./aura/aura-manager.mjs";
 import { FocusManager } from "./focus/focus-manager.mjs";
 import { FeatureFxConfig } from "./focus/feature-fx-config.mjs";
 import { PolymorphSheet } from "./polymorph/polymorph-sheet.mjs";
+import { GoldSinkSheet, buyFavoriteItem, getShopItems } from "./merchant/gold-sink-sheet.mjs";
 import { BeastCache } from "./polymorph/beast-cache.mjs";
 import { populateBeasts } from "./polymorph/populate-beasts.mjs";
 import { DrakenFeatures } from "./ancestry-features/draken.mjs";
 import { ImbueManager } from "./spell-features/imbue-manager.mjs";
 import { BlessManager } from "./spell-features/bless-manager.mjs";
+import { EffectOnlyHandler } from "./spell-features/effect-only-handler.mjs";
 import { SummonerFeatures } from "./class-features/summoner.mjs";
 import { RangeValidator } from "./range-validator.mjs";
 
@@ -177,6 +179,16 @@ Hooks.once("init", () => {
     config: false,
     type: Boolean,
     default: false
+  });
+
+  game.settings.register(MODULE_ID, "goldSinkSellRatio", {
+    name: "Gold Sink Sell Ratio (%)",
+    hint: "Percentage of base cost that items sell for in the Merchant Gold Sink tab. Default 100%.",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 100, step: 5 },
+    default: 100
   });
 
   console.log(`${MODULE_ID} | Initialized.`);
@@ -1130,6 +1142,38 @@ Hooks.once("ready", async () => {
         useVirtuoso: (buffKey) => BardFeatures._useVirtuosoFromTab(actor, buffKey),
       };
     },
+    /** API for Vagabond Crawler: get Gold Sink favorite items for a merchant actor */
+    getGoldSinkData: (actor) => {
+      if (!actor) return null;
+      const features = actor.getFlag(MODULE_ID, "features");
+      if (!features?.merchant_goldSink) return null;
+      const favUuids = actor.getFlag(MODULE_ID, "goldSinkFavorites") ?? [];
+      if (!favUuids.length) return { hasMerchant: true, favorites: [] };
+      // Resolve favorites from cached shop items (loaded at ready)
+      const shopItems = getShopItems();
+      if (!shopItems) return { hasMerchant: true, favorites: [] };
+      const cur = actor.system.currency ?? { gold: 0, silver: 0, copper: 0 };
+      const walletCopper = (cur.gold * 10000) + (cur.silver * 100) + cur.copper;
+      const favorites = favUuids.map(uuid => {
+        const item = shopItems.find(i => i.uuid === uuid);
+        if (!item) return null;
+        const affordable = walletCopper >= item.costCopper;
+        const parts = [];
+        if (item.baseCost.gold) parts.push(`${item.baseCost.gold}g`);
+        if (item.baseCost.silver) parts.push(`${item.baseCost.silver}s`);
+        if (item.baseCost.copper) parts.push(`${item.baseCost.copper}c`);
+        const priceLabel = parts.join(" ") || "Free";
+        return {
+          uuid, label: item.name, img: item.img, priceLabel, affordable,
+        };
+      }).filter(Boolean);
+      return {
+        hasMerchant: true,
+        favorites,
+        /** Call this to buy a favorite item from the crawler */
+        buyItem: (uuid) => buyFavoriteItem(actor, uuid),
+      };
+    },
     debug: (actor) => {
       if (!actor) {
         console.warn(`${MODULE_ID} | debug: No actor provided. Usage: game.vagabondCharacterEnhancer.debug(game.actors.get("id"))`);
@@ -1171,6 +1215,7 @@ Hooks.once("ready", async () => {
   DrakenFeatures.registerHooks();
   ImbueManager.registerHooks();
   BlessManager.registerHooks();
+  EffectOnlyHandler.registerHooks();
   SummonerFeatures.registerHooks();
 
   // Patch modifyMovementCost to ignore walk difficulty for Treads Lightly
@@ -1192,6 +1237,9 @@ Hooks.once("ready", async () => {
 
   // Patch character sheet for Beast Form panel injection
   PolymorphSheet.patchSheet();
+
+  // Patch character sheet for Merchant Gold Sink tab
+  GoldSinkSheet.patchSheet();
 
   // Initialize beast cache from compendiums
   BeastCache.initialize();
