@@ -600,8 +600,8 @@ export const GoldSinkSheet = {
     if (this._patched) return;
     const self = this;
 
-    // Pre-load shop items
-    Hooks.once("ready", () => _loadShopItems());
+    // Pre-load shop items (already inside the ready hook, so call directly)
+    _loadShopItems();
 
     Hooks.on("renderApplicationV2", (app, html, data) => {
       if (app.document?.type === "character") {
