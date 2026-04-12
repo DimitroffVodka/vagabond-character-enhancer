@@ -150,8 +150,9 @@ function _buildTabHTML(actor, items, state) {
   const sellRatio = _getSellRatio();
   const ratioLabel = Math.round(sellRatio * 100);
 
-  // Get favorites set
-  const favorites = new Set(actor.getFlag(MODULE_ID, "goldSinkFavorites") ?? []);
+  // Get favorites (array of {uuid, name, ...} objects)
+  const favArray = actor.getFlag(MODULE_ID, "goldSinkFavorites") ?? [];
+  const favorites = new Set(favArray.map(f => f.uuid));
 
   // Filter shop items
   let filtered = items;
@@ -295,13 +296,19 @@ function _bindEvents(section, actor, state, rebuildFn) {
       e.stopPropagation();
       const uuid = row.dataset.uuid;
       if (!uuid) return;
-      const favs = new Set(actor.getFlag(MODULE_ID, "goldSinkFavorites") ?? []);
-      if (favs.has(uuid)) {
-        favs.delete(uuid);
+      const item = _shopItems?.find(i => i.uuid === uuid);
+      if (!item) return;
+      const favs = actor.getFlag(MODULE_ID, "goldSinkFavorites") ?? [];
+      const idx = favs.findIndex(f => f.uuid === uuid);
+      if (idx >= 0) {
+        favs.splice(idx, 1);
       } else {
-        favs.add(uuid);
+        favs.push({
+          uuid, name: item.name, img: item.img,
+          baseCost: item.baseCost, costCopper: item.costCopper, packId: item.packId,
+        });
       }
-      await actor.setFlag(MODULE_ID, "goldSinkFavorites", [...favs]);
+      await actor.setFlag(MODULE_ID, "goldSinkFavorites", favs);
     });
   });
 

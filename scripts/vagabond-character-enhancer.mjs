@@ -61,7 +61,7 @@ import { AuraManager } from "./aura/aura-manager.mjs";
 import { FocusManager } from "./focus/focus-manager.mjs";
 import { FeatureFxConfig } from "./focus/feature-fx-config.mjs";
 import { PolymorphSheet } from "./polymorph/polymorph-sheet.mjs";
-import { GoldSinkSheet, buyFavoriteItem, getShopItems } from "./merchant/gold-sink-sheet.mjs";
+import { GoldSinkSheet, buyFavoriteItem } from "./merchant/gold-sink-sheet.mjs";
 import { BeastCache } from "./polymorph/beast-cache.mjs";
 import { populateBeasts } from "./polymorph/populate-beasts.mjs";
 import { DrakenFeatures } from "./ancestry-features/draken.mjs";
@@ -1142,29 +1142,28 @@ Hooks.once("ready", async () => {
         useVirtuoso: (buffKey) => BardFeatures._useVirtuosoFromTab(actor, buffKey),
       };
     },
-    /** API for Vagabond Crawler: get Gold Sink favorite items for a merchant actor */
+    /** API for Vagabond Crawler: get Gold Sink favorite items for a merchant actor.
+     *  Reads metadata directly from the actor flag — no dependency on shop cache. */
     getGoldSinkData: (actor) => {
       if (!actor) return null;
       const features = actor.getFlag(MODULE_ID, "features");
       if (!features?.merchant_goldSink) return null;
-      const favUuids = actor.getFlag(MODULE_ID, "goldSinkFavorites") ?? [];
-      if (!favUuids.length) return { hasMerchant: true, favorites: [] };
-      // Resolve favorites from cached shop items (loaded at ready)
-      const shopItems = getShopItems();
-      if (!shopItems) return { hasMerchant: true, favorites: [] };
+      const favs = actor.getFlag(MODULE_ID, "goldSinkFavorites") ?? [];
+      if (!favs.length) return { hasMerchant: true, favorites: [] };
       const cur = actor.system.currency ?? { gold: 0, silver: 0, copper: 0 };
       const walletCopper = (cur.gold * 10000) + (cur.silver * 100) + cur.copper;
-      const favorites = favUuids.map(uuid => {
-        const item = shopItems.find(i => i.uuid === uuid);
-        if (!item) return null;
-        const affordable = walletCopper >= item.costCopper;
+      const favorites = favs.map(f => {
+        if (!f.uuid) return null;
+        const cost = f.baseCost ?? { gold: 0, silver: 0, copper: 0 };
+        const costCopper = f.costCopper ?? ((cost.gold * 10000) + (cost.silver * 100) + (cost.copper ?? 0));
+        const affordable = walletCopper >= costCopper;
         const parts = [];
-        if (item.baseCost.gold) parts.push(`${item.baseCost.gold}g`);
-        if (item.baseCost.silver) parts.push(`${item.baseCost.silver}s`);
-        if (item.baseCost.copper) parts.push(`${item.baseCost.copper}c`);
+        if (cost.gold) parts.push(`${cost.gold}g`);
+        if (cost.silver) parts.push(`${cost.silver}s`);
+        if (cost.copper) parts.push(`${cost.copper}c`);
         const priceLabel = parts.join(" ") || "Free";
         return {
-          uuid, label: item.name, img: item.img, priceLabel, affordable,
+          uuid: f.uuid, label: f.name, img: f.img, priceLabel, affordable,
         };
       }).filter(Boolean);
       return {
