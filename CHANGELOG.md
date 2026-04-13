@@ -4,6 +4,9 @@
 
 ### Bug Fixes
 - **Alchemy weapons missing Thrown property** — Crafted offensive alchemical items (Alchemist's Fire, Acid Flask, etc.) now correctly receive the Thrown weapon property. Previously these weapons were stuck at 5' melee range despite being set to "Near" range because the Thrown property was never added during weapon conversion.
+- **Range hinder not applied to dice** — Thrown weapons at Far range (>30ft) showed a "Hindered" notification but the hinder wasn't actually applied to the d20 roll. The system's `rollAttack` ignores the favorHinder string parameter — it builds favor/hinder internally from Active Effects and keyboard modifiers. Fixed by routing the range hinder through `buildAndEvaluateD20WithRollData`.
+- **Materials are now weightless** — Materials items converted to consumables for alchemy crafting now have zero slot cost (`baseSlots: 0` + `trueZeroSlot` flag), preventing inflated inventory slot counts when stacking quantities.
+- **Fixed module download URL** — Manifest now uses the `latest` redirect for downloads so Foundry can detect and install updates correctly.
 
 ## v0.2.7
 
