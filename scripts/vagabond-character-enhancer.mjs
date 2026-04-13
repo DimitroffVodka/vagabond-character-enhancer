@@ -3,7 +3,7 @@
  * Automates ancestry traits, class features, and perks for the Vagabond RPG system.
  */
 
-import { MODULE_ID, log, getFeatures } from "./utils.mjs";
+import { MODULE_ID, log, getFeatures, combineFavor } from "./utils.mjs";
 export { MODULE_ID };
 
 // Module-global context for passing actor through wrapped call chains.
@@ -32,6 +32,10 @@ export let _saveSourceAttackType = null;
 // Direct damage source attack type. Set by handleApplyDirect patch so
 // calculateFinalDamage can bypass armor for cast attacks.
 export let _directSourceAttackType = null;
+
+// Range hinder. Set by rollAttack patch when RangeValidator applies hinder
+// (e.g. Thrown at Far range), consumed by buildAndEvaluateD20WithRollData.
+let _rangeFavorHinder = "none";
 
 // Brawl intent state. Set by rollWeapon patch, consumed by renderChatMessage.
 import { BrawlIntent, setBrawlIntent, resetBrawlIntent } from "./brawl/brawl-intent.mjs";
@@ -474,9 +478,13 @@ Hooks.once("ready", async () => {
 
         // Stash actor for Climax/Choreographer in buildAndEvaluateD20WithRollData
         _currentRollActor = actor;
+        // Pass range/pre-roll hinder through to buildAndEvaluateD20WithRollData
+        // since the system's rollAttack ignores the favorHinder parameter
+        _rangeFavorHinder = ctx.favorHinder;
         try {
-          const result = await origRollAttack.call(this, actor, ctx.favorHinder);
+          const result = await origRollAttack.call(this, actor);
           _currentRollActor = null;
+          _rangeFavorHinder = "none";
 
           // Post-roll handlers
           ctx.rollResult = result;
@@ -491,6 +499,7 @@ Hooks.once("ready", async () => {
           return result;
         } catch (e) {
           _currentRollActor = null;
+          _rangeFavorHinder = "none";
           VagabondDamageHelper._vceForceRollDamage = false;
           throw e;
         }
@@ -673,6 +682,10 @@ Hooks.once("ready", async () => {
     // --- buildAndEvaluateD20WithRollData: Dispatch to Bard + Dancer + Hunter ---
     const origBuildD20WithRollData = VagabondRollBuilder.buildAndEvaluateD20WithRollData;
     VagabondRollBuilder.buildAndEvaluateD20WithRollData = async function (rollData, favorHinder, baseFormula = null) {
+      // Apply range hinder (e.g. Thrown at Far range) from rollAttack pre-roll handlers
+      if (_rangeFavorHinder !== "none") {
+        favorHinder = combineFavor(favorHinder, _rangeFavorHinder);
+      }
       const ctx = { currentRollActor: _currentRollActor, favorHinder, VagabondDamageHelper };
       BardFeatures.onPreBuildD20WithRollData(ctx);
       DancerFeatures.onPreBuildD20WithRollData(ctx);
