@@ -926,6 +926,11 @@ export function convertToWeapon(itemData) {
   data.system.isConsumable  = true;
   data.system.equipped      = false;
   data.system.equipmentState = "oneHand";
+  // Add Thrown property so the weapon uses thrown range mechanics
+  data.system.properties = [...(data.system.properties || [])];
+  if (!data.system.properties.includes("Thrown")) {
+    data.system.properties.push("Thrown");
+  }
   // Always use damageAmount as the weapon's one-hand damage — the alchemical
   // compendium items have the real damage in damageAmount while damageOneHand
   // holds a generic template default (e.g. "d6") that doesn't reflect the item.

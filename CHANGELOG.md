@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.2.8.1
+
+### Bug Fixes
+- **Alchemy weapons missing Thrown property** — Crafted offensive alchemical items (Alchemist's Fire, Acid Flask, etc.) now correctly receive the Thrown weapon property. Previously these weapons were stuck at 5' melee range despite being set to "Near" range because the Thrown property was never added during weapon conversion.
+
 ## v0.2.7
 
 ### New Features — Merchant Gold Sink
