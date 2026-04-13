@@ -772,9 +772,11 @@ async function _convertToConsumable(actor, mat) {
     "name": `Materials (${formatCost(silver)}) (Consumable)`,
     "system.isConsumable": true,
     "system.quantity": silver,
+    "system.baseSlots": 0,
     "system.baseCost.gold": 0,
     "system.baseCost.silver": silver,
     "system.baseCost.copper": 0,
+    "flags.vagabond-crawler.trueZeroSlot": true,
   }]);
   return actor.items.get(mat.id);
 }
@@ -893,9 +895,11 @@ export function registerMaterialsHook() {
       "name": `Materials (${formatCost(silver)}) (Consumable)`,
       "system.isConsumable": true,
       "system.quantity": silver,
+      "system.baseSlots": 0,
       "system.baseCost.gold": 0,
       "system.baseCost.silver": silver,
       "system.baseCost.copper": 0,
+      "flags.vagabond-crawler.trueZeroSlot": true,
     }]);
 
     console.log(`${MODULE_ID} | Auto-converted Materials to consumable: ${silver}s`);
