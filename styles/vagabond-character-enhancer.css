@@ -78,20 +78,11 @@
 }
 
 /* -------------------------------------------- */
-/*  Tab Bar — Beast Form integration            */
+/*  Tab Bar — VCE tab integration               */
 /* -------------------------------------------- */
 
-/* Prevent wrapping on Beast Form tab text */
-nav.sheet-tabs [data-tab="vce-beast-form"] {
-  white-space: nowrap;
-}
-
-/* Flexible centering with overflow protection — any VCE-injected tab */
-nav.sheet-tabs:has([data-tab="vce-beast-form"]),
-nav.sheet-tabs:has([data-tab="vce-cookbook"]),
-nav.sheet-tabs:has([data-tab="vce-virtuoso"]),
-nav.sheet-tabs:has([data-tab="vce-stepup"]),
-nav.sheet-tabs:has([data-tab="vce-gold-sink"]) {
+/* Any VCE tab: scroll protection without shrinking (4 tabs looks fine) */
+nav.sheet-tabs:has([data-tab^="vce-"]) {
   justify-content: center !important;
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -99,22 +90,47 @@ nav.sheet-tabs:has([data-tab="vce-gold-sink"]) {
   scrollbar-width: none; /* Firefox */
 }
 
-nav.sheet-tabs:has([data-tab="vce-beast-form"])::-webkit-scrollbar,
-nav.sheet-tabs:has([data-tab="vce-cookbook"])::-webkit-scrollbar,
-nav.sheet-tabs:has([data-tab="vce-virtuoso"])::-webkit-scrollbar,
-nav.sheet-tabs:has([data-tab="vce-stepup"])::-webkit-scrollbar,
-nav.sheet-tabs:has([data-tab="vce-gold-sink"])::-webkit-scrollbar {
+nav.sheet-tabs:has([data-tab^="vce-"])::-webkit-scrollbar {
   display: none; /* Chrome/Safari */
 }
 
-/* Tabs should not shrink at normal widths — only scroll if needed */
-nav.sheet-tabs:has([data-tab="vce-beast-form"]) [data-tab],
-nav.sheet-tabs:has([data-tab="vce-cookbook"]) [data-tab],
-nav.sheet-tabs:has([data-tab="vce-virtuoso"]) [data-tab],
-nav.sheet-tabs:has([data-tab="vce-stepup"]) [data-tab],
-nav.sheet-tabs:has([data-tab="vce-gold-sink"]) [data-tab] {
+nav.sheet-tabs:has([data-tab^="vce-"]) [data-tab] {
   flex-shrink: 0;
   white-space: nowrap;
+}
+
+/* 5+ tabs (2+ VCE tabs): smaller text to fit */
+nav.sheet-tabs:has([data-tab^="vce-"] ~ [data-tab^="vce-"]) [data-tab] {
+  font-size: 15px !important;
+}
+
+/* -------------------------------------------- */
+/*  Ward Button on Damage Cards                 */
+/* -------------------------------------------- */
+
+.vce-ward-btn {
+  display: block;
+  width: 100%;
+  padding: 4px 12px;
+  margin-bottom: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: rgba(74, 144, 217, 0.15);
+  border: 1px solid rgba(74, 144, 217, 0.4);
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: bold;
+  text-align: center;
+}
+
+.vce-ward-btn:hover:not(:disabled) {
+  background: rgba(74, 144, 217, 0.3);
+  border-color: rgba(74, 144, 217, 0.7);
+}
+
+.vce-ward-btn:disabled {
+  cursor: default;
 }
 
 /* -------------------------------------------- */

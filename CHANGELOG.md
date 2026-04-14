@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.3.0
+
+### New Features — Ward Spell Automation
+- **Ward spell automation:** Full reactive Ward spell implementation. Cast Ward on a target to apply a "Warded" Active Effect. When the Warded target takes damage (via save or direct application), the caster is prompted with a dialog to make a Cast Check and optionally spend extra Mana for additional d6 reduction dice.
+- **Cast Check on damage:** Ward's Cast Check only triggers reactively when the target takes damage — not on the initial cast. On pass, damage is reduced by d6 (+d6 per extra Mana spent). On crit (natural 20), all damage from the hit is negated.
+- **Post-damage healing:** Ward reduction is applied after the full save/armor/weakness pipeline resolves, healing back the Ward amount (capped at the actual damage taken from the hit — Ward can't heal pre-existing damage).
+- **Mana spending dialog:** Shows current mana, cast difficulty, and a dropdown to spend 0–N extra Mana for additional d6 reduction dice.
+- **Aura delivery support:** Ward is registered in the Aura Spells system. Casting Ward with Aura delivery protects all allies within the aura radius.
+- **Focus cleanup:** Warded AE is automatically removed when the caster stops focusing on Ward (round/turn change).
+- **No initial Cast Check:** Ward spell items on characters are automatically set to skip the Cast Check on initial cast (the check only applies reactively).
+
+### UI Improvements
+- **Tab bar shrinking:** When 5+ tabs are present on a character sheet (e.g., Beast Form + Summon + Features + Magic + Effects), tab text is slightly reduced to prevent crowding and truncation. Sheets with 4 or fewer tabs are unaffected.
+- **Cookbook tab position:** Alchemist Cookbook tab now appears on the far left, consistent with other VCE-injected tabs.
+
+### Documentation
+- **Spell automation reference:** Fixed duplicate Exalt entry (was listed as both automated and easy-to-automate). Updated counts.
+
 ## v0.2.9
 
 ### Bug Fixes

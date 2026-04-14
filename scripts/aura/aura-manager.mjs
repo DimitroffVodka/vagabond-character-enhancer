@@ -51,6 +51,16 @@ const AURA_SPELLS = {
     fx: null, // jb2a.bless asset doesn't exist in standard JB2A
     // d4 save bonus is handled by BlessManager.onPreRollSave, not via AE changes
     changes: []
+  },
+  ward: {
+    label: "Ward",
+    icon: "icons/magic/defensive/shield-barrier-blue.webp",
+    templateColor: "#4a90d9",
+    templateBorder: "#2e5c8a",
+    description: "Reduce damage by d6 on Cast Check pass (crit = negate all)",
+    fx: null,
+    // Ward's reactive damage reduction is handled by WardManager, not via AE changes
+    changes: []
   }
 };
 
@@ -565,6 +575,12 @@ export const AuraManager = {
       }
       // Allies mode: add blessAE flag for d4 save detection
       flags[MODULE_ID].blessAE = true;
+    }
+
+    // Ward aura: add wardAE + wardCasterId flags for reactive damage reduction
+    if (spellDef.label === "Ward") {
+      flags[MODULE_ID].wardAE = true;
+      flags[MODULE_ID].wardCasterId = casterActor.id;
     }
 
     const aeData = {

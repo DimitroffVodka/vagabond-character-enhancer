@@ -71,6 +71,7 @@ import { populateBeasts } from "./polymorph/populate-beasts.mjs";
 import { DrakenFeatures } from "./ancestry-features/draken.mjs";
 import { ImbueManager } from "./spell-features/imbue-manager.mjs";
 import { BlessManager } from "./spell-features/bless-manager.mjs";
+import { WardManager } from "./spell-features/ward-manager.mjs";
 import { EffectOnlyHandler } from "./spell-features/effect-only-handler.mjs";
 import { SummonerFeatures } from "./class-features/summoner.mjs";
 import { FamiliarFeatures } from "./perk-features/familiar.mjs";
@@ -822,7 +823,14 @@ Hooks.once("ready", async () => {
           return;
         }
 
-        return await origHandleSaveRoll.call(this, button, event);
+        // Ward: snapshot HP before damage for accurate heal-back capping
+        try { WardManager.snapshotHP(button); } catch (e) { /* ignore */ }
+
+        await origHandleSaveRoll.call(this, button, event);
+
+        // Ward: prompt caster for reactive damage reduction AFTER save resolves and damage applies
+        try { await WardManager.onPostDamage(button); } catch (e) { /* Don't crash save flow */ }
+        return;
       } finally {
         for (const ctx of _blessContexts) await BlessManager.onPostRollSave(ctx);
         _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
@@ -891,7 +899,14 @@ Hooks.once("ready", async () => {
           return;
         }
 
-        return await origHandleApplyDirect.call(this, button);
+        // Ward: snapshot HP before damage for accurate heal-back capping
+        try { WardManager.snapshotHP(button); } catch (e) { /* ignore */ }
+
+        await origHandleApplyDirect.call(this, button);
+
+        // Ward: prompt caster for reactive damage reduction AFTER damage is applied
+        try { await WardManager.onPostDamage(button); } catch (e) { /* Don't crash apply flow */ }
+        return;
       } finally { _damageSourceActorId = null; _directSourceAttackType = null; }
     };
     console.log(`${MODULE_ID} | Patched handleApplyDirect.`);
@@ -1235,6 +1250,7 @@ Hooks.once("ready", async () => {
   DrakenFeatures.registerHooks();
   ImbueManager.registerHooks();
   BlessManager.registerHooks();
+  WardManager.registerHooks();
   EffectOnlyHandler.registerHooks();
   SummonerFeatures.registerHooks();
   FamiliarFeatures.registerHooks();

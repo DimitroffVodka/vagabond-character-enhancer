@@ -490,8 +490,8 @@ async function _injectCookbookTab(sheet) {
   cookbookTab.dataset.tab = "vce-cookbook";
   cookbookTab.dataset.group = "primary";
   cookbookTab.innerHTML = "<span>Cookbook</span>";
-  // Insert after the last existing tab
-  tabNav.appendChild(cookbookTab);
+  // Insert at the far left
+  tabNav.prepend(cookbookTab);
 
   // Create tab section
   const cookbookSection = document.createElement("section");

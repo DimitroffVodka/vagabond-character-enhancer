@@ -35,7 +35,7 @@ ALL spells with `causedStatuses` configured in the system compendium when cast w
 |----------|-------|
 | ✅ Module (VCE custom) | 4 |
 | ✅ System (causedStatuses) | 19 |
-| 🟢 AE (easy automation) | 6 |
+| 🟢 AE (easy automation) | 5 |
 | 🟡 Status Removal | 2 |
 | 🟡 Complex | 12 |
 | 🔴 Narrative | 17 |
@@ -88,7 +88,6 @@ These could be implemented as AEs applied to the target on cast.
 
 | Spell | Damage | What it does | Automation approach |
 |-------|--------|--------------|---------------------|
-| Exalt | -- | +1 bonus to each damage die + Will vs Frightened | AE: `universalDamageBonus +1`, `saves.will.bonus +1`. Already automated for Revelator, could be generalized. |
 | Tempo | -- | Speed +/- 5' per mana | AE: speed modifier. Needs dialog for direction + amount. Crit: 1 min no focus. |
 | Freeze | cold | Target's Speed -10' | AE: speed -10. Also freezes water / creates ice (narrative). Crit: continual. |
 | Shrink | -- | Size and damage dice reduced by one | AE: size reduction + damage die downgrade. Crit: 1 min no focus. |
