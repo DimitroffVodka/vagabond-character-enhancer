@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.3.2
+
+### Imbue — Cost Enforcement & Ally Targeting
+- **1 Mana minimum enforced** — Imbue's base cost is 0 Mana (+2 per additional Target) but the delivery now rejects casts below 1 Mana total with a notification. Blocks the free-cast edge case where a 0-dice, single-target imbue would otherwise go through for 0 Mana from either the character sheet or the Crawler strip.
+- **Friendly target resolves wielder** — If the caster has a friendly token targeted (disposition FRIENDLY or the caster themselves), that ally's weapon is imbued instead of the caster's. Falls back to the caster when no friendly tokens are targeted. Works cross-owner via the socket relay — players can imbue an ally actor they don't own.
+- **Multi-target Imbue** — Paying `+2` Mana per extra Target now actually imbues multiple wielders. Weapon-selection dialog runs once per wielder.
+- **Wielder picker when over-targeted** — If the caster has more friendly tokens targeted than the cost paid for, a picker dialog appears with a live "Selected N / M" counter that auto-caps at the paid amount. Pick exactly the allies you want to receive the imbue; the rest roll off.
+- **Chat attribution** — The imbue chat card now reads "`CasterName` imbues `AllyName`'s `Weapon` with `Spell`" when the caster and wielder differ.
+
 ## v0.3.1
 
 ### Bug Fixes — Imbue

@@ -431,7 +431,7 @@ Spells in the Vagabond system have no built-in Active Effects. VCE automates sel
 |-------|------------------|
 | Bless | Full aura system — d4 save bonus AE on allies, silvered weapons, mode buttons in chat |
 | Exalt | +1 per damage die (+2 vs Undead/Hellspawn), counts all dice including silver/imbue bonus dice |
-| Imbue | Spell damage dice added to weapon formula, single armor application |
+| Imbue | Spell damage dice added to weapon formula, single armor application. 1 Mana minimum enforced; friendly-target resolves wielder (self, ally, or multi-target with picker) |
 | Polymorph | Beast Form tab, stat swap, token swap, beast action rolls, mana drain per round. Works for any caster. |
 
 ---

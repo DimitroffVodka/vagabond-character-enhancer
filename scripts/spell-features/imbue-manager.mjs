@@ -22,6 +22,7 @@
  */
 
 import { MODULE_ID, log } from "../utils.mjs";
+import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -270,10 +271,15 @@ export const ImbueManager = {
     const actorId = btn.dataset.actorId;
     const imbueData = JSON.parse(btn.dataset.imbueData.replace(/&quot;/g, '"'));
 
-    const actor = game.actors.get(actorId);
-    if (!actor) return;
+    const caster = game.actors.get(actorId);
+    if (!caster) return;
 
-    await this.showWeaponDialog(actor, imbueData);
+    // Fallback path: the spell card was posted without our upfront intercept,
+    // so deliveryIncrease isn't available — default to 1 wielder.
+    const wielders = await this._resolveWielders(caster, 1);
+    for (const wielder of wielders) {
+      await this.showWeaponDialog(wielder, imbueData, { caster });
+    }
   },
 
   /* -------------------------------------------- */
@@ -282,8 +288,12 @@ export const ImbueManager = {
 
   /**
    * Show a dialog to select which weapon to imbue.
+   * @param {Actor} actor - The wielder whose weapon will be imbued
+   * @param {object} spellData - Spell details for the imbue
+   * @param {object} [opts]
+   * @param {Actor} [opts.caster] - The spell's caster (defaults to wielder for self-imbue)
    */
-  async showWeaponDialog(actor, spellData) {
+  async showWeaponDialog(actor, spellData, opts = {}) {
     const weapons = actor.items.filter(i => {
       const isWeapon = i.type === "weapon"
         || (i.type === "equipment" && i.system.equipmentType === "weapon");
@@ -296,7 +306,7 @@ export const ImbueManager = {
     }
 
     if (weapons.length === 1) {
-      await this.applyImbue(actor, weapons[0].id, spellData);
+      await this.applyImbue(actor, weapons[0].id, spellData, opts);
       return;
     }
 
@@ -325,7 +335,7 @@ export const ImbueManager = {
         render: (html) => {
           html.find(".vce-imbue-weapon-btn").on("click", async (ev) => {
             const weaponId = ev.currentTarget.dataset.weaponId;
-            await this.applyImbue(actor, weaponId, spellData);
+            await this.applyImbue(actor, weaponId, spellData, opts);
             d.close();
             resolve(weaponId);
           });
@@ -341,17 +351,23 @@ export const ImbueManager = {
   /* -------------------------------------------- */
 
   /**
-   * Store imbue state on actor and create a display AE.
+   * Store imbue state on the wielder and create a display AE on them. If the
+   * current user doesn't own the wielder's actor (ally imbue), route the writes
+   * through the GM via socket relay.
+   * @param {Actor} actor - The wielder
+   * @param {string} weaponId - Weapon on the wielder to imbue
+   * @param {object} spellData - Spell details
+   * @param {object} [opts]
+   * @param {Actor} [opts.caster] - Spell's caster; defaults to wielder if omitted
    */
-  async applyImbue(actor, weaponId, spellData) {
+  async applyImbue(actor, weaponId, spellData, opts = {}) {
     const weapon = actor.items.get(weaponId);
     if (!weapon) return;
 
+    const caster = opts.caster ?? actor;
+
     // Clear any existing imbue first (including stale pending-damage state from a prior attack)
     await this.clearImbue(actor);
-    if (actor.getFlag(MODULE_ID, FLAG_PENDING)) {
-      await actor.unsetFlag(MODULE_ID, FLAG_PENDING);
-    }
 
     const imbueState = {
       weaponId,
@@ -364,16 +380,14 @@ export const ImbueManager = {
       dieSize: spellData.dieSize || 6,
       hasEffect: spellData.hasEffect,
       effectDesc: spellData.effectDesc,
-      casterId: actor.id
+      casterId: caster.id
     };
-    await actor.setFlag(MODULE_ID, FLAG_IMBUE, imbueState);
 
-    // Create display AE
     const typeLabel = spellData.damageType !== "-"
       ? ` (${spellData.damageType.charAt(0).toUpperCase() + spellData.damageType.slice(1)})`
       : "";
     const aeName = `Imbued: ${spellData.spellName}${typeLabel}`;
-    await actor.createEmbeddedDocuments("ActiveEffect", [{
+    const aeData = {
       name: aeName,
       icon: spellData.spellImg || "icons/magic/light/explosion-star-glow-yellow.webp",
       origin: `${MODULE_ID}.imbue`,
@@ -386,40 +400,68 @@ export const ImbueManager = {
           [IMBUE_AE_FLAG]: true
         }
       }
-    }]);
+    };
 
-    // Chat notification
+    if (actor.isOwner) {
+      if (actor.getFlag(MODULE_ID, FLAG_PENDING)) {
+        await actor.unsetFlag(MODULE_ID, FLAG_PENDING);
+      }
+      await actor.setFlag(MODULE_ID, FLAG_IMBUE, imbueState);
+      await actor.createEmbeddedDocuments("ActiveEffect", [aeData]);
+    } else {
+      await gmRequest("applyImbue", {
+        wielderId: actor.id,
+        imbueState,
+        aeData
+      });
+    }
+
+    // Chat notification — credit the caster
     const dieSize = spellData.dieSize || 6;
     const damageText = spellData.damageDice > 0
       ? ` (+${spellData.damageDice}d${dieSize} ${spellData.damageType})`
       : "";
+    const wielderText = caster.id === actor.id
+      ? `<strong>${weapon.name}</strong>`
+      : `<strong>${actor.name}</strong>'s <strong>${weapon.name}</strong>`;
     ChatMessage.create({
       content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
         <div class="card-body"><section class="content-body">
           <div class="card-description" style="text-align:center;">
-            <strong>${actor.name}</strong> imbues <strong>${weapon.name}</strong> with
+            <strong>${caster.name}</strong> imbues ${wielderText} with
             <em>${spellData.spellName}</em>${damageText}
           </div>
         </section></div>
       </div>`,
-      speaker: ChatMessage.getSpeaker({ actor })
+      speaker: ChatMessage.getSpeaker({ actor: caster })
     });
 
-    log("Imbue", `${actor.name} imbued ${weapon.name} with ${spellData.spellName}`);
+    log("Imbue", `${caster.name} imbued ${actor.name}'s ${weapon.name} with ${spellData.spellName}`);
   },
 
   /**
-   * Remove active imbue state and display AE from an actor.
+   * Remove active imbue state and display AE from an actor. Routes through the
+   * GM via socket relay if the current user doesn't own the actor.
    */
   async clearImbue(actor) {
-    const existing = actor.getFlag(MODULE_ID, FLAG_IMBUE);
-    if (existing) {
-      await actor.unsetFlag(MODULE_ID, FLAG_IMBUE);
+    if (actor.isOwner) {
+      const existing = actor.getFlag(MODULE_ID, FLAG_IMBUE);
+      if (existing) {
+        await actor.unsetFlag(MODULE_ID, FLAG_IMBUE);
+      }
+      const imbueAE = actor.effects.find(e => e.getFlag(MODULE_ID, IMBUE_AE_FLAG));
+      if (imbueAE) {
+        await actor.deleteEmbeddedDocuments("ActiveEffect", [imbueAE.id]);
+      }
+      return;
     }
-    const imbueAE = actor.effects.find(e => e.getFlag(MODULE_ID, IMBUE_AE_FLAG));
-    if (imbueAE) {
-      await actor.deleteEmbeddedDocuments("ActiveEffect", [imbueAE.id]);
-    }
+
+    // Not owned — only bother the GM if there's actually something to clear
+    const hasFlag = !!actor.getFlag(MODULE_ID, FLAG_IMBUE);
+    const hasAE = actor.effects.some(e => e.getFlag(MODULE_ID, IMBUE_AE_FLAG));
+    if (!hasFlag && !hasAE) return;
+
+    await gmRequest("clearImbue", { wielderId: actor.id });
   },
 
   /**
@@ -441,6 +483,12 @@ export const ImbueManager = {
   async handleImbueCast(actor, spell, state, costs) {
     if (state.deliveryType !== "imbue") return false;
 
+    // Enforce 1 Mana minimum to attempt Imbue
+    if ((costs.totalCost ?? 0) < 1) {
+      ui.notifications.warn("Imbue requires at least 1 Mana to cast.");
+      return true; // Handled (blocked)
+    }
+
     // Validate mana
     if (costs.totalCost > (actor.system?.mana?.current ?? 0)) {
       ui.notifications.error(`Not enough mana! Need ${costs.totalCost}, have ${actor.system.mana.current}.`);
@@ -454,9 +502,14 @@ export const ImbueManager = {
     // Deduct mana (Imbue always succeeds — no cast check)
     await actor.update({ "system.mana.current": Math.max(0, actor.system.mana.current - costs.totalCost) });
 
-    // Show weapon selection dialog
+    // Resolve wielders — up to (1 + deliveryIncrease) friendly targets, or caster if none
+    const targetCount = 1 + (state.deliveryIncrease || 0);
+    const wielders = await this._resolveWielders(actor, targetCount);
+    if (!wielders || wielders.length === 0) return true;
+
+    // Show weapon selection dialog for each wielder
     const dieSize = spell.system.damageDieSize || actor.system.spellDamageDieSize || 6;
-    await this.showWeaponDialog(actor, {
+    const spellData = {
       spellId: spell.id,
       spellName: spell.name,
       spellImg: spell.img,
@@ -465,8 +518,113 @@ export const ImbueManager = {
       dieSize,
       hasEffect: true,
       effectDesc: spell.system.description || ""
-    });
+    };
+
+    for (const wielder of wielders) {
+      await this.showWeaponDialog(wielder, spellData, { caster: actor });
+    }
 
     return true; // Handled
+  },
+
+  /* -------------------------------------------- */
+  /*  Wielder Resolution                           */
+  /* -------------------------------------------- */
+
+  /**
+   * Determine which actors' weapons should be imbued. Rules:
+   *   - If no friendly targets selected → [caster]
+   *   - If friendlies <= targetCount → all of them
+   *   - If friendlies > targetCount → show picker dialog to choose exactly N
+   * @param {Actor} caster
+   * @param {number} targetCount - How many wielders the mana cost paid for
+   * @returns {Promise<Actor[]>}
+   */
+  async _resolveWielders(caster, targetCount) {
+    const targets = Array.from(game.user.targets || []);
+    const friendlyActors = targets
+      .filter(t => {
+        const disp = t.document?.disposition;
+        return disp === CONST.TOKEN_DISPOSITIONS.FRIENDLY
+          || disp === CONST.TOKEN_DISPOSITIONS.SECRET
+          || t.actor?.id === caster.id;
+      })
+      .map(t => t.actor)
+      .filter(Boolean);
+
+    if (friendlyActors.length === 0) return [caster];
+
+    // Dedupe by actor id (multiple tokens of same actor)
+    const unique = [...new Map(friendlyActors.map(a => [a.id, a])).values()];
+
+    if (unique.length <= targetCount) return unique;
+
+    // More friendly targets than paid for — let the user pick N
+    return this._showWielderPickerDialog(unique, targetCount);
+  },
+
+  /**
+   * Dialog to pick exactly N wielders from a list of friendly targets.
+   * @param {Actor[]} candidates
+   * @param {number} pickCount
+   * @returns {Promise<Actor[]>} Selected actors, or empty array on cancel
+   */
+  async _showWielderPickerDialog(candidates, pickCount) {
+    const content = `
+      <p>Choose <strong>${pickCount}</strong> ${pickCount === 1 ? "ally" : "allies"} to imbue:</p>
+      <div class="vce-imbue-picker" style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+        ${candidates.map(a => `
+          <label style="display:flex; align-items:center; gap:8px; padding:4px 8px; cursor:pointer;">
+            <input type="checkbox" class="vce-wielder-pick" data-actor-id="${a.id}">
+            <img src="${a.img}" width="28" height="28" style="border:none;">
+            <span>${a.name}</span>
+          </label>
+        `).join("")}
+      </div>
+      <p class="vce-imbue-pick-status" style="margin-top:6px; opacity:0.7; font-size:0.85em;">
+        Selected: 0 / ${pickCount}
+      </p>
+    `;
+
+    return new Promise((resolve) => {
+      const d = new Dialog({
+        title: `Imbue — Choose ${pickCount} Target${pickCount > 1 ? "s" : ""}`,
+        content,
+        buttons: {
+          confirm: {
+            icon: '<i class="fas fa-check"></i>',
+            label: "Confirm",
+            callback: (html) => {
+              const checked = [...html[0].querySelectorAll(".vce-wielder-pick:checked")];
+              const picked = checked.map(c => candidates.find(a => a.id === c.dataset.actorId))
+                .filter(Boolean);
+              resolve(picked);
+            }
+          },
+          cancel: {
+            icon: '<i class="fas fa-times"></i>',
+            label: "Cancel",
+            callback: () => resolve([])
+          }
+        },
+        default: "confirm",
+        render: (html) => {
+          const el = html instanceof jQuery ? html[0] : html;
+          const statusEl = el.querySelector(".vce-imbue-pick-status");
+          const boxes = [...el.querySelectorAll(".vce-wielder-pick")];
+          const update = () => {
+            const n = boxes.filter(b => b.checked).length;
+            statusEl.textContent = `Selected: ${n} / ${pickCount}`;
+            // Cap at pickCount by disabling unchecked boxes once reached
+            boxes.forEach(b => {
+              if (!b.checked) b.disabled = n >= pickCount;
+            });
+          };
+          boxes.forEach(b => b.addEventListener("change", update));
+        },
+        close: () => resolve([])
+      }, { width: 360 });
+      d.render(true);
+    });
   }
 };

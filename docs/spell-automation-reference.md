@@ -49,7 +49,7 @@ ALL spells with `causedStatuses` configured in the system compendium when cast w
 |-------|--------|---------|-------|
 | Bless | -- | `bless-manager.mjs` | d4 save bonus AE on allies, silvered weapons, mode dialog |
 | Exalt | -- | Class feature (Revelator) | +1 per damage die AE, +1 Will vs Frightened |
-| Imbue | -- | `imbue-manager.mjs` | Spell damage dice added to weapon, consumed on attack |
+| Imbue | -- | `imbue-manager.mjs` | Spell damage dice added to weapon, consumed on attack. 1 Mana minimum; friendly-target resolves wielder (self/ally/multi-target with picker); cross-owner writes via socket relay |
 | Polymorph | -- | `polymorph/` system | Full beast form transformation (Druid) |
 
 ### System causedStatuses (handled by effect-only handler + system damage flow)

@@ -1,7 +1,7 @@
 # Vagabond Character Enhancer — Claude Context
 
 ## What This Is
-A FoundryVTT v13 module (`vagabond-character-enhancer`) that automates ancestry traits, class features, and perks for the **Vagabond RPG** system (by mordachai). The Vagabond system ID is `vagabond`, current version 5.1.3.
+A FoundryVTT v13 module (`vagabond-character-enhancer`) that automates ancestry traits, class features, and perks for the **Vagabond RPG** system (by mordachai). The Vagabond system ID is `vagabond` (module.json pins minimum/verified to 5.0.0).
 
 ## Vagabond RPG — Core Mechanics Reference
 
@@ -79,8 +79,8 @@ Cast Checks only required vs unwilling targets. Casting stat depends on class tr
 - **Unconscious**: Blinded + Incapacitated + Prone. Close attacks auto-crit.
 - **Vulnerable**: Its attacks/saves hindered; attacks targeting it are favored
 
-### Classes (18 total)
-Alchemist, Barbarian, Bard, Dancer, Druid, Fighter, Gunslinger, Hunter, Luminary, Magus, Merchant, Pugilist, Revelator, Rogue, Sorcerer, Vanguard, Witch, Wizard
+### Classes (20 total)
+Alchemist, Barbarian, Bard, Dancer, Druid, Fighter, Gunslinger, Hunter, Luminary, Magus, Merchant, Monk, Pugilist, Revelator, Rogue, Sorcerer, Summoner, Vanguard, Witch, Wizard
 
 Level 1-10. Even levels = +1 stat. Odd levels (after 1) = +1 perk.
 
@@ -192,7 +192,12 @@ saves.reflex.bonus, saves.endure.bonus, saves.will.bonus
 - `scripts/alchemy/` — Alchemist cookbook UI and crafting helpers
 - `scripts/ancestry-features/` — One file per ancestry with trait registries
 - `scripts/perk-features.mjs` — Perk automation registry (all 104 perks with flags)
-- `scripts/spell-features/` — Spell automation (bless-manager.mjs, imbue-manager.mjs)
+- `scripts/perk-features/` — Per-perk subdirectory for complex perks (e.g., `familiar.mjs`). Simple flag-based perks stay in `perk-features.mjs`.
+- `scripts/spell-features/` — Spell automation (bless-manager, imbue-manager, ward-manager, effect-only-handler)
+- `scripts/aura/aura-manager.mjs` — Persistent spell aura templates that follow tokens and apply buffs (Revelator Paragon's Aura)
+- `scripts/brawl/brawl-intent.mjs` — Grapple/Shove intent system for Brawl attacks
+- `scripts/merchant/gold-sink-sheet.mjs` — Merchant Gold Sink shop tab injection (shares junk flag with vagabond-crawler)
+- `scripts/socket-relay.mjs` — GM-proxied operations (token creation, actor import/delete) for player clients via socket
 - `scripts/range-validator.mjs` — Weapon range enforcement, target count limits, auto-hinder
 - `scripts/status-effects.mjs` — Custom status effect definitions
 - `scripts/focus/` — Focus tracking + Feature FX system (see `docs/feature-fx-system.md`)
@@ -232,7 +237,7 @@ Full Vagabond rulebook in Obsidian markdown: `F:/Obsidian/Vagabond/Vagabond/`
 **Always read the relevant class file before implementing a class feature. Don't guess at rules.**
 
 ## Development Notes
-- FoundryVTT v13.351, Vagabond system v5.1.3
+- FoundryVTT v13.351, Vagabond system v5.0.0+ (per module.json)
 - Module runs as ES modules (`.mjs`), no build step
 - System methods are patched via monkey-patching on `ready` hook (no libWrapper currently)
 - MCP bridge available for live testing via `foundry-mcp-bridge` module

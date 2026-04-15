@@ -72,6 +72,28 @@ async function _handleRequest(data) {
       return { ok: true };
     }
 
+    case "applyImbue": {
+      const actor = game.actors.get(data.wielderId);
+      if (!actor) return { error: "Wielder not found" };
+      if (actor.getFlag(MODULE_ID, "pendingImbueDamage")) {
+        await actor.unsetFlag(MODULE_ID, "pendingImbueDamage");
+      }
+      await actor.setFlag(MODULE_ID, "imbue", data.imbueState);
+      const [ae] = await actor.createEmbeddedDocuments("ActiveEffect", [data.aeData]);
+      return { ok: true, aeId: ae?.id };
+    }
+
+    case "clearImbue": {
+      const actor = game.actors.get(data.wielderId);
+      if (!actor) return { error: "Wielder not found" };
+      if (actor.getFlag(MODULE_ID, "imbue")) {
+        await actor.unsetFlag(MODULE_ID, "imbue");
+      }
+      const imbueAE = actor.effects.find(e => e.getFlag(MODULE_ID, "imbueAE"));
+      if (imbueAE) await actor.deleteEmbeddedDocuments("ActiveEffect", [imbueAE.id]);
+      return { ok: true };
+    }
+
     default:
       return { error: `Unknown action: ${data.action}` };
   }
