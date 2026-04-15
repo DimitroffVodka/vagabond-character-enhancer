@@ -1,13 +1,21 @@
 /**
  * Imbue Manager
  * Handles the Imbue spell delivery type: cast a spell onto a weapon,
- * then the next attack with that weapon adds the spell's damage dice.
+ * then the next attack with that weapon deals the spell's damage alongside
+ * the weapon's damage in a SINGLE combined roll (armor applied once). The
+ * spell's damage type is surfaced on the attack card for visibility.
  *
  * FLOW
  * ────
  * 1. Caster casts a spell with Imbue delivery → "Imbue Weapon" button on chat card
  * 2. Player clicks → weapon selection dialog → imbue stored as flag + display AE
- * 3. Next attack with imbued weapon → spell damage dice added to weapon formula
+ * 3. Next attack with imbued weapon:
+ *    - rollDamage patch appends spell dice + spell damage bonuses to the weapon
+ *      formula (and pre-rolls a weakness die if all targets are weak to the
+ *      spell's type but not the weapon's)
+ *    - onPostRollAttack stashes pending annotation data on the actor
+ *    - createChatMessage injects an "Imbued: [Spell] ([Type])" tag into the
+ *      weapon attack card so both damage types are visible
  * 4. Imbue consumed after the attack (hit or miss)
  *
  * Mana is spent upfront when casting the spell. No additional cost on attack.
@@ -20,6 +28,7 @@ import { MODULE_ID, log } from "../utils.mjs";
 /* -------------------------------------------- */
 
 const FLAG_IMBUE = "imbue";
+const FLAG_PENDING = "pendingImbueDamage";
 const IMBUE_AE_FLAG = "imbueAE";
 
 /* -------------------------------------------- */
@@ -37,6 +46,9 @@ export const ImbueManager = {
     // Uses createChatMessage (modifies persisted HTML — survives Foundry v13 re-renders).
     Hooks.on("createChatMessage", async (message) => {
       await this._onSpellCardCreate(message);
+      // Annotate the weapon attack card with the imbue's damage type so both
+      // types are visible on the single combined-damage card.
+      await this._annotateWeaponAttackCard(message);
     });
 
     // Attach click handlers when messages render (handles re-renders + page load)
@@ -56,8 +68,10 @@ export const ImbueManager = {
   /* -------------------------------------------- */
 
   /**
-   * After any attack with the imbued weapon: roll spell damage separately on hit,
-   * consume on miss. The spell damage uses the spell's damage type (not the weapon's).
+   * After any attack with the imbued weapon: on hit, stash annotation data so
+   * the createChatMessage hook can surface the imbue's damage type on the
+   * weapon attack card. On miss, post a "missed — imbue wasted" notification.
+   * Either way, consume the imbue.
    * Called from the rollAttack post-handler.
    * @param {object} ctx - { item, actor, rollResult }
    */
@@ -67,51 +81,112 @@ export const ImbueManager = {
     if (!imbue) return;
     if (ctx.item?.id !== imbue.weaponId) return;
 
-    if (ctx.rollResult.isHit && imbue.damageDice > 0) {
-      // HIT: Imbue dice were already added to the weapon damage formula by the
-      // rollDamage patch (same pattern as Exalt/Silver weakness). Just notify.
-      const dieSize = imbue.dieSize || 6;
-      const typeLabel = imbue.damageType !== "-"
-        ? imbue.damageType.charAt(0).toUpperCase() + imbue.damageType.slice(1) : "";
+    const dieSize = imbue.dieSize || 6;
+    const typeLabel = imbue.damageType !== "-"
+      ? imbue.damageType.charAt(0).toUpperCase() + imbue.damageType.slice(1) : "";
 
-      ChatMessage.create({
-        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
-          <div class="card-body"><section class="content-body">
-            <div class="card-description" style="text-align:center;">
-              <em>${imbue.spellName}</em> delivered via <strong>${imbue.weaponName}</strong>
-              (+${imbue.damageDice}d${dieSize} ${typeLabel})
-            </div>
-          </section></div>
-        </div>`,
-        speaker: ChatMessage.getSpeaker({ actor: ctx.actor })
+    if (ctx.rollResult.isHit) {
+      // HIT: stash annotation data, leave the imbue flag in place so the
+      // rollDamage patch (which runs AFTER this handler) can still read it.
+      // Also force-auto-roll so the combined damage appears on the attack card
+      // without needing a manual "Roll Damage" click.
+      // The annotate hook will consume both flags after the attack card posts.
+      await ctx.actor.setFlag(MODULE_ID, FLAG_PENDING, {
+        weaponId: imbue.weaponId,
+        spellName: imbue.spellName,
+        spellImg: imbue.spellImg,
+        damageType: imbue.damageType,
+        damageDice: imbue.damageDice,
+        dieSize
       });
-
-      log("Imbue", `${ctx.actor.name} delivered ${imbue.spellName}: +${imbue.damageDice}d${dieSize} ${typeLabel} (combined with weapon roll)`);
-    } else if (!ctx.rollResult.isHit) {
-      // MISS: Just notify
-      const typeLabel = imbue.damageType !== "-"
-        ? imbue.damageType.charAt(0).toUpperCase() + imbue.damageType.slice(1) : "";
-      const dieSize = imbue.dieSize || 6;
-      const damageText = imbue.damageDice > 0
-        ? ` (${imbue.damageDice}d${dieSize} ${typeLabel})` : "";
-
-      ChatMessage.create({
-        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
-          <div class="card-body"><section class="content-body">
-            <div class="card-description" style="text-align:center;">
-              <strong>${ctx.actor.name}</strong> misses with <strong>${imbue.weaponName}</strong>
-              — <em>${imbue.spellName}</em> imbue wasted${damageText}
-              <br><span style="font-size:0.8em; opacity:0.6;">(Imbue consumed on miss)</span>
-            </div>
-          </section></div>
-        </div>`,
-        speaker: ChatMessage.getSpeaker({ actor: ctx.actor })
-      });
+      if (ctx.VagabondDamageHelper) {
+        ctx.VagabondDamageHelper._vceForceRollDamage = true;
+      }
+      log("Imbue", `${ctx.actor.name} hit with imbued ${imbue.weaponName} — annotating card`);
+      return;
     }
 
-    // Consume the imbue (hit or miss)
+    // MISS: rollDamage won't run — safe to consume the imbue now.
+    const damageText = imbue.damageDice > 0
+      ? ` (${imbue.damageDice}d${dieSize} ${typeLabel})` : "";
+
+    ChatMessage.create({
+      content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+        <div class="card-body"><section class="content-body">
+          <div class="card-description" style="text-align:center;">
+            <strong>${ctx.actor.name}</strong> misses with <strong>${imbue.weaponName}</strong>
+            — <em>${imbue.spellName}</em> imbue wasted${damageText}
+            <br><span style="font-size:0.8em; opacity:0.6;">(Imbue consumed on miss)</span>
+          </div>
+        </section></div>
+      </div>`,
+      speaker: ChatMessage.getSpeaker({ actor: ctx.actor })
+    });
     await this.clearImbue(ctx.actor);
-    log("Imbue", `Imbue consumed on ${ctx.actor.name}'s ${imbue.weaponName} (${ctx.rollResult.isHit ? "hit" : "miss"})`);
+    log("Imbue", `Imbue consumed on ${ctx.actor.name}'s ${imbue.weaponName} (miss)`);
+  },
+
+  /* -------------------------------------------- */
+  /*  Weapon Attack Card — Imbue Annotation        */
+  /* -------------------------------------------- */
+
+  /**
+   * When the system posts the weapon attack card for an imbued weapon that has
+   * pending imbue annotation data, inject an "Imbued: [Spell] ([Type])" tag
+   * into the card so both damage types are visible at a glance. The damage
+   * itself is a single combined roll (armor applied once).
+   */
+  async _annotateWeaponAttackCard(message) {
+    const actorId = message.flags?.vagabond?.actorId;
+    const itemId = message.flags?.vagabond?.itemId;
+    if (!actorId || !itemId) return;
+
+    const actor = game.actors.get(actorId);
+    if (!actor) return;
+
+    const pending = actor.getFlag(MODULE_ID, FLAG_PENDING);
+    if (!pending) return;
+    if (pending.weaponId !== itemId) return;
+
+    // Only the client that created the weapon attack card should handle this
+    // (prevents double-updates from multiple observers).
+    if (message.user?.id !== game.user.id) return;
+
+    // Consume the annotation flag AND the imbue (flag + AE) now that the
+    // attack card has been posted and rollDamage has already read the imbue flag.
+    await actor.unsetFlag(MODULE_ID, FLAG_PENDING);
+    await this.clearImbue(actor);
+
+    const damageType = (pending.damageType || "-").toLowerCase();
+    const typeLabel = damageType !== "-"
+      ? damageType.charAt(0).toUpperCase() + damageType.slice(1)
+      : "Untyped";
+    const damageIcon = CONFIG.VAGABOND?.damageTypeIcons?.[damageType] || "fas fa-burst";
+    const iconHtml = damageType !== "-" ? `<i class="${damageIcon}"></i> ` : "";
+    const diceText = pending.damageDice > 0
+      ? `${pending.damageDice}d${pending.dieSize || 6}` : "";
+
+    const tagHtml = `<span class="tag tag-imbue" style="background:rgba(80,40,120,0.25); border:1px solid rgba(150,100,200,0.6); padding:2px 6px; border-radius:3px; display:inline-flex; align-items:center; gap:4px;" title="Imbued with ${pending.spellName}"><i class="fas fa-hand-sparkles"></i> ${iconHtml}${diceText} ${typeLabel}</span>`;
+
+    let content = message.content || "";
+    // Inject the tag into the first card-tags row if present, otherwise prepend
+    // a small strip at the top of the card body.
+    if (content.includes('class="card-tags"') || content.includes("card-tags")) {
+      content = content.replace(
+        /(<div[^>]*class="[^"]*card-tags[^"]*"[^>]*>)/,
+        `$1${tagHtml}`
+      );
+    } else if (content.includes("content-body")) {
+      content = content.replace(
+        /(<section[^>]*class="[^"]*content-body[^"]*"[^>]*>)/,
+        `$1<div class="imbue-annotation" style="padding:4px 8px;">${tagHtml}</div>`
+      );
+    } else {
+      content = `<div class="imbue-annotation" style="padding:4px 8px; text-align:center;">${tagHtml}</div>` + content;
+    }
+
+    await message.update({ content });
+    log("Imbue", `${actor.name}: annotated ${pending.spellName} (${typeLabel}) on attack card`);
   },
 
   /* -------------------------------------------- */
@@ -272,8 +347,11 @@ export const ImbueManager = {
     const weapon = actor.items.get(weaponId);
     if (!weapon) return;
 
-    // Clear any existing imbue first
+    // Clear any existing imbue first (including stale pending-damage state from a prior attack)
     await this.clearImbue(actor);
+    if (actor.getFlag(MODULE_ID, FLAG_PENDING)) {
+      await actor.unsetFlag(MODULE_ID, FLAG_PENDING);
+    }
 
     const imbueState = {
       weaponId,

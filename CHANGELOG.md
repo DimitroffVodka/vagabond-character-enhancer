@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.1
+
+### Bug Fixes — Imbue
+- **Spell damage bonuses now apply to imbued attacks** — A trinket/AE granting `universalSpellDamageBonus` (e.g., +1 spell damage) was being silently dropped on imbued weapon attacks because the imbue dice rolled through the weapon damage path, which only reads weapon/legacy universal bonuses. The imbue formula now appends `universalSpellDamageBonus` + `universalSpellDamageDice` alongside the spell dice.
+- **Imbue weakness to spell's damage type** — If all targeted enemies are weak to the imbue spell's damage type (and not the weapon's), a bonus weakness die is pre-rolled into the combined damage. Previously only the weapon's damage type was checked for weakness.
+- **No more phantom damage on imbue miss** — The force-auto-roll flag was being set in the rollAttack pre-hook, causing weapon damage to auto-roll even on a missed imbued attack. Force is now only set after a confirmed hit.
+
+### UX
+- **Imbue damage type visible on attack card** — Imbued weapon attack cards now display an "Imbued: [Spell] (Type)" tag alongside the weapon's own damage tag so both damage types in play are visible at a glance.
+
 ## v0.3.0
 
 ### New Features — Ward Spell Automation

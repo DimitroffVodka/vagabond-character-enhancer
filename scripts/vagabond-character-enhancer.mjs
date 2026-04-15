@@ -429,16 +429,8 @@ Hooks.once("ready", async () => {
         // (game.user.targets may be cleared by the time rollDamage fires on hit)
         this._vceAttackTargets = Array.from(game.user.targets);
 
-        // Stash imbue data on the item for rollDamage to use.
-        // rollDamage is called AFTER rollAttack returns (roll-handler.mjs:303),
-        // but onPostRollAttack clears the imbue flag — so we capture it here.
-        // Also force auto-roll so damage goes through our patched item.rollDamage()
-        // instead of rollDamageFromButton() which bypasses our formula injection.
-        const imbueState = actor.getFlag(MODULE_ID, "imbue");
-        if (imbueState && this.id === imbueState.weaponId) {
-          this._vceImbue = imbueState;
-          VagabondDamageHelper._vceForceRollDamage = true;
-        }
+        // Imbue: force-auto-roll is deferred to ImbueManager.onPostRollAttack
+        // (hit path) so we don't auto-roll damage on a miss.
 
         // Force auto-roll damage for Monk Finesse attacks so die escalation
         // goes through our patched item.rollDamage() instead of rollDamageFromButton()
@@ -540,21 +532,50 @@ Hooks.once("ready", async () => {
           }
         }
 
-        // Imbue: add spell damage dice to weapon formula.
-        // Imbue data was stashed on the item by the rollAttack patch (this._vceImbue)
-        // because the imbue flag is cleared by onPostRollAttack before rollDamage runs.
+        // Imbue: add spell damage dice + spell-specific damage bonuses to the
+        // weapon formula so they roll together as a single damage instance
+        // (armor applied once). The spell's damage type is surfaced on the chat
+        // card by ImbueManager's createChatMessage hook for visibility; weakness
+        // vs the spell's type is also pre-rolled here when applicable.
         let imbueOrigDamage;
-        const imbue = this._vceImbue;
-        if (imbue && imbue.damageDice > 0) {
+        const imbue = actor.getFlag(MODULE_ID, "imbue");
+        if (imbue && imbue.damageDice > 0 && this.id === imbue.weaponId) {
           const formula = this.system.currentDamage || "d6";
           const dieSize = imbue.dieSize || 6;
+          let addition = `${imbue.damageDice}d${dieSize}`;
+
+          const spellFlat = actor.system?.universalSpellDamageBonus || 0;
+          let spellDice = actor.system?.universalSpellDamageDice || "";
+          if (Array.isArray(spellDice)) spellDice = spellDice.filter(d => !!d).join(" + ");
+          if (spellFlat !== 0) addition += ` + ${spellFlat}`;
+          if (typeof spellDice === "string" && spellDice.trim() !== "") addition += ` + ${spellDice}`;
+
+          // Pre-roll a weakness die if all targets are weak to the spell's damage type
+          // (but NOT already weak to the weapon's type — that case is covered by the
+          // system's own weakness handling at apply time).
+          const spellType = (imbue.damageType || "-").toLowerCase();
+          const weaponType = (this.system?.currentDamageType || "physical").toLowerCase();
+          if (spellType !== "-" && spellType !== weaponType) {
+            const targets = this._vceAttackTargets || Array.from(game.user.targets);
+            const targetActors = targets.map(t => t.actor).filter(Boolean);
+            const allWeakToSpellType = targetActors.length > 0
+              && targetActors.every(a => (a.system?.weaknesses || []).includes(spellType));
+            const anyWeakToWeaponType = targetActors.some(a =>
+              (a.system?.weaknesses || []).includes(weaponType)
+              || (this.system?.metal && (a.system?.weaknesses || []).includes(this.system.metal)));
+            if (allWeakToSpellType && !anyWeakToWeaponType) {
+              addition += ` + 1d${dieSize}`;
+              this._vceImbueWeaknessPreRolled = true;
+            }
+          }
+
           imbueOrigDamage = this.system.currentDamage;
-          this.system.currentDamage = `${formula} + ${imbue.damageDice}d${dieSize}`;
-          log("Imbue", `${actor.name}: +${imbue.damageDice}d${dieSize} (${imbue.spellName}) added to ${formula}`);
+          this.system.currentDamage = `${formula} + ${addition}`;
+          log("Imbue", `${actor.name}: +${addition} (${imbue.spellName}) added to ${formula}`);
         }
 
         // Exalt: +1 per damage die (+2 vs Undead/Hellspawn) — added to roll formula.
-        // Runs AFTER silver/imbue so bonus dice from those sources are counted.
+        // Runs AFTER silver so its bonus die is counted.
         let exaltOrigDamage;
         const focusedIds = actor.system?.focus?.spellIds || [];
         const hasExaltAura = !!actor.effects.find(e => e.getFlag(MODULE_ID, "auraSpell") === "Exalt");
@@ -580,7 +601,7 @@ Hooks.once("ready", async () => {
         try {
           const damageRoll = await origRollDamage.call(this, actor, isCritical, statKey);
           // Flag the roll as weakness-pre-rolled so handleApplyDirect doesn't add another die
-          if (silverOrigDamage !== undefined && damageRoll) {
+          if ((silverOrigDamage !== undefined || this._vceImbueWeaknessPreRolled) && damageRoll) {
             damageRoll._weaknessPreRolled = true;
           }
           // Sneak Attack: post-roll cleanup + chat notification
@@ -592,11 +613,11 @@ Hooks.once("ready", async () => {
           if (exaltOrigDamage !== undefined) {
             this.system.currentDamage = exaltOrigDamage;
           }
-          // Restore imbue-modified damage + clean up stashed state
+          // Restore imbue-modified damage
           if (imbueOrigDamage !== undefined) {
             this.system.currentDamage = imbueOrigDamage;
           }
-          delete this._vceImbue;
+          this._vceImbueWeaknessPreRolled = false;
           // Restore silver-modified damage
           if (silverOrigDamage !== undefined) {
             this.system.currentDamage = silverOrigDamage;
