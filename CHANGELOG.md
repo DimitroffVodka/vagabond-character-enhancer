@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.3
+
+### Bug Fixes — Spell Mechanics
+- **Spell Effects (Fx) now require their +1 Mana surcharge** — Casting a spell *without* paying for the Effect no longer applies the spell's `causedStatuses` to targets (Dazed, Burned, Stunned, Blinded, etc.). The system was reading the spell's effect entries unconditionally regardless of whether the player paid the Fx cost. Cast tracking now captures `useFx` from both the character sheet (`SpellHandler.castSpell`) and the crawler strip (`CrawlerSpellDialog._cast`), then `StatusHelper.processCausedStatuses` filters out gated entries at apply time. **Crit-only effects** (`critCausedStatuses`) still trigger on a crit even without paying for Fx — so spells with a "if crit, apply..." entry still fire on crits, matching the rules expectation.
+- **Cast attacks now bypass NPC armor (per RAW)** — Players casting damage spells at monsters were having the monster's `system.armor` subtracted from damage. Two interlocking fixes: (1) the bypass condition only matched NPC-side `castClose`/`castRanged` types and not the player-spell `cast` type — now matches any `cast`-prefixed attack type; (2) the "Apply Direct" button on spell cards has no `data-attack-type` attribute, so the wrapper falls back to checking the source item — if `item.type === "spell"`, it's treated as a cast. Orichalcum armor still blocks (mirrors the hero-side rule).
+- **Auras stop dropping at end of combat when caster is still focusing** — `AuraManager._cleanupAllAuras` now skips active auras whose caster still has the source spell in `focus.spellIds`. Specifically fixes Exalt Aura silently disappearing at the end of every fight even though the player was still focusing.
+- **Selfless HP restore now goes through GM relay** — When a non-GM player triggered Revelator's Selfless to take damage for an ally, the ally's HP restore was failing silently because the clicker doesn't own the ally actor. Both updates now route through the existing socket relay so the GM client performs them atomically. Latent `Math.min(0, …)` zeroing bug also fixed (would have wiped the ally's HP entirely if `health.max` were ever undefined).
+
+### New Features
+- **Moon spell — token light emission** — Focusing the Moon spell now emits silvery moonlight from the caster's token (15' bright + 30' dim, `#c8d8ff`, gentle pulse animation). Mirrors the Light spell behavior with a cooler color and calmer animation. Both spells share the same saved-original flag, so switching between them never clobbers the actor's true original token light settings.
+- **Light spell tuned to 15' bright / 30' dim** — Previously 30' bright / 0' dim, now matches Moon's emission radii for consistency. Color and torch animation unchanged.
+- **Area-attack weapons no longer blocked by single-target validator** — `RangeValidator` now recognizes the system's `Breath Attack` weapon (and any custom weapon flagged via the new `markAreaAttack(item)` API) as area-of-effect and skips the single-target / range checks. The Vagabond system has no native AoE weapon property, so this fills the gap for breath/cone/spray-style attacks.
+
+### Documentation
+- **CLAUDE.md — "Spell Cast-Time Tracking — Dual-Patch Required" section added** — Documents the dual patch sites (`SpellHandler.castSpell` for the sheet + `CrawlerSpellDialog._cast` for the crawler) for any feature that needs to capture cast-time state. Prevents future single-side patches from silently failing on the crawler strip.
+
 ## v0.3.2
 
 ### Imbue — Cost Enforcement & Ally Targeting

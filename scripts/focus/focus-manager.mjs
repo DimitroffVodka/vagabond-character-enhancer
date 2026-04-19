@@ -386,27 +386,53 @@ export const FocusManager = {
   },
 
   /* -------------------------------------------- */
-  /*  Light Spell Focus — Token Light Emission    */
+  /*  Light / Moon Spell Focus — Token Emission   */
   /* -------------------------------------------- */
 
   /**
-   * Sync token light emission when Light spell is focused/unfocused.
-   * Light sheds bright light out to 30' (Near) while focused.
+   * Per-spell emission settings. Each one defines what the token's light
+   * looks like while that spell is focused.
+   */
+  _SPELL_LIGHT_EMISSIONS: {
+    light: {
+      // Warm sun/torch glow
+      bright: 15, dim: 30,
+      color: "#ffffaa", alpha: 0.4,
+      animType: "torch", animSpeed: 3, animIntensity: 3,
+      logTag: "Light",
+    },
+    moon: {
+      // Cool silvery moonlight, gentler pulse
+      bright: 15, dim: 30,
+      color: "#c8d8ff", alpha: 0.35,
+      animType: "pulse", animSpeed: 2, animIntensity: 2,
+      logTag: "Moon",
+    },
+  },
+
+  /**
+   * Sync token light emission when Light or Moon is focused/unfocused.
+   * Both spells shed light out to 30' (Near) while focused but use distinct
+   * colors/animations. Light wins if both happen to be focused.
    */
   async _syncLightFocus(actor) {
     const focusedIds = actor.system?.focus?.spellIds || [];
-    const isFocusingLight = focusedIds.some(id => {
-      const spell = actor.items.get(id);
-      return spell?.name?.toLowerCase() === "light";
-    });
+    let activeKey = null;
+    for (const id of focusedIds) {
+      const name = actor.items.get(id)?.name?.toLowerCase();
+      if (name === "light") { activeKey = "light"; break; }
+      if (name === "moon" && !activeKey) activeKey = "moon";
+    }
 
     const token = actor.getActiveTokens()?.[0]?.document;
     if (!token) return;
 
     const FLAG_LIGHT = "originalLight";
 
-    if (isFocusingLight) {
-      // Save original light settings (only if not already saved)
+    if (activeKey) {
+      // Save original light settings only if we haven't already (covers the
+      // case where the player switches between Light and Moon — we restore
+      // the actor's true original, not the prior spell's settings).
       const saved = actor.getFlag(MODULE_ID, FLAG_LIGHT);
       if (!saved) {
         await actor.setFlag(MODULE_ID, FLAG_LIGHT, {
@@ -419,19 +445,19 @@ export const FocusManager = {
           animationIntensity: token.light.animation?.intensity
         });
       }
-      // Apply Light spell emission: 30' bright, warm golden glow
+      const e = this._SPELL_LIGHT_EMISSIONS[activeKey];
       await token.update({
-        "light.bright": 30,
-        "light.dim": 0,
-        "light.color": "#ffffaa",
-        "light.alpha": 0.4,
-        "light.animation.type": "torch",
-        "light.animation.speed": 3,
-        "light.animation.intensity": 3
+        "light.bright": e.bright,
+        "light.dim": e.dim,
+        "light.color": e.color,
+        "light.alpha": e.alpha,
+        "light.animation.type": e.animType,
+        "light.animation.speed": e.animSpeed,
+        "light.animation.intensity": e.animIntensity
       });
-      log("Light", `${actor.name}: Light focused — token emitting 30' bright light`);
+      log(e.logTag, `${actor.name}: ${activeKey} focused — token emitting ${e.bright}' bright`);
     } else {
-      // Restore original light settings
+      // Neither spell focused — restore original
       const saved = actor.getFlag(MODULE_ID, FLAG_LIGHT);
       if (saved) {
         await token.update({
@@ -444,7 +470,7 @@ export const FocusManager = {
           "light.animation.intensity": saved.animationIntensity ?? 5
         });
         await actor.unsetFlag(MODULE_ID, FLAG_LIGHT);
-        log("Light", `${actor.name}: Light unfocused — token light restored`);
+        log("Light", `${actor.name}: spell unfocused — token light restored`);
       }
     }
   },

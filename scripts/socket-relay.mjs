@@ -94,6 +94,26 @@ async function _handleRequest(data) {
       return { ok: true };
     }
 
+    case "selflessTransfer": {
+      // Revelator's Selfless: revelator takes raw damage, ally's HP restored
+      // by the post-armor amount they actually lost. Routed through GM because
+      // the clicker only owns the revelator, not the ally.
+      const revelator = game.actors.get(data.revelatorId);
+      const target = game.actors.get(data.targetId);
+      if (!revelator || !target) return { error: "Actor(s) not found" };
+
+      const revHP = revelator.system?.health?.value ?? 0;
+      const newRevHP = Math.max(0, revHP - data.damage);
+      await revelator.update({ "system.health.value": newRevHP });
+
+      const tgtHP = target.system?.health?.value ?? 0;
+      const tgtMax = target.system?.health?.max ?? Infinity;
+      const newTgtHP = Math.min(tgtMax, tgtHP + data.appliedDamage);
+      await target.update({ "system.health.value": newTgtHP });
+
+      return { ok: true, newRevHP, newTgtHP };
+    }
+
     default:
       return { error: `Unknown action: ${data.action}` };
   }

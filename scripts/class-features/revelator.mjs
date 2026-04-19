@@ -21,6 +21,7 @@
 
 import { MODULE_ID, log, hasFeature, combineFavor } from "../utils.mjs";
 import { AuraManager } from "../aura/aura-manager.mjs";
+import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -381,16 +382,22 @@ export const RevelatorFeatures = {
     const target = game.actors.get(targetId);
     if (!revelator || !target || damage <= 0) return;
 
-    // Apply raw damage to revelator (unreducible — bypasses armor/DR/everything)
-    const currentHP = revelator.system?.health?.value ?? 0;
-    const newHP = Math.max(0, currentHP - damage);
-    await revelator.update({ "system.health.value": newHP });
-
-    // Restore the ally's HP (undo only the damage they actually took after armor)
-    const targetCurrentHP = target.system?.health?.value ?? 0;
-    const targetMaxHP = target.system?.health?.max ?? 0;
-    const restoredHP = Math.min(targetMaxHP, targetCurrentHP + appliedDamage);
-    await target.update({ "system.health.value": restoredHP });
+    // Both updates routed through GM via socket relay. The clicker (typically
+    // the revelator's player) doesn't own the ally and a direct target.update()
+    // silently fails on permission. The revelator update goes through the same
+    // path for consistency and to keep both sides atomic.
+    try {
+      await gmRequest("selflessTransfer", {
+        revelatorId,
+        targetId,
+        damage,
+        appliedDamage,
+      });
+    } catch (e) {
+      ui.notifications.error(`Selfless transfer failed: ${e.message}`);
+      log("Revelator", `Selfless transfer error: ${e.message}`);
+      return;
+    }
 
     // Mark Selfless as used this turn
     this._selflessUsedThisTurn.set(revelatorId, true);

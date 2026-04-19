@@ -31,6 +31,15 @@ const RANGE_CLOSE = 5;
 const RANGE_NEAR = 30;
 const RANGE_FAR = Infinity;
 
+// Known compendium weapons that hit multiple targets in an area. The Vagabond
+// system has no native AoE weapon property, so RangeValidator treats these as
+// area attacks and bypasses single-target / range validation. Add new entries
+// here for any future system AoE weapons. Custom items can opt in via the
+// `areaAttack` module flag instead.
+const KNOWN_AREA_ATTACK_NAMES = new Set([
+  "breath attack",
+]);
+
 /* -------------------------------------------- */
 /*  Helpers                                     */
 /* -------------------------------------------- */
@@ -128,6 +137,17 @@ export const RangeValidator = {
 
     // Guard: only validate weapon attacks (not spells, items, etc.)
     if (ctx.item.system?.equipmentType !== "weapon" && !ctx.item.system?.weaponSkill) return false;
+
+    // Area-attack escape hatch — bypass target count + range validation for
+    // items that hit multiple targets in an area. Two ways to qualify:
+    //   1. Compendium-known AoE weapon by name (e.g., "Breath Attack")
+    //   2. Opt-in module flag for custom items:
+    //      item.setFlag("vagabond-character-enhancer", "areaAttack", true)
+    const itemNameLower = (ctx.item.name || "").toLowerCase().trim();
+    if (KNOWN_AREA_ATTACK_NAMES.has(itemNameLower) || ctx.item.getFlag?.(MODULE_ID, "areaAttack")) {
+      log("Range", `${ctx.item.name}: area attack — bypassing target count + range checks`);
+      return false;
+    }
 
     // Guard: no targets selected
     const targets = game.user.targets;

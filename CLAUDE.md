@@ -160,6 +160,20 @@ Each class has `scripts/class-features/{class}.mjs` exporting:
 
 **Recommendation for new spell-related features:** Always use `renderChatMessage` button injection. Don't attempt to patch `rollSpellDamage` or `_createSpellChatCard` — it will not work across both code paths.
 
+### Spell Cast-Time Tracking — Dual-Patch Required
+**CRITICAL**: The vagabond-crawler module has its own `CrawlerSpellDialog._cast` (in `vagabond-crawler/scripts/npc-action-menu.mjs`) that bypasses `SpellHandler.castSpell` entirely. Any cast-time state capture (e.g., useFx, damage dice, focus intent, target snapshot) MUST be patched in BOTH places or it will silently fail when players cast from the crawler strip.
+
+| Code path | Patch site | Cast button |
+|---|---|---|
+| Character sheet | `SpellHandler.prototype.castSpell` | Sheet's "Cast" |
+| Crawler strip | `CrawlerSpellDialog.prototype._cast` | Crawler dialog "Cast" |
+
+Both call `VagabondChatCard.spellCast()` to render the chat card and `VagabondDamageHelper.rollSpellDamage()` to roll damage — but they do NOT share a cast entry point.
+
+**Pattern**: Define one helper (e.g., `_recordCastUseFx`), call it from both patch sites. Wrap the crawler patch in `if (game.modules.get("vagabond-crawler")?.active)` and a try/catch since the module is optional.
+
+**Existing example**: `_recordCastUseFx` in `vagabond-character-enhancer.mjs` is called from both `SpellHandler.castSpell` and `CrawlerSpellDialog._cast` patches — see those for reference.
+
 ### Key System Fields for Active Effects
 ```
 # Crit thresholds (negative = lower threshold, e.g., -1 means crit on 19+)

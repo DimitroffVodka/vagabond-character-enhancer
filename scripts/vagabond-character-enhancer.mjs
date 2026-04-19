@@ -33,6 +33,39 @@ export let _saveSourceAttackType = null;
 // calculateFinalDamage can bypass armor for cast attacks.
 export let _directSourceAttackType = null;
 
+// Spell item ID for the current apply call. Set by handleApplyDirect /
+// handleSaveRoll / handleApplySaveDamage so processCausedStatuses can look up
+// whether the cast paid for Fx and gate effects accordingly.
+let _currentApplySpellId = null;
+
+// Cast-time useFx tracking. Keyed by `${actorId}:${spellId}`. Value is the
+// boolean useFx state at the moment castSpell ran. Entries auto-expire after
+// 5 minutes — long enough for a normal apply flow but bounded so stale records
+// don't gate later casts.
+const _castUseFxBySpell = new Map();
+function _recordCastUseFx(actorId, spellId, useFx) {
+  if (!actorId || !spellId) return;
+  const key = `${actorId}:${spellId}`;
+  _castUseFxBySpell.set(key, useFx);
+  setTimeout(() => _castUseFxBySpell.delete(key), 5 * 60_000);
+}
+function _statusEntryMatches(a, b) {
+  if (!a || !b || a.statusId !== b.statusId) return false;
+  return (a.duration ?? null) === (b.duration ?? null)
+    && (a.dieFormula ?? null) === (b.dieFormula ?? null);
+}
+function _filterStatusesUseFxOff(statuses, spell) {
+  if (!Array.isArray(statuses) || !spell) return statuses;
+  const normal = spell.system?.causedStatuses ?? [];
+  const crit = spell.system?.critCausedStatuses ?? [];
+  if (normal.length === 0) return statuses;
+  return statuses.filter(s => {
+    if (crit.some(c => _statusEntryMatches(c, s))) return true;       // crit-specific override → keep
+    if (normal.some(n => _statusEntryMatches(n, s))) return false;    // normal Fx entry → gated
+    return true;                                                       // coating / passive / NPC action → keep
+  });
+}
+
 // Range hinder. Set by rollAttack patch when RangeValidator applies hinder
 // (e.g. Thrown at Far range), consumed by buildAndEvaluateD20WithRollData.
 let _rangeFavorHinder = "none";
@@ -248,8 +281,9 @@ Hooks.once("ready", async () => {
       }
 
       // Cast attacks bypass armor unless target wears Orichalcum
+      // ('cast' = player spells; 'castClose'/'castRanged' = NPC actions before normalization)
       const origAttackType = _directSourceAttackType || _saveSourceAttackType;
-      if (origAttackType === 'castClose' || origAttackType === 'castRanged') {
+      if (origAttackType?.startsWith('cast')) {
         const equippedArmor = actor.items?.find(i => {
           const isArmor = (i.type === 'armor') ||
             (i.type === 'equipment' && i.system.equipmentType === 'armor');
@@ -766,6 +800,7 @@ Hooks.once("ready", async () => {
       _saveSourceActorId = button.dataset.actorId || null;
       _damageSourceActorId = button.dataset.actorId || null;
       _saveSourceAttackType = button.dataset.attackType || null;
+      _currentApplySpellId = button.dataset.itemId || null;
       const saveSourceActor = game.actors.get(button.dataset.actorId);
       const saveActionIdx = button.dataset.actionIndex;
       const saveAction = (saveActionIdx !== '' && saveActionIdx != null)
@@ -855,6 +890,7 @@ Hooks.once("ready", async () => {
       } finally {
         for (const ctx of _blessContexts) await BlessManager.onPostRollSave(ctx);
         _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
+        _currentApplySpellId = null;
         VagabondDamageHelper._vceRemoveDiceCount = 0;
       }
     };
@@ -863,26 +899,75 @@ Hooks.once("ready", async () => {
       _saveSourceActorId = button.dataset.actorId || null;
       _damageSourceActorId = button.dataset.actorId || null;
       _saveSourceAttackType = button.dataset.attackType || null;
+      _currentApplySpellId = button.dataset.itemId || null;
       const saveReminderActor = game.actors.get(button.dataset.actorId);
       const saveReminderIdx = button.dataset.actionIndex;
       const saveReminderAction = (saveReminderIdx !== '' && saveReminderIdx != null)
         ? saveReminderActor?.system?.actions?.[parseInt(saveReminderIdx)] : null;
       if (saveReminderAction?.attackType?.startsWith('cast')) _saveSourceAttackType = saveReminderAction.attackType;
       try { return await origHandleSaveReminderRoll.call(this, button, event); }
-      finally { _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null; }
+      finally { _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null; _currentApplySpellId = null; }
     };
     console.log(`${MODULE_ID} | Patched handleSaveRoll + handleSaveReminderRoll.`);
+
+    // --- handleApplySaveDamage: Track deferred-save apply context for Fx gating ---
+    const origHandleApplySaveDamage = VagabondDamageHelper.handleApplySaveDamage;
+    VagabondDamageHelper.handleApplySaveDamage = async function (button) {
+      _damageSourceActorId = button.dataset.sourceActorId || null;
+      _currentApplySpellId = button.dataset.sourceItemId || null;
+      try { return await origHandleApplySaveDamage.call(this, button); }
+      finally { _damageSourceActorId = null; _currentApplySpellId = null; }
+    };
+    console.log(`${MODULE_ID} | Patched handleApplySaveDamage.`);
+
+    // --- StatusHelper.processCausedStatuses: Gate spell Effects when useFx was off ---
+    // The system reads spell.causedStatuses unconditionally when applying damage —
+    // so a spell cast without paying the +1 Mana Fx surcharge still fires its Effect.
+    // We intercept here and strip normal Fx entries for the active cast, keeping
+    // crit-specific overrides so a crit without Fx still triggers the crit effect.
+    const { StatusHelper } = await import("/systems/vagabond/module/helpers/status-helper.mjs");
+    const origProcessCausedStatuses = StatusHelper.processCausedStatuses;
+    StatusHelper.processCausedStatuses = async function (targetActor, statuses, damageWasBlocked, sourceName = '', options = {}) {
+      const sourceActorId = _damageSourceActorId || _saveSourceActorId;
+      const spellId = _currentApplySpellId;
+      if (sourceActorId && spellId) {
+        const key = `${sourceActorId}:${spellId}`;
+        const useFx = _castUseFxBySpell.get(key);
+        if (useFx === false) {
+          const spell = game.actors.get(sourceActorId)?.items.get(spellId);
+          if (spell?.type === "spell") {
+            const before = statuses?.length ?? 0;
+            statuses = _filterStatusesUseFxOff(statuses, spell);
+            const after = statuses?.length ?? 0;
+            if (before !== after) log("Spell Fx", `Gated ${before - after} Effect status(es) for ${spell.name} — cast without Fx`);
+          }
+        }
+      }
+      return origProcessCausedStatuses.call(this, targetActor, statuses, damageWasBlocked, sourceName, options);
+    };
+    console.log(`${MODULE_ID} | Patched StatusHelper.processCausedStatuses (Fx gating).`);
 
     // --- handleApplyDirect: Track damage source + fix Cleave split (full/half, not even) ---
     const origHandleApplyDirect = VagabondDamageHelper.handleApplyDirect;
     VagabondDamageHelper.handleApplyDirect = async function (button) {
       _damageSourceActorId = button.dataset.actorId || null;
-      // Look up original NPC action attackType (before system normalizes castClose/castRanged)
+      _currentApplySpellId = button.dataset.itemId || null;
+      // Attack-type detection priority:
+      //   1. NPC action attackType (preserves unnormalized 'castClose'/'castRanged')
+      //   2. button.dataset.attackType (set on save buttons, NOT on vagabond-apply-direct-button)
+      //   3. Source item type === 'spell' → treat as 'cast' (covers player spell direct-apply,
+      //      where the system omits data-attack-type on the apply button)
+      _directSourceAttackType = button.dataset.attackType || null;
       const directSourceActor = game.actors.get(button.dataset.actorId);
       const directActionIdx = button.dataset.actionIndex;
       const directAction = (directActionIdx !== '' && directActionIdx != null)
         ? directSourceActor?.system?.actions?.[parseInt(directActionIdx)] : null;
-      _directSourceAttackType = directAction?.attackType || null;
+      if (directAction?.attackType?.startsWith('cast')) {
+        _directSourceAttackType = directAction.attackType;
+      } else if (!_directSourceAttackType && button.dataset.itemId) {
+        const directSourceItem = directSourceActor?.items.get(button.dataset.itemId);
+        if (directSourceItem?.type === 'spell') _directSourceAttackType = 'cast';
+      }
 
       try {
         // Fix Cleave: system splits evenly, RAW is full to first + half to rest
@@ -928,7 +1013,7 @@ Hooks.once("ready", async () => {
         // Ward: prompt caster for reactive damage reduction AFTER damage is applied
         try { await WardManager.onPostDamage(button); } catch (e) { /* Don't crash apply flow */ }
         return;
-      } finally { _damageSourceActorId = null; _directSourceAttackType = null; }
+      } finally { _damageSourceActorId = null; _directSourceAttackType = null; _currentApplySpellId = null; }
     };
     console.log(`${MODULE_ID} | Patched handleApplyDirect.`);
 
@@ -1032,6 +1117,13 @@ Hooks.once("ready", async () => {
       // Check if this cast uses Imbue delivery — if so, bypass d20/damage rolls
       const spellId = target.dataset.spellId;
       const state = this._getSpellState?.(spellId);
+
+      // Record useFx for this cast so processCausedStatuses can gate the
+      // spell's Effect at apply time. Without this, the system's apply path
+      // reads spell.system.causedStatuses unconditionally and fires the Effect
+      // even when the player didn't pay the +1 Mana Fx surcharge.
+      if (state) _recordCastUseFx(this.actor?.id, spellId, !!state.useFx);
+
       if (state?.deliveryType === "imbue") {
         const spell = this.actor.items.get(spellId);
         if (spell) {
@@ -1064,6 +1156,48 @@ Hooks.once("ready", async () => {
       }
     };
     console.log(`${MODULE_ID} | Patched SpellHandler.castSpell.`);
+
+    // --- CrawlerSpellDialog._cast: Capture useFx for crawler-strip casts ---
+    // The vagabond-crawler module has its own spell cast UI that bypasses
+    // SpellHandler.castSpell entirely. Without this patch the Fx-gating record
+    // is never written for crawler casts and the Effect always applies.
+    try {
+      if (game.modules.get("vagabond-crawler")?.active) {
+        const crawlerMod = await import("/modules/vagabond-crawler/scripts/npc-action-menu.mjs");
+        const CrawlerSpellDialog = crawlerMod?.CrawlerSpellDialog;
+        if (CrawlerSpellDialog?.prototype?._cast) {
+          const origCrawlerCast = CrawlerSpellDialog.prototype._cast;
+          CrawlerSpellDialog.prototype._cast = async function () {
+            _recordCastUseFx(this.actor?.id, this.spell?.id, !!this.spellState?.useFx);
+            return await origCrawlerCast.call(this);
+          };
+          console.log(`${MODULE_ID} | Patched CrawlerSpellDialog._cast for Fx gating.`);
+        }
+      }
+    } catch (e) {
+      console.warn(`${MODULE_ID} | Could not patch crawler spell cast (Fx gating):`, e);
+    }
+
+    // --- SpellHandler._calculateSpellCost: Fix healing spell mana costs ---
+    // Life spell (damageType "healing") has special rules:
+    //   - Effect (revive) is always free — no fxCost surcharge
+    //   - Healing costs 1 Mana per d6 — no free first die
+    const origCalculateSpellCost = SpellHandler.prototype._calculateSpellCost;
+    SpellHandler.prototype._calculateSpellCost = function (spellId) {
+      const result = origCalculateSpellCost.call(this, spellId);
+      const spell = this.actor.items.get(spellId);
+      if (spell?.system.damageType === "healing") {
+        const state = this._getSpellState(spellId);
+        result.damageCost = state.damageDice;    // 1 Mana per d6, no free first die
+        result.fxCost = 0;                       // Effect is always free
+        result.totalCost = result.damageCost + result.deliveryBaseCost + result.deliveryIncreaseCost;
+        // Re-apply spell mana cost reduction
+        const spellReduction = this.actor.system.bonuses?.spellManaCostReduction || 0;
+        result.totalCost = Math.max(0, result.totalCost - spellReduction);
+      }
+      return result;
+    };
+    console.log(`${MODULE_ID} | Patched SpellHandler._calculateSpellCost for healing spells.`);
 
     // --- SpellHandler.toggleSpellFocus: Enforce combined focus cap + sync FX ---
     const origToggleFocus = SpellHandler.prototype.toggleSpellFocus;
@@ -1113,6 +1247,16 @@ Hooks.once("ready", async () => {
     auraEnd: (actor) => AuraManager.deactivate(actor),
     layOnHands: (actor) => RevelatorFeatures.useLayOnHands(actor),
     setDraconicResilience: (actor) => DrakenFeatures.promptResilienceChoice(actor),
+    /** Mark a weapon item as an area attack — bypasses the single-target / range
+     *  validation in RangeValidator. Use for breath weapons, cone/spray attacks,
+     *  or any custom weapon that hits multiple targets in an area.
+     *  Pass `false` (or omit `enabled`) to clear the flag. */
+    markAreaAttack: (item, enabled = true) => {
+      if (!item) return;
+      return enabled
+        ? item.setFlag(MODULE_ID, "areaAttack", true)
+        : item.unsetFlag(MODULE_ID, "areaAttack");
+    },
     imbue: ImbueManager,
     clearImbue: (actor) => ImbueManager.clearImbue(actor),
     witch: WitchFeatures,

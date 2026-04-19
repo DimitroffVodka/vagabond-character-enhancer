@@ -653,13 +653,20 @@ export const AuraManager = {
 
   /**
    * Clean up all auras (on combat end, etc.)
+   * Skips auras whose caster is still focusing on the source spell —
+   * focused spells persist past combat per Vagabond rules.
    */
   async _cleanupAllAuras() {
     for (const actor of game.actors) {
       const auraState = actor.getFlag(MODULE_ID, "activeAura");
-      if (auraState) {
-        await AuraManager.deactivate(actor);
+      if (!auraState) continue;
+
+      if (auraState.focusSpellId) {
+        const focusedIds = actor.system?.focus?.spellIds || [];
+        if (focusedIds.includes(auraState.focusSpellId)) continue;
       }
+
+      await AuraManager.deactivate(actor);
     }
     // Safety net: kill any lingering aura Sequencer effects
     if (typeof Sequencer !== "undefined") {
