@@ -61,6 +61,22 @@ async function _handleRequest(data) {
       }
       const [tokenDoc] = await scene.createEmbeddedDocuments("Token", [tokenData]);
       if (!tokenDoc) return { error: "Failed to create token" };
+      // Auto-add to an active combat on this scene so the companion participates
+      // in vagabond-crawler flanking checks and turn order. Flanking-checker
+      // only scans game.combat.combatants, so a summon that isn't a combatant
+      // can't flank or be flanked.
+      try {
+        const combat = game.combats?.find(c => c.scene?.id === scene.id);
+        if (combat && !combat.combatants.some(x => x.tokenId === tokenDoc.id)) {
+          await combat.createEmbeddedDocuments("Combatant", [{
+            tokenId: tokenDoc.id,
+            sceneId: scene.id,
+            actorId: tokenDoc.actorId
+          }]);
+        }
+      } catch (e) {
+        log("SocketRelay", `Could not add ${tokenDoc.name} to combat: ${e.message}`);
+      }
       return { tokenId: tokenDoc.id };
     }
 
