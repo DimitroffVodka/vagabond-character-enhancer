@@ -9,6 +9,7 @@
  *   const { tokenId } = await gmRequest("placeToken", { sceneId, tokenData: { ... } });
  *   await gmRequest("removeToken", { sceneId, tokenId });
  *   await gmRequest("deleteActor", { actorId });
+ *   await gmRequest("setActorFlag", { actorId, scope, key, value });  // value:null unsets
  */
 
 import { MODULE_ID, log } from "./utils.mjs";
@@ -114,6 +115,20 @@ async function _handleRequest(data) {
       return { ok: true, newRevHP, newTgtHP };
     }
 
+    case "setActorFlag": {
+      if (data.scope !== MODULE_ID) {
+        return { error: `setActorFlag: refused scope "${data.scope}"` };
+      }
+      const actor = game.actors.get(data.actorId);
+      if (!actor) return { error: `setActorFlag: actor "${data.actorId}" not found` };
+      if (data.value === null || data.value === undefined) {
+        await actor.unsetFlag(data.scope, data.key);
+      } else {
+        await actor.setFlag(data.scope, data.key, data.value);
+      }
+      return { ok: true };
+    }
+
     default:
       return { error: `Unknown action: ${data.action}` };
   }
@@ -126,7 +141,7 @@ async function _handleRequest(data) {
 /**
  * Request a GM-privileged operation. If the caller IS the GM, executes directly.
  * Otherwise, sends a socket request and awaits the GM's response.
- * @param {string} action - One of: importActor, placeToken, removeToken, deleteActor
+ * @param {string} action - One of: importActor, placeToken, removeToken, deleteActor, setActorFlag, applyImbue, clearImbue, selflessTransfer
  * @param {object} payload - Action-specific data
  * @returns {Promise<object>} Result from the GM
  */
