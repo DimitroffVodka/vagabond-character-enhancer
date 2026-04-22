@@ -31,8 +31,11 @@ function _routeTarget(target) {
  * statusContext, on-hit status processing — uses the original NPC (damageTarget).
  */
 export async function patchedHandleSaveRoll(button, event = null) {
-  const DH = CONFIG.VAGABOND?._damageHelper ?? globalThis.VagabondDamageHelper;
-  // ^ resolve the class at call-time (see Task 3 for where it's attached)
+  // Resolve the damage helper class at call-time. Set on CONFIG.VAGABOND by the
+  // install block in vagabond-character-enhancer.mjs (ready hook); fall back to
+  // a fresh import if the install hasn't run.
+  const DH = CONFIG.VAGABOND?._damageHelper
+    ?? (await import("/systems/vagabond/module/helpers/damage-helper.mjs")).VagabondDamageHelper;
 
   const saveType = button.dataset.saveType;
   const damageAmount = parseInt(button.dataset.damageAmount);
@@ -240,15 +243,22 @@ export async function patchedHandleSaveRoll(button, event = null) {
       autoApply ? null : statusContext
     );
     if (routingNote && saveMessage) {
-      // Append the routing note into the card flavor/subtitle by editing the
-      // posted message content. Minimally invasive vs full card re-render.
       try {
-        const patched = (saveMessage.content || '').replace(
-          /(<div class="card-title"[^>]*>[^<]*<\/div>)/,
-          `$1<div class="card-subtitle vce-routing-note">${foundry.utils.escapeHTML ? foundry.utils.escapeHTML(routingNote) : routingNote}</div>`
-        );
-        if (patched !== saveMessage.content) {
-          await saveMessage.update({ content: patched });
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(saveMessage.content || "", "text/html");
+        // Find the best injection point: prefer .header-info, fall back to .header-title's parent.
+        const anchor = doc.querySelector(".header-info")
+          ?? doc.querySelector(".header-title")?.parentElement
+          ?? doc.querySelector(".vagabond-chat-card-v2");
+        if (anchor) {
+          const note = doc.createElement("div");
+          note.className = "vce-routing-note";
+          note.textContent = routingNote; // textContent auto-escapes
+          anchor.appendChild(note);
+          const patched = doc.body.innerHTML;
+          if (patched && patched !== saveMessage.content) {
+            await saveMessage.update({ content: patched });
+          }
         }
       } catch (e) {
         log("save-routing: failed to inject routing note", e);
@@ -282,7 +292,11 @@ export async function patchedHandleSaveRoll(button, event = null) {
  * Same CHANGES as patchedHandleSaveRoll.
  */
 export async function patchedHandleSaveReminderRoll(button, event = null) {
-  const DH = CONFIG.VAGABOND?._damageHelper ?? globalThis.VagabondDamageHelper;
+  // Resolve the damage helper class at call-time. Set on CONFIG.VAGABOND by the
+  // install block in vagabond-character-enhancer.mjs (ready hook); fall back to
+  // a fresh import if the install hasn't run.
+  const DH = CONFIG.VAGABOND?._damageHelper
+    ?? (await import("/systems/vagabond/module/helpers/damage-helper.mjs")).VagabondDamageHelper;
 
   const saveType = button.dataset.saveType;
   const attackType = button.dataset.attackType;
@@ -385,12 +399,21 @@ export async function patchedHandleSaveReminderRoll(button, event = null) {
     );
     if (routingNote && saveMessage) {
       try {
-        const patched = (saveMessage.content || '').replace(
-          /(<div class="card-title"[^>]*>[^<]*<\/div>)/,
-          `$1<div class="card-subtitle vce-routing-note">${foundry.utils.escapeHTML ? foundry.utils.escapeHTML(routingNote) : routingNote}</div>`
-        );
-        if (patched !== saveMessage.content) {
-          await saveMessage.update({ content: patched });
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(saveMessage.content || "", "text/html");
+        // Find the best injection point: prefer .header-info, fall back to .header-title's parent.
+        const anchor = doc.querySelector(".header-info")
+          ?? doc.querySelector(".header-title")?.parentElement
+          ?? doc.querySelector(".vagabond-chat-card-v2");
+        if (anchor) {
+          const note = doc.createElement("div");
+          note.className = "vce-routing-note";
+          note.textContent = routingNote; // textContent auto-escapes
+          anchor.appendChild(note);
+          const patched = doc.body.innerHTML;
+          if (patched && patched !== saveMessage.content) {
+            await saveMessage.update({ content: patched });
+          }
         }
       } catch (e) {
         log("save-routing: failed to inject routing note", e);
