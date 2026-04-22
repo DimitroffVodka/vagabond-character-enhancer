@@ -110,6 +110,7 @@ import { SummonerFeatures } from "./class-features/summoner.mjs";
 import { FamiliarFeatures } from "./perk-features/familiar.mjs";
 import { registerSocketRelay } from "./socket-relay.mjs";
 import { RangeValidator } from "./range-validator.mjs";
+import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companion/save-routing-patch.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -241,6 +242,14 @@ Hooks.once("init", () => {
 Hooks.once("ready", async () => {
   try {
     const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
+
+    // Route friendly NPC saves through their controller PC.
+    // See scripts/companion/save-routing.mjs for the flag schema.
+    CONFIG.VAGABOND = CONFIG.VAGABOND || {};
+    CONFIG.VAGABOND._damageHelper = VagabondDamageHelper;
+    VagabondDamageHelper.handleSaveRoll = patchedHandleSaveRoll;
+    VagabondDamageHelper.handleSaveReminderRoll = patchedHandleSaveReminderRoll;
+    log("save-routing", "patched handleSaveRoll + handleSaveReminderRoll");
 
     // --- calculateFinalDamage: Cast armor bypass + Rage DR + Tempest Within + Apex Predator ---
     const origCalcFinal = VagabondDamageHelper.calculateFinalDamage;
