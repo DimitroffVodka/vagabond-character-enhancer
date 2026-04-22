@@ -16,6 +16,11 @@
 ### Documentation
 - **CLAUDE.md — "Spell Cast-Time Tracking — Dual-Patch Required" section added** — Documents the dual patch sites (`SpellHandler.castSpell` for the sheet + `CrawlerSpellDialog._cast` for the crawler) for any feature that needs to capture cast-time state. Prevents future single-side patches from silently failing on the crawler strip.
 
+### Summoner
+
+- **Summon tab damage display fixed** — Character sheet's Summon tab was rendering action damage as `1d6 + 3` when the data only supports one OR the other (the roll path uses `rollDamage || flatDamage`, never both). Display now matches the roll: prefer `rollDamage`, fall back to `flatDamage`. Matches the monster-creator fix pattern — no mechanical change, just a visual correction.
+- **Banish-on-death no longer races the system's Dead status effect** — When a summon hit 0 HP, VCE's `updateActor` banish hook and the Vagabond system's `updateActor` hook (which calls `actor.toggleStatusEffect('dead')`) fired in parallel. For unlinked-token summons, the system's ActiveEffect create needed to resolve its parent UUID (`Scene.X.Token.Y.ActorDelta…`) — but the banish deleted the token first, so the create threw `undefined id [tokenId] does not exist in the EmbeddedCollection collection`. The banish call is now deferred by 250 ms, comfortably past the local create round-trip, so the Dead effect lands cleanly before the token goes away. Diagnosed via a scripted kill through MCP that captured the race stack (`banishSummon` at `summoner.mjs:1043`).
+
 ## v0.3.2
 
 ### Imbue — Cost Enforcement & Ally Targeting

@@ -198,7 +198,16 @@ export const SummonerFeatures = {
       }
     });
 
-    // Watch summon actor HP for 0 HP banishment
+    // Watch summon actor HP for 0 HP banishment.
+    //
+    // Deferred banish: the Vagabond system's own updateActor hook calls
+    // actor.toggleStatusEffect('dead', { active: true }) in parallel with
+    // this one. For an unlinked-token summon, that ActiveEffect create needs
+    // to resolve its parent UUID (Scene.X.Token.Y.ActorDelta...) — but if we
+    // delete the token first, Foundry throws
+    //   "undefined id [tokenId] does not exist in the EmbeddedCollection"
+    // during parent resolution. Queuing the banish behind a setTimeout lets
+    // the system's async toggleStatusEffect finish before we wipe the token.
     Hooks.on("updateActor", async (actor, changes) => {
       if (actor.type !== "npc") return;
       if (!game.user.isGM) return;
@@ -209,7 +218,9 @@ export const SummonerFeatures = {
       for (const char of game.actors.filter(a => a.type === "character")) {
         const conjure = char.getFlag(MODULE_ID, FLAG_CONJURE);
         if (conjure?.summonActorId === actor.id) {
-          await this.banishSummon(char, "Defeated (0 HP)");
+          // 250ms is comfortably more than a local ActiveEffect create round-trip
+          // and still fast enough to feel immediate at the table.
+          setTimeout(() => this.banishSummon(char, "Defeated (0 HP)"), 250);
           break;
         }
       }
@@ -610,10 +621,11 @@ export const SummonerFeatures = {
       html += `<div class="vce-bf-section"><h3 class="vce-bf-section-title">Actions</h3>`;
       for (let i = 0; i < actions.length; i++) {
         const a = actions[i];
-        const dmgParts = [];
-        if (a.rollDamage) dmgParts.push(a.rollDamage);
-        if (a.flatDamage) dmgParts.push(`+ ${a.flatDamage}`);
-        const dmgStr = dmgParts.length ? dmgParts.join(" ") : "";
+        // Display one damage value: prefer rollDamage (e.g. "1d6"), fall back
+        // to flatDamage when no dice are set. Mirrors the roll path above
+        // (formula = rollDamage || flatDamage) — never sum them, they're
+        // alternates, not a dice + bonus pair.
+        const dmgStr = a.rollDamage || a.flatDamage || "";
         const dTypeStr = a.damageType && a.damageType !== "-" ? ` ${a.damageType}` : "";
         const rechargeStr = a.recharge ? ` <span style="opacity:0.6;">(${a.recharge})</span>` : "";
 
