@@ -244,7 +244,11 @@ Hooks.once("ready", async () => {
     const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
 
     // Route friendly NPC saves through their controller PC.
-    // See scripts/companion/save-routing.mjs for the flag schema.
+    // Flag schema: scripts/companion/save-routing.mjs
+    // Patch body:  scripts/companion/save-routing-patch.mjs
+    // NOTE: Must run before the handleSaveRoll wrapper below (~line 807),
+    // which captures this assignment as its `origHandleSaveRoll`.
+    // Do not reorder without also updating that wrapper.
     CONFIG.VAGABOND = CONFIG.VAGABOND || {};
     CONFIG.VAGABOND._damageHelper = VagabondDamageHelper;
     VagabondDamageHelper.handleSaveRoll = patchedHandleSaveRoll;
@@ -804,6 +808,9 @@ Hooks.once("ready", async () => {
     // Wraps the system's save-roll entry points to capture the attacker's actor ID
     // before _rollSave and calculateFinalDamage fire, so Overwatch and Apex Predator
     // can check whether the effect was provoked by / damage dealt by a specific actor.
+    // NOTE: Layers on top of patchedHandleSaveRoll (installed ~line 250). The
+    // `origHandleSaveRoll` captured here is VCE's save-routing patch, not the
+    // raw system method. Keep install order: save-routing first, this wrapper second.
     const origHandleSaveRoll = VagabondDamageHelper.handleSaveRoll;
     VagabondDamageHelper.handleSaveRoll = async function (button, event = null) {
       _saveSourceActorId = button.dataset.actorId || null;
