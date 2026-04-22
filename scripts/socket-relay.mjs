@@ -10,6 +10,7 @@
  *   await gmRequest("removeToken", { sceneId, tokenId });
  *   await gmRequest("deleteActor", { actorId });
  *   await gmRequest("setActorFlag", { actorId, scope, key, value });  // value:null unsets
+ *   await gmRequest("updateActorFlags", { actorId, scope, flags: {key:value, ...} });
  */
 
 import { MODULE_ID, log } from "./utils.mjs";
@@ -132,6 +133,30 @@ async function _handleRequest(data) {
       return { ok: true };
     }
 
+    case "updateActorFlags": {
+      // Scope-gated (same trust model as setActorFlag).
+      if (data.scope !== MODULE_ID) {
+        return { error: `updateActorFlags: refused scope "${data.scope}"` };
+      }
+      const actor = game.actors.get(data.actorId);
+      if (!actor) return { error: `updateActorFlags: actor "${data.actorId}" not found` };
+      if (!data.flags || typeof data.flags !== "object") {
+        return { error: "updateActorFlags: flags object required" };
+      }
+      // Build the update payload from { key: value } map.
+      // value:null means unset — use the -= prefix syntax.
+      const payload = {};
+      for (const [key, value] of Object.entries(data.flags)) {
+        if (value === null || value === undefined) {
+          payload[`flags.${data.scope}.-=${key}`] = null;
+        } else {
+          payload[`flags.${data.scope}.${key}`] = value;
+        }
+      }
+      await actor.update(payload);
+      return { ok: true };
+    }
+
     default:
       return { error: `Unknown action: ${data.action}` };
   }
@@ -144,7 +169,7 @@ async function _handleRequest(data) {
 /**
  * Request a GM-privileged operation. If the caller IS the GM, executes directly.
  * Otherwise, sends a socket request and awaits the GM's response.
- * @param {string} action - One of: importActor, placeToken, removeToken, deleteActor, setActorFlag, applyImbue, clearImbue, selflessTransfer
+ * @param {string} action - One of: importActor, placeToken, removeToken, deleteActor, setActorFlag, updateActorFlags, applyImbue, clearImbue, selflessTransfer
  * @param {object} payload - Action-specific data
  * @returns {Promise<object>} Result from the GM
  */

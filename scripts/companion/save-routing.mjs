@@ -62,8 +62,10 @@ export async function setController(actor, { controllerId, type }) {
   if (type !== CONTROLLER_TYPES.COMPANION && type !== CONTROLLER_TYPES.HIRELING) {
     throw new Error(`setController: invalid type "${type}"`);
   }
-  await actor.setFlag(MODULE_ID, FLAG_CONTROLLER_ACTOR, controllerId);
-  await actor.setFlag(MODULE_ID, FLAG_CONTROLLER_TYPE, type);
+  await actor.update({
+    [`flags.${MODULE_ID}.${FLAG_CONTROLLER_ACTOR}`]: controllerId,
+    [`flags.${MODULE_ID}.${FLAG_CONTROLLER_TYPE}`]:  type
+  });
 }
 
 /**
@@ -72,6 +74,8 @@ export async function setController(actor, { controllerId, type }) {
  */
 export async function clearController(actor) {
   if (!actor) return;
-  await actor.unsetFlag(MODULE_ID, FLAG_CONTROLLER_ACTOR);
-  await actor.unsetFlag(MODULE_ID, FLAG_CONTROLLER_TYPE);
+  await actor.update({
+    [`flags.${MODULE_ID}.-=${FLAG_CONTROLLER_ACTOR}`]: null,
+    [`flags.${MODULE_ID}.-=${FLAG_CONTROLLER_TYPE}`]:  null
+  });
 }

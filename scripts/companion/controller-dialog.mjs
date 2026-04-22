@@ -13,7 +13,6 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 export class ControllerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
 
   static DEFAULT_OPTIONS = {
-    id: "vce-controller-dialog-{id}",
     tag: "form",
     window: {
       title: "Set Save Controller",
@@ -39,7 +38,7 @@ export class ControllerDialog extends HandlebarsApplicationMixin(ApplicationV2) 
    * @param {object} [options]
    */
   constructor(npcActor, options = {}) {
-    super(options);
+    super({ ...options, id: `vce-controller-dialog-${npcActor.id}` });
     this.npcActor = npcActor;
   }
 
@@ -86,26 +85,16 @@ export class ControllerDialog extends HandlebarsApplicationMixin(ApplicationV2) 
       throw new Error("incomplete");
     }
 
-    // Check if any PC actors exist at all
-    if (game.actors.filter(a => a.type === "character").length === 0) {
-      ui.notifications.warn("No PCs available.");
-      throw new Error("no-pcs");
-    }
-
     if (app.npcActor.isOwner) {
       await setController(app.npcActor, { controllerId, type });
     } else {
-      await gmRequest("setActorFlag", {
+      await gmRequest("updateActorFlags", {
         actorId: app.npcActor.id,
-        scope: MODULE_ID,
-        key: "controllerActorId",
-        value: controllerId
-      });
-      await gmRequest("setActorFlag", {
-        actorId: app.npcActor.id,
-        scope: MODULE_ID,
-        key: "controllerType",
-        value: type
+        scope:   MODULE_ID,
+        flags:   {
+          controllerActorId: controllerId,
+          controllerType:    type
+        }
       });
     }
 
@@ -124,17 +113,13 @@ export class ControllerDialog extends HandlebarsApplicationMixin(ApplicationV2) 
     if (app.npcActor.isOwner) {
       await clearController(app.npcActor);
     } else {
-      await gmRequest("setActorFlag", {
+      await gmRequest("updateActorFlags", {
         actorId: app.npcActor.id,
-        scope: MODULE_ID,
-        key: "controllerActorId",
-        value: null
-      });
-      await gmRequest("setActorFlag", {
-        actorId: app.npcActor.id,
-        scope: MODULE_ID,
-        key: "controllerType",
-        value: null
+        scope:   MODULE_ID,
+        flags:   {
+          controllerActorId: null,
+          controllerType:    null
+        }
       });
     }
 
