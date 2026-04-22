@@ -116,6 +116,9 @@ async function _handleRequest(data) {
     }
 
     case "setActorFlag": {
+      // Scope-gated only — any connected player may write MODULE_ID flags on any
+      // actor. Acceptable for the table-trust model; tighten with a key allowlist
+      // if we ever store sensitive data under this scope.
       if (data.scope !== MODULE_ID) {
         return { error: `setActorFlag: refused scope "${data.scope}"` };
       }
