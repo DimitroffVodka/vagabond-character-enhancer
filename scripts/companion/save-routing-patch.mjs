@@ -283,6 +283,33 @@ export async function patchedHandleSaveRoll(button, event = null) {
       }
       await VagabondChatCard.statusResults(statusResults, damageTarget, sourceItem?.name ?? '', sourceItem?.img ?? null);
     }
+
+    // Rider extension: apply +Fatigue on a failed save, for any causedStatuses
+    // entry that has fatigueOnFail > 0. Fires even when statuses are otherwise
+    // suppressed (immune / already-applied), because fatigue is a rider payload,
+    // not a status. Only applies to the damageTarget; for routed saves the
+    // target (not the controller) takes the fatigue.
+    if (!isSuccess && autoApply) {
+      let fatigueToAdd = 0;
+      for (const entry of allStatusEntries) {
+        const n = Number(entry?.fatigueOnFail);
+        if (n > 0) fatigueToAdd += n;
+      }
+      if (fatigueToAdd > 0 && damageTarget.system?.fatigue !== undefined) {
+        const current = damageTarget.system.fatigue ?? 0;
+        await damageTarget.update({ "system.fatigue": Math.min(5, current + fatigueToAdd) });
+        ChatMessage.create({
+          content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+            <div class="card-body"><section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                <strong>${damageTarget.name}</strong> gains <strong>+${fatigueToAdd} Fatigue</strong> (failed ${saveType} save).
+              </div>
+            </section></div>
+          </div>`,
+          speaker: ChatMessage.getSpeaker({ actor: damageTarget })
+        });
+      }
+    }
   }
 }
 
@@ -448,6 +475,32 @@ export async function patchedHandleSaveReminderRoll(button, event = null) {
         });
       }
       await VagabondChatCard.statusResults(statusResults, damageTarget, sourceName, sourceItem?.img ?? null);
+    }
+
+    // Rider extension: apply +Fatigue on a failed save. Same logic as
+    // patchedHandleSaveRoll's fatigue block — shared across damage-save and
+    // reminder-save flows so "pass [Endure] or +1 Fatigue" works from either
+    // entry point.
+    if (!isSuccess) {
+      let fatigueToAdd = 0;
+      for (const entry of allStatusEntries) {
+        const n = Number(entry?.fatigueOnFail);
+        if (n > 0) fatigueToAdd += n;
+      }
+      if (fatigueToAdd > 0 && damageTarget.system?.fatigue !== undefined) {
+        const current = damageTarget.system.fatigue ?? 0;
+        await damageTarget.update({ "system.fatigue": Math.min(5, current + fatigueToAdd) });
+        ChatMessage.create({
+          content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+            <div class="card-body"><section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                <strong>${damageTarget.name}</strong> gains <strong>+${fatigueToAdd} Fatigue</strong> (failed ${saveType} save).
+              </div>
+            </section></div>
+          </div>`,
+          speaker: ChatMessage.getSpeaker({ actor: damageTarget })
+        });
+      }
     }
   }
 }

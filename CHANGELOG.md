@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Save-routing — fatigueOnFail payload
+
+- **Riders with `fatigueOnFail > 0` now apply fatigue on a failed save.** `patchedHandleSaveRoll` and `patchedHandleSaveReminderRoll` both iterate the matched `causedStatuses` entries on the on-fail branch, sum any `fatigueOnFail` values, and bump `damageTarget.system.fatigue` (capped at 5). A small chat card notes the gain. Companion rider work — the field is authored in Crawler's Monster Creator UI and ships with the matching Crawler commit.
+
 ## v0.3.3
 
 ### Bug Fixes — Spell Mechanics
