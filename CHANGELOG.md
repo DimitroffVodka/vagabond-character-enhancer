@@ -1,10 +1,31 @@
 # Changelog
 
-## Unreleased
+## v0.3.4
 
-### Save-routing — fatigueOnFail payload
+### New Feature — Friendly NPC Saves (Controller Routing)
 
-- **Riders with `fatigueOnFail > 0` now apply fatigue on a failed save.** `patchedHandleSaveRoll` and `patchedHandleSaveReminderRoll` both iterate the matched `causedStatuses` entries on the on-fail branch, sum any `fatigueOnFail` values, and bump `damageTarget.system.fatigue` (capped at 5). A small chat card notes the gain. Companion rider work — the field is authored in Crawler's Monster Creator UI and ships with the matching Crawler commit.
+Friendly NPCs (summons, familiars, hirelings) can now roll Reflex/Endure/Will saves from chat-card buttons. The save rolls on a linked **controller PC** using their stat-based save formula (so favor/hinder, luck, feats, and crit threshold all stack naturally), while damage, Cleave split, weakness, armor, and HP updates stay on the NPC. The save chat card attributes the save to the NPC with a *"via [Controller PC] ([Skill Label])"* subtitle so it's clear who rolled for whom.
+
+- **Flag schema** — each flagged NPC stores `flags.vagabond-character-enhancer.controllerActorId` and `controllerType` (`"companion"` or `"hireling"`). Companions use the controller's **Mana Skill** for chat attribution; hirelings use **Leadership**.
+- **"Set Save Controller…"** button added to every NPC actor sheet header **and** character actor sheet header (for character-type hirelings). Opens an ApplicationV2 dialog with a PC dropdown and Companion/Hireling radio. Save/Clear buttons write or unset both flags atomically via a single `actor.update()` call.
+- **Auto-stamping** — Summoner's `conjureSummon` and Familiar's ritual now stamp the controller flags on the summoned NPC automatically, so saves route immediately with no manual setup.
+- **Save-handler patches** — `VagabondDamageHelper.handleSaveRoll` and `handleSaveReminderRoll` are replaced with VCE versions that split the roller from the damage target for flagged NPCs. Unflagged NPCs and character actors behave identically to the system defaults (no regression). Permission checks accept ownership of either the target OR the resolved controller PC.
+- **Hireling weapon attacks route through Leadership** — `VagabondItem.prototype.rollAttack` is extended so a flagged hireling's weapon attack rolls on the controller PC's Leadership Skill per RAW. Weapon damage, properties, and Cleave split are unchanged; only the d20 check + difficulty is substituted.
+- **Fatigue on failed save rider** — `causedStatuses` entries with `fatigueOnFail > 0` now bump the target's `system.fatigue` (capped at 5) on a failed save. Fires independently of status application (e.g., when the target is immune to the status itself). Companion rider to Crawler's Monster Creator UI for authoring the field.
+
+### Companion Placement Fixes
+
+Unblocks companion UX that was previously GM-only:
+
+- **Player ownership granted at placement** — `gmRequest("placeToken", ...)` now ensures the requesting player has OWNER on the summon's world actor. Covers the case where the summon pulls a pre-existing world actor (not freshly imported), which previously left the player unable to move or control their own summon.
+- **Auto-add summons to active combat** — newly placed summon/familiar/hireling tokens are automatically added to the current combat's combatants list, so they participate in vagabond-crawler flanking checks and turn-order grouping out of the box.
+
+### Internal / Plumbing
+
+- New `scripts/companion/` directory as the landing zone for future unified `CompanionManager` work (see `docs/superpowers/plans/2026-04-22-friendly-npc-saves.md`).
+- New `updateActorFlags` socket-relay op for atomic multi-flag writes (supersedes pairs of `setActorFlag` calls where both flags must land together).
+- `CONFIG.VAGABOND._damageHelper` reference stash for patch-module access at call time.
+- `.vce-routing-note` CSS rule scoped under `.vagabond-chat-card-v2` for the routing-note subtitle.
 
 ## v0.3.3
 
