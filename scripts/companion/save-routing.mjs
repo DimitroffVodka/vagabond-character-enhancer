@@ -42,9 +42,9 @@ export function resolveSaveRoller(npcActor) {
   const skill = SKILL_BY_TYPE[ctrl.type];
   let skillLabel = skill === "leadership" ? "Leadership" : "Mysticism";
   if (skill === "mana") {
-    const key = roller.system?.attributes?.manaSkill;
-    const cfgLabel = key ? CONFIG.VAGABOND?.skills?.[key] : null;
-    if (cfgLabel) skillLabel = game.i18n.localize(cfgLabel) || skillLabel;
+    const key = roller.system?.attributes?.manaSkill ?? roller.system?.classData?.manaSkill;
+    const label = key ? roller.system?.skills?.[key]?.label : null;
+    if (label) skillLabel = label;
   }
 
   return { roller, type: ctrl.type, skill, skillLabel };
