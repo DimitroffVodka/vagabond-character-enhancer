@@ -49,6 +49,16 @@ async function _handleRequest(data) {
       const tokenData = { ...data.tokenData };
       // Ensure the token is actorLink: false so HP is per-token
       tokenData.actorLink = false;
+      // Ensure the requesting player has OWNER on the world actor so they
+      // can move/control the resulting unlinked token. Covers the case where
+      // the summon's actor was NOT freshly imported (no ownership grant in
+      // that path) and already existed with GM-only permissions.
+      if (data.userId && tokenData.actorId) {
+        const worldActor = game.actors.get(tokenData.actorId);
+        if (worldActor && (worldActor.ownership?.[data.userId] ?? 0) < 3) {
+          await worldActor.update({ [`ownership.${data.userId}`]: 3 });
+        }
+      }
       const [tokenDoc] = await scene.createEmbeddedDocuments("Token", [tokenData]);
       if (!tokenDoc) return { error: "Failed to create token" };
       return { tokenId: tokenDoc.id };
