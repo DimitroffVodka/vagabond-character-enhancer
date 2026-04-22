@@ -14,6 +14,7 @@
 
 import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { gmRequest } from "../socket-relay.mjs";
+import { CONTROLLER_TYPES } from "../companion/save-routing.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -398,6 +399,22 @@ export const FamiliarFeatures = {
         try { await gmRequest("deleteActor", { actorId: sourceActorId }); } catch { /* best effort */ }
       }
       return;
+    }
+
+    // Stamp controller flags so the familiar's saves route through its caster.
+    // Atomic via updateActorFlags. Non-fatal — the familiar works without routing,
+    // and the player can Set Save Controller manually if the stamp fails.
+    try {
+      await gmRequest("updateActorFlags", {
+        actorId: sourceActorId,
+        scope:   MODULE_ID,
+        flags: {
+          controllerActorId: actor.id,
+          controllerType:    CONTROLLER_TYPES.COMPANION
+        }
+      });
+    } catch (e) {
+      console.warn(`${MODULE_ID} | Familiar | Failed to stamp controller flags on ${npcData.name}:`, e);
     }
 
     // Store familiar state
