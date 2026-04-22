@@ -146,6 +146,24 @@ Hooks.on("getChatMessageContextOptions", (app, options) => {
 });
 
 /* -------------------------------------------- */
+/*  NPC Sheet Header — Set Save Controller btn  */
+/* -------------------------------------------- */
+
+Hooks.on("getHeaderControlsActorSheetV2", (app, controls) => {
+  const actor = app.document;
+  if (!actor || actor.type !== "npc") return;
+  controls.unshift({
+    icon: "fas fa-people-arrows",
+    action: "vce-set-save-controller",
+    label: "Set Save Controller\u2026",
+    onClick: async () => {
+      const { ControllerDialog } = await import("./companion/controller-dialog.mjs");
+      new ControllerDialog(actor).render(true);
+    }
+  });
+});
+
+/* -------------------------------------------- */
 /*  Init                                        */
 /* -------------------------------------------- */
 

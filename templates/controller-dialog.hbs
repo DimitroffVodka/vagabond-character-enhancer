@@ -1,0 +1,28 @@
+<div class="vce-controller-dialog" style="display:flex;flex-direction:column;gap:0.75rem;padding:0.5rem;">
+  <p>Configure save routing for <strong>{{npcName}}</strong>.</p>
+
+  <div class="form-group">
+    <label for="vce-controller-pc">Controller PC</label>
+    <select id="vce-controller-pc" name="controllerId">
+      <option value="">— Select —</option>
+      {{#each pcChoices}}
+        <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+      {{/each}}
+    </select>
+  </div>
+
+  <fieldset class="form-group">
+    <legend>Type</legend>
+    {{#each types}}
+      <label>
+        <input type="radio" name="controllerType" value="{{value}}" {{#if checked}}checked{{/if}}>
+        {{label}}
+      </label>
+    {{/each}}
+  </fieldset>
+
+  <footer style="display:flex;justify-content:space-between;gap:0.5rem;margin-top:0.5rem;">
+    <button type="button" data-action="clear"><i class="fas fa-trash"></i> Clear</button>
+    <button type="submit"><i class="fas fa-save"></i> Save</button>
+  </footer>
+</div>
