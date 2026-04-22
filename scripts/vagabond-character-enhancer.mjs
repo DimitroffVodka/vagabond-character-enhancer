@@ -151,7 +151,9 @@ Hooks.on("getChatMessageContextOptions", (app, options) => {
 
 Hooks.on("getHeaderControlsActorSheetV2", (app, controls) => {
   const actor = app.document;
-  if (!actor || actor.type !== "npc") return;
+  // Show on NPC and character actors. Character-type hirelings need routing
+  // too — per RAW, their saves use the hiring Hero's Leadership Skill.
+  if (!actor || (actor.type !== "npc" && actor.type !== "character")) return;
   controls.unshift({
     icon: "fas fa-people-arrows",
     action: "vce-set-save-controller",
