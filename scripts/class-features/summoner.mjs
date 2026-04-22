@@ -15,6 +15,7 @@
 import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 import { gmRequest } from "../socket-relay.mjs";
+import { CONTROLLER_TYPES } from "../companion/save-routing.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -968,6 +969,23 @@ export const SummonerFeatures = {
         try { await gmRequest("deleteActor", { actorId: sourceActorId }); } catch { /* best effort */ }
       }
       return;
+    }
+
+    // Stamp controller flags on the summoned NPC so its saves route through
+    // the summoner's actor. Uses the atomic updateActorFlags op so the pair
+    // is written in a single actor.update(). Non-fatal: if this fails, the
+    // summon still exists and the player can Set Save Controller manually.
+    try {
+      await gmRequest("updateActorFlags", {
+        actorId: sourceActorId,
+        scope:   MODULE_ID,
+        flags: {
+          controllerActorId: actor.id,
+          controllerType:    CONTROLLER_TYPES.COMPANION
+        }
+      });
+    } catch (e) {
+      console.warn(`[VCE] summoner: failed to stamp controller flags on ${npcData.name}`, e);
     }
 
     // Second Nature (L4): choose Focus or Cd4 duration
