@@ -536,6 +536,31 @@ Hooks.once("ready", async () => {
         await MonkFeatures.onPreRollAttack(ctx);            // Martial Arts: Keen/Cleave
         BrawlIntent.onPreRollAttack(ctx);                 // Bully Favor for Grapple/Shove
 
+        // Hireling routing: if the wielder is flagged as a hireling, the attack
+        // d20 + difficulty must use the hiring Hero's Leadership Skill per RAW
+        // (Core Rulebook — Bestiary: "Use the Hero's Leadership Skill for any
+        // Checks and Saves the Hireling makes that Round"). The weapon and its
+        // damage/properties still belong to the hireling — only the skill roll
+        // is substituted. See scripts/companion/save-routing.mjs for flag schema.
+        let _vceHirelingRoutingRestore = null;
+        try {
+          const ctrlId = actor?.getFlag?.(MODULE_ID, "controllerActorId");
+          const ctrlType = actor?.getFlag?.(MODULE_ID, "controllerType");
+          if (ctrlId && ctrlType === "hireling") {
+            const controller = game.actors.get(ctrlId);
+            if (controller) {
+              const origWeaponSkill = this.system.weaponSkill;
+              this.system.weaponSkill = "leadership";
+              _vceHirelingRoutingRestore = () => {
+                this.system.weaponSkill = origWeaponSkill;
+              };
+              actor = controller; // swap actor for origRollAttack's rollData lookup
+            }
+          }
+        } catch (e) {
+          log("save-routing", "Hireling attack routing pre-check failed", e);
+        }
+
         // Stash actor for Climax/Choreographer in buildAndEvaluateD20WithRollData
         _currentRollActor = actor;
         // Pass range/pre-roll hinder through to buildAndEvaluateD20WithRollData
@@ -545,6 +570,7 @@ Hooks.once("ready", async () => {
           const result = await origRollAttack.call(this, actor);
           _currentRollActor = null;
           _rangeFavorHinder = "none";
+          if (_vceHirelingRoutingRestore) { _vceHirelingRoutingRestore(); _vceHirelingRoutingRestore = null; }
 
           // Post-roll handlers
           ctx.rollResult = result;
@@ -561,6 +587,7 @@ Hooks.once("ready", async () => {
           _currentRollActor = null;
           _rangeFavorHinder = "none";
           VagabondDamageHelper._vceForceRollDamage = false;
+          if (_vceHirelingRoutingRestore) { _vceHirelingRoutingRestore(); _vceHirelingRoutingRestore = null; }
           throw e;
         }
       };
