@@ -985,7 +985,7 @@ export const SummonerFeatures = {
         }
       });
     } catch (e) {
-      console.warn(`[VCE] summoner: failed to stamp controller flags on ${npcData.name}`, e);
+      console.warn(`${MODULE_ID} | Summoner | Failed to stamp controller flags on ${npcData.name}:`, e);
     }
 
     // Second Nature (L4): choose Focus or Cd4 duration
