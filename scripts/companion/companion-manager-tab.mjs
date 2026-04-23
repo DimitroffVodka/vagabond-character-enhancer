@@ -19,8 +19,10 @@
  *   VagabondChatCard.createActionCard called on the controller).
  */
 
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { CompanionSpawner } from "./companion-spawner.mjs";
+import { SummonerFeatures } from "../class-features/summoner.mjs";
+import { FamiliarFeatures } from "../perk-features/familiar.mjs";
 
 export const CompanionManagerTab = {
   init() {
@@ -122,15 +124,41 @@ export const CompanionManagerTab = {
 
   _buildPanelHTML(pc) {
     const companions = CompanionSpawner.getCompanionsFor(pc);
+    const actions = this._buildActionBarHTML(pc);
+
     if (!companions.length) {
       return `
+        ${actions}
         <div class="vce-companions-empty">
           <i class="fas fa-users-slash"></i>
           <p>You have no active companions.</p>
           <p class="vce-companions-empty-hint">Cast a summoning spell, conjure a familiar, or engage a hireling.</p>
         </div>`;
     }
-    return companions.map(c => this._buildCardHTML(c)).join("");
+    return actions + companions.map(c => this._buildCardHTML(c)).join("");
+  },
+
+  /**
+   * Build the top-of-tab action bar — feature-gated conjure buttons.
+   * Only shows buttons for the features this PC actually has.
+   * @param {Actor} pc
+   * @returns {string} HTML fragment (empty if PC has no conjure-capable features)
+   */
+  _buildActionBarHTML(pc) {
+    const features = getFeatures(pc) ?? {};
+    const buttons = [];
+    if (features.summoner_creatureCodex) {
+      buttons.push(`<button type="button" class="vce-companion-conjure-btn" data-action="conjure-summon">
+        <i class="fas fa-paw"></i> Conjure Summon
+      </button>`);
+    }
+    if (features.perk_familiar) {
+      buttons.push(`<button type="button" class="vce-companion-conjure-btn" data-action="conjure-familiar">
+        <i class="fas fa-feather"></i> Conjure Familiar
+      </button>`);
+    }
+    if (!buttons.length) return "";
+    return `<div class="vce-companion-actions-bar">${buttons.join("")}</div>`;
   },
 
   _buildCardHTML(entry) {
@@ -322,6 +350,16 @@ export const CompanionManagerTab = {
   },
 
   _bindEvents(panel, pc) {
+    // --- Action bar buttons (Conjure Summon / Conjure Familiar) ---
+    panel.querySelector('[data-action="conjure-summon"]')?.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      SummonerFeatures.showConjureDialog(pc);
+    });
+    panel.querySelector('[data-action="conjure-familiar"]')?.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      FamiliarFeatures.showConjureDialog(pc);
+    });
+
     panel.querySelectorAll(".vce-companion-card").forEach(card => {
       const actorId = card.dataset.actorId;
       const actor = game.actors.get(actorId);

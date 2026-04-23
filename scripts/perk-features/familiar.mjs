@@ -170,19 +170,9 @@ export const FamiliarFeatures = {
                     enabled: true,
                     action: () => self.banishFamiliar(actor, "Dismissed")
                   });
-                  menuItems.push({
-                    label: "Conjure New Familiar",
-                    icon: "fas fa-sync",
-                    enabled: true,
-                    action: () => self.showConjureDialog(actor)
-                  });
-                } else {
-                  menuItems.push({
-                    label: "Conjure Familiar",
-                    icon: "fas fa-paw",
-                    enabled: true,
-                    action: () => self.showConjureDialog(actor)
-                  });
+                  // v0.4.0: "Conjure / Re-conjure Familiar" options moved to
+                  // the Companions tab's action bar — single source of truth
+                  // for all companion summoning.
                 }
 
                 menuItems.push({

@@ -1858,6 +1858,42 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   font-family: "Paradigm", serif;
 }
 
+/* Action bar at top of tab — Conjure Summon / Conjure Familiar buttons */
+.vce-companion-actions-bar {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0 12px;
+  flex-wrap: wrap;
+}
+
+.vce-companion-conjure-btn {
+  flex: 1;
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--vce-accent-dim);
+  border-radius: 4px;
+  background: rgba(212, 168, 67, 0.10);
+  color: var(--vagabond-c-text-primary, #BDC1C6);
+  font-family: "Germania", serif;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.vce-companion-conjure-btn:hover {
+  background: rgba(212, 168, 67, 0.20);
+  border-color: var(--vce-accent);
+}
+
+.vce-companion-conjure-btn i {
+  color: var(--vce-accent);
+}
+
 .vce-companion-card {
   margin-bottom: 12px;
   border: 1px solid var(--vagabond-c-faint);
