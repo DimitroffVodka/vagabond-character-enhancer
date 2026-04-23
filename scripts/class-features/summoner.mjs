@@ -15,7 +15,7 @@
 import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 import { gmRequest } from "../socket-relay.mjs";
-import { CONTROLLER_TYPES } from "../companion/save-routing.mjs";
+import { CompanionSpawner } from "../companion/companion-spawner.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -216,6 +216,11 @@ export const SummonerFeatures = {
       const newHP = changes.system?.health?.value ?? changes["system.health.value"];
       if (newHP === undefined || newHP > 0) return;
 
+      // v0.4.0: CompanionTerminationManager owns dismissal for companions with
+      // companionMeta. This hook only handles legacy v0.3.4 summons where the
+      // flag shape is only controllerActorId + activeConjure on the caster.
+      if (actor.getFlag(MODULE_ID, "companionMeta")) return;
+
       for (const char of game.actors.filter(a => a.type === "character")) {
         const conjure = char.getFlag(MODULE_ID, FLAG_CONJURE);
         if (conjure?.summonActorId === actor.id) {
@@ -295,6 +300,28 @@ export const SummonerFeatures = {
       const hasFocus = featureFocus.some(f => f.key === FOCUS_KEY);
       if (!hasFocus) {
         await this.banishSummon(actor, "Focus dropped");
+      }
+    });
+
+    // Register source-specific dismiss cleanup — fires whenever a summoner-sourced
+    // companion is dismissed via CompanionSpawner.dismiss (zeroHP, replace-on-spawn,
+    // Companions tab Dismiss button). Releases focus + removes Soulbonder AEs +
+    // clears the caster-side activeConjure flag.
+    CompanionSpawner.registerDismissHandler("summoner", async (companionActor, { reason, meta, controller }) => {
+      if (!controller) return;
+      try {
+        await FocusManager.releaseFeatureFocus(controller, FOCUS_KEY);
+        await this._removeSoulbonder(controller);
+        if (controller.getFlag(MODULE_ID, FLAG_CONJURE)) {
+          await controller.unsetFlag(MODULE_ID, FLAG_CONJURE);
+        }
+        // Delete imported compendium actor if applicable
+        if (meta?.meta?.importedFromCompendium && companionActor?.id) {
+          try { await gmRequest("deleteActor", { actorId: companionActor.id }); }
+          catch (e) { log("Summoner", `Could not delete imported actor on dismiss: ${e.message}`); }
+        }
+      } catch (e) {
+        log("Summoner", `Summoner dismiss handler error: ${e.message}`);
       }
     });
 
@@ -917,27 +944,7 @@ export const SummonerFeatures = {
       await actor.update({ "system.mana.current": currentMana - cost });
     }
 
-    // Get or import the source actor (via GM relay if player)
-    let sourceActorId = npcData.worldActorId;
-    let importedFromCompendium = false;
-
-    if (!sourceActorId && npcData.compendiumUuid) {
-      try {
-        const result = await gmRequest("importActor", { uuid: npcData.compendiumUuid });
-        sourceActorId = result.actorId;
-        importedFromCompendium = true;
-      } catch (e) {
-        ui.notifications.error(`Failed to import creature: ${e.message}`);
-        return;
-      }
-    }
-
-    if (!sourceActorId) {
-      ui.notifications.error("Could not resolve source actor for summon.");
-      return;
-    }
-
-    // Place token on canvas (via GM relay if player)
+    // Validate caster has a token on canvas
     const summonerToken = actor.getActiveTokens()?.[0];
     if (!summonerToken) {
       ui.notifications.warn("No summoner token on canvas.");
@@ -947,46 +954,48 @@ export const SummonerFeatures = {
     const gridSize = canvas.grid?.size ?? 100;
     const sizeMultiplier = SIZE_MAP[npcData.size?.toLowerCase()] ?? 1;
 
-    let tokenId;
-    try {
-      const result = await gmRequest("placeToken", {
-        sceneId: canvas.scene.id,
-        tokenData: {
-          name: npcData.name,
-          actorId: sourceActorId,
-          texture: { src: npcData.img || "icons/svg/mystery-man.svg" },
-          x: summonerToken.document.x + gridSize,
-          y: summonerToken.document.y,
-          width: sizeMultiplier,
-          height: sizeMultiplier,
-          disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY
-        }
-      });
-      tokenId = result.tokenId;
-    } catch (e) {
-      ui.notifications.error(`Failed to place summon token: ${e.message}`);
-      if (importedFromCompendium) {
-        try { await gmRequest("deleteActor", { actorId: sourceActorId }); } catch { /* best effort */ }
-      }
+    // Resolve the creature UUID (world actor OR compendium)
+    const creatureUuid = npcData.worldActorId
+      ? `Actor.${npcData.worldActorId}`
+      : npcData.compendiumUuid;
+    if (!creatureUuid) {
+      ui.notifications.error("Could not resolve source actor for summon.");
       return;
     }
 
-    // Stamp controller flags on the summoned NPC so its saves route through
-    // the summoner's actor. Uses the atomic updateActorFlags op so the pair
-    // is written in a single actor.update(). Non-fatal: if this fails, the
-    // summon still exists and the player can Set Save Controller manually.
-    try {
-      await gmRequest("updateActorFlags", {
-        actorId: sourceActorId,
-        scope:   MODULE_ID,
-        flags: {
-          controllerActorId: actor.id,
-          controllerType:    CONTROLLER_TYPES.COMPANION
-        }
-      });
-    } catch (e) {
-      console.warn(`${MODULE_ID} | Summoner | Failed to stamp controller flags on ${npcData.name}:`, e);
+    // Delegate spawn to CompanionSpawner: handles import, placeToken,
+    // flag stamping (controllerActorId + controllerType + companionMeta),
+    // combat-add, ownership grant, and chat notification.
+    const spawnResult = await CompanionSpawner.spawn({
+      caster: actor,
+      sourceId: "summoner",
+      creatureUuid,
+      tokenData: {
+        name: npcData.name,
+        texture: { src: npcData.img || "icons/svg/mystery-man.svg" },
+        x: summonerToken.document.x + gridSize,
+        y: summonerToken.document.y,
+        width: sizeMultiplier,
+        height: sizeMultiplier,
+        disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY,
+      },
+      meta: {
+        hd: npcData.hd,
+        armor: npcData.armor ?? 0,
+        immunities: npcData.immunities ?? [],
+        freeConjure: !!freeConjure,
+        importedFromCompendium: !npcData.worldActorId && !!npcData.compendiumUuid,
+      },
+    });
+    if (!spawnResult.success) {
+      ui.notifications.error(`Failed to summon: ${spawnResult.error ?? "unknown error"}`);
+      return;
     }
+    const sourceActorId = spawnResult.actorId;
+    const tokenId = spawnResult.tokenId;
+
+    // Track whether this was a fresh compendium import (for legacy banishSummon cleanup)
+    const importedFromCompendium = !npcData.worldActorId && !!npcData.compendiumUuid;
 
     // Second Nature (L4): choose Focus or Cd4 duration
     let useSecondNature = false;
