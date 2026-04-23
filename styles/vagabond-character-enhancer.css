@@ -1847,3 +1847,202 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   opacity: 0.75;
   margin-top: 2px;
 }
+
+/* -------------------------------------------- */
+/*  Companion Manager Tab (v0.4.0)              */
+/* -------------------------------------------- */
+
+.vce-companions-tab {
+  padding: 8px;
+  color: var(--vagabond-c-text-primary);
+  font-family: "Paradigm", serif;
+}
+
+.vce-companion-card {
+  margin-bottom: 12px;
+  border: 1px solid var(--vagabond-c-faint);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--vagabond-c-inset-2);
+}
+
+.vce-companion-card + .vce-companion-card {
+  margin-top: 4px;
+}
+
+.vce-companion-body {
+  padding: 6px 8px;
+}
+
+/* Type badge — inline colour via style attr */
+.vce-companion-type-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: bold;
+  font-family: "Germania", serif;
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: white;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* HP bar */
+.vce-companion-hp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  font-family: "Paradigm", serif;
+}
+.vce-companion-hp-label {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--vagabond-c-text-primary);
+  min-width: 20px;
+}
+.vce-companion-hp-bar-wrap {
+  flex: 1;
+  height: 14px;
+  background: #222;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 1px solid var(--vagabond-c-tan);
+}
+.vce-companion-hp-bar {
+  height: 100%;
+  border-radius: 7px;
+  transition: width 0.3s, background 0.3s;
+}
+.vce-companion-hp-bar.vce-hp-ok       { background: #3aaa3a; }
+.vce-companion-hp-bar.vce-hp-mid      { background: #b8a020; }
+.vce-companion-hp-bar.vce-hp-low      { background: #c86040; }
+.vce-companion-hp-bar.vce-hp-critical { background: #8a1010; }
+.vce-companion-hp-text {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--vagabond-c-text-primary);
+  min-width: 52px;
+  text-align: right;
+}
+.vce-companion-armor {
+  font-size: 12px;
+  color: var(--vagabond-c-muted);
+  font-family: "Manofa", sans-serif;
+  text-transform: uppercase;
+}
+
+/* Status chips */
+.vce-companion-statuses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 5px;
+}
+.vce-companion-status-chip {
+  display: inline-block;
+  font-size: 11px;
+  font-family: "Paradigm", serif;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--vce-condition-bg);
+  border: 1px solid var(--vce-condition-border);
+  color: var(--vce-condition-text);
+}
+
+/* Controller attribution note */
+.vce-companion-controller {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--vagabond-c-muted);
+  margin-bottom: 5px;
+  font-family: "Paradigm", serif;
+}
+.vce-companion-controller i {
+  margin-right: 3px;
+  color: var(--vce-accent);
+}
+
+/* Save button row */
+.vce-companion-saves {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+.vce-save-btn {
+  flex: 1;
+  padding: 4px 2px;
+  border: 1px solid var(--vce-accent-dim);
+  border-radius: 3px;
+  background: var(--vagabond-c-inset-2);
+  color: var(--vagabond-c-text-primary);
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.15s, border-color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 24px;
+}
+.vce-save-btn:hover {
+  background: var(--vagabond-c-tan-lite);
+  border-color: var(--vce-accent);
+}
+.vce-save-btn i {
+  font-size: 10px;
+  color: var(--vce-accent);
+}
+.vce-save-btn-open-sheet {
+  padding: 4px 8px;
+  border: 1px solid var(--vagabond-c-tan);
+  border-radius: 3px;
+  background: var(--vagabond-c-inset-2);
+  color: var(--vagabond-c-muted);
+  font-size: 12px;
+  cursor: pointer;
+  min-height: 24px;
+}
+.vce-save-btn-open-sheet:hover {
+  border-color: var(--vce-accent);
+  color: var(--vce-accent);
+}
+
+/* Dismiss button variant (red) — reuse .vce-bf-end, no override needed */
+
+/* Empty state */
+.vce-companions-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--vagabond-c-muted);
+  font-family: "Paradigm", serif;
+}
+.vce-companions-empty i {
+  font-size: 40px;
+  margin-bottom: 12px;
+  color: #444;
+}
+.vce-companions-empty p {
+  margin: 2px 0;
+  font-size: 13px;
+}
+.vce-companions-empty-hint {
+  font-style: italic;
+  font-size: 12px !important;
+  color: var(--vagabond-c-tan);
+}
+
+/* Spawn + dismiss chat notifications */
+.vce-companion-spawned,
+.vce-companion-dismissed {
+  padding: 4px 8px;
+  font-size: 13px;
+}
