@@ -90,16 +90,22 @@ export const CompanionSpawner = {
    * @param {boolean} [opts.suppressChat=false] - if true, skip the generic "conjures X" chat message
    *   (use when the feature adapter posts its own detailed chat card — e.g. Summoner's HD + Mana
    *   breakdown, Familiar's ritual card). Dismiss notifications are NOT affected by this flag.
+   * @param {boolean} [opts.allowMultiple=false] - if true, skip the "replace active {source}?"
+   *   prompt and allow multiple active companions from the same sourceId. Used by cumulative-budget
+   *   sources like Beast and Raise where each cast adds to the pool instead of replacing.
    * @returns {Promise<{tokenId, actorId, success, error?}>}
    */
-  async spawn({ caster, sourceId, creatureUuid, tokenData = {}, cost = {}, duration = null, meta = {}, suppressChat = false }) {
+  async spawn({ caster, sourceId, creatureUuid, tokenData = {}, cost = {}, duration = null, meta = {}, suppressChat = false, allowMultiple = false }) {
     const sourceMeta = getSourceMeta(sourceId);
     if (sourceMeta === COMPANION_SOURCES.legacy) {
       return { success: false, error: `Unknown sourceId: ${sourceId}` };
     }
 
     // Multi-companion check: same source already active?
-    const existing = this.getCompanionsFor(caster).filter(c => c.sourceId === sourceId);
+    // Sources with cumulative budgets (Beast, Raise) set allowMultiple:true to skip the prompt.
+    const existing = allowMultiple
+      ? []
+      : this.getCompanionsFor(caster).filter(c => c.sourceId === sourceId);
     if (existing.length) {
       const replace = await foundry.applications.api.DialogV2.confirm({
         window: { title: "Replace active companion?" },
