@@ -39,7 +39,11 @@ export const CompanionManagerTab = {
 
   _onRenderSheet(app, html, data) {
     if (app.document?.type !== "character") return;
-    if (app.element.querySelector('[data-tab="vce-companions"]')) return; // already injected
+    // Guard specifically on the NAV LINK: ApplicationV2 re-renders replace
+    // nav.sheet-tabs but can leave orphaned section children in .window-content.
+    // A generic [data-tab="vce-companions"] check would match the orphaned
+    // section and skip re-injection, leaving the tab invisible in the nav bar.
+    if (app.element.querySelector('nav.sheet-tabs [data-tab="vce-companions"]')) return;
     this._inject(app);
   },
 
@@ -61,6 +65,11 @@ export const CompanionManagerTab = {
 
     const nav = windowContent.querySelector("nav.sheet-tabs");
     if (!nav) return;
+
+    // Remove any stale panel from a prior render cycle. ApplicationV2 replaces
+    // nav.sheet-tabs on re-render but can leave section children behind.
+    const stale = windowContent.querySelector('section[data-tab="vce-companions"]');
+    if (stale) stale.remove();
 
     // Inject tab link — prepend so it appears first (before Features)
     const tabLink = document.createElement("a");
