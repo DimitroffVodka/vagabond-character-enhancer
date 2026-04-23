@@ -345,18 +345,39 @@ export const FamiliarFeatures = {
           // Right-click: toggle Familiar Codex membership (favorite)
           html.find(".vce-summon-row").on("contextmenu", async (ev) => {
             ev.preventDefault();
-            const name = ev.currentTarget.dataset.creatureName;
+            const row = ev.currentTarget;
+            const name = row.dataset.creatureName;
             if (!name) return;
             const current = actor.getFlag(MODULE_ID, "familiarCodex") || [];
             const isFav = current.includes(name);
             const next = isFav ? current.filter(n => n !== name) : [...current, name];
             await actor.setFlag(MODULE_ID, "familiarCodex", next);
-            const starCell = ev.currentTarget.querySelector(".vce-summon-fav");
+
+            // Toggle star icon
+            const starCell = row.querySelector(".vce-summon-fav");
             if (starCell) {
               starCell.innerHTML = isFav
                 ? '<i class="far fa-star" style="opacity:0.35;" title="Right-click to favorite"></i>'
                 : '<i class="fas fa-star" style="color:#d4a843;" title="Favorited — right-click to unfavorite"></i>';
             }
+
+            // Reorder tbody to reflect new favorite state
+            const tbody = row.parentElement;
+            if (!isFav) {
+              // Just favorited — move to top
+              tbody.insertBefore(row, tbody.firstElementChild);
+            } else {
+              // Just unfavorited — move to top of non-favorites section
+              let target = null;
+              for (const sib of tbody.children) {
+                if (sib === row) continue;
+                const sibName = sib.dataset.creatureName;
+                if (sibName && !next.includes(sibName)) { target = sib; break; }
+              }
+              if (target) tbody.insertBefore(row, target);
+              else tbody.appendChild(row);
+            }
+
             ui.notifications.info(`${isFav ? "Removed" : "Added"} ${name} ${isFav ? "from" : "to"} Familiar Codex.`);
           });
 
