@@ -122,6 +122,16 @@ async function _handleRequest(data) {
       return { ok: true, deleted: existing.length };
     }
 
+    case "createActorAE": {
+      // Player-triggered AE create on a world actor (e.g., Undead template
+      // applied by Raise/Reanimator when the caster doesn't own the target).
+      const actor = game.actors.get(data.actorId);
+      if (!actor) return { error: `createActorAE: actor "${data.actorId}" not found` };
+      if (!data.aeData) return { error: "createActorAE: aeData required" };
+      const [ae] = await actor.createEmbeddedDocuments("ActiveEffect", [data.aeData]);
+      return { ok: true, aeId: ae?.id };
+    }
+
     case "createTokens": {
       // Batch token create — used by GatherCompanions on release. Each entry
       // in data.tokenDataArray is a full token snapshot (from mt.document.toObject).

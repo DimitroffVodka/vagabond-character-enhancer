@@ -1,0 +1,31 @@
+<form class="vce-corpse-picker">
+  <div class="vce-cp-header">
+    <p class="vce-cp-hint">{{hintText}}</p>
+    {{#if multi}}
+      <p class="vce-cp-budget">
+        {{budgetLabel}} — Used: <span class="vce-cp-budget-used">0</span>
+      </p>
+    {{/if}}
+  </div>
+
+  <div class="vce-cp-list" tabindex="0">
+    {{#each corpses}}
+      <div class="vce-cp-row" data-uuid="{{uuid}}" data-hd="{{hd}}" role="button" tabindex="0">
+        <img src="{{img}}" class="vce-cp-img" alt="{{name}}">
+        <div class="vce-cp-info">
+          <div class="vce-cp-name">{{name}}</div>
+          <div class="vce-cp-meta">HD {{hd}} · {{size}} · {{beingType}} · {{sourceLabel}}</div>
+        </div>
+      </div>
+    {{else}}
+      <div class="vce-cp-empty">No eligible corpses found. Defeat a creature first, or configure a fallback compendium.</div>
+    {{/each}}
+  </div>
+
+  <footer class="vce-cp-footer">
+    {{#if multi}}
+      <button type="button" class="vce-cp-confirm" data-action="confirm">Raise Selected</button>
+    {{/if}}
+    <button type="button" class="vce-cp-cancel" data-action="cancel">Cancel</button>
+  </footer>
+</form>
