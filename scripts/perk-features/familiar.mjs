@@ -241,7 +241,14 @@ export const FamiliarFeatures = {
       return;
     }
 
-    candidates.sort((a, b) => a.name.localeCompare(b.name));
+    // Sort: favorites (Familiar Codex) first, then by name
+    const codex = actor.getFlag(MODULE_ID, "familiarCodex") || [];
+    candidates.sort((a, b) => {
+      const aFav = codex.includes(a.name);
+      const bFav = codex.includes(b.name);
+      if (aFav !== bFav) return aFav ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
 
     const rows = candidates.map((c, idx) => {
       const speedExtras = [];
@@ -256,8 +263,14 @@ export const FamiliarFeatures = {
         return `${a.name}: ${dmg}`;
       }).join("; ");
 
+      const isFav = codex.includes(c.name);
+      const starIcon = isFav
+        ? '<i class="fas fa-star" style="color:#d4a843;" title="Favorited — right-click to unfavorite"></i>'
+        : '<i class="far fa-star" style="opacity:0.35;" title="Right-click to favorite"></i>';
+
       return `
-        <tr class="vce-summon-row" data-idx="${idx}" role="button" tabindex="0">
+        <tr class="vce-summon-row" data-idx="${idx}" data-creature-name="${c.name}" role="button" tabindex="0">
+          <td class="vce-bd-cell vce-bd-cell-center vce-summon-fav">${starIcon}</td>
           <td class="vce-bd-cell vce-bd-cell-img">
             <img src="${c.img || "icons/svg/mystery-man.svg"}" class="vce-bd-beast-img" alt="" />
           </td>
@@ -278,6 +291,7 @@ export const FamiliarFeatures = {
         <table class="vce-bd-table" role="grid">
           <thead>
             <tr class="vce-bd-header-row">
+              <th class="vce-bd-th vce-bd-th-center" scope="col" style="width:24px;"></th>
               <th class="vce-bd-th vce-bd-th-img" scope="col"></th>
               <th class="vce-bd-th" scope="col">Creature</th>
               <th class="vce-bd-th vce-bd-th-center" scope="col">Type</th>
@@ -290,7 +304,8 @@ export const FamiliarFeatures = {
         </table>
       </div>
       <p style="font-size:0.85em; opacity:0.7; margin-top:4px;">
-        Familiar: HD 1, Small creatures only | No Mana cost (Ritual)
+        Familiar: HD 1, Small creatures only | No Mana cost (Ritual)<br>
+        <em>Right-click any row to favorite it — favorites appear at the top next time.</em>
       </p>
     `;
 
@@ -325,6 +340,24 @@ export const FamiliarFeatures = {
               ev.preventDefault();
               ev.currentTarget.click();
             }
+          });
+
+          // Right-click: toggle Familiar Codex membership (favorite)
+          html.find(".vce-summon-row").on("contextmenu", async (ev) => {
+            ev.preventDefault();
+            const name = ev.currentTarget.dataset.creatureName;
+            if (!name) return;
+            const current = actor.getFlag(MODULE_ID, "familiarCodex") || [];
+            const isFav = current.includes(name);
+            const next = isFav ? current.filter(n => n !== name) : [...current, name];
+            await actor.setFlag(MODULE_ID, "familiarCodex", next);
+            const starCell = ev.currentTarget.querySelector(".vce-summon-fav");
+            if (starCell) {
+              starCell.innerHTML = isFav
+                ? '<i class="far fa-star" style="opacity:0.35;" title="Right-click to favorite"></i>'
+                : '<i class="fas fa-star" style="color:#d4a843;" title="Favorited — right-click to unfavorite"></i>';
+            }
+            ui.notifications.info(`${isFav ? "Removed" : "Added"} ${name} ${isFav ? "from" : "to"} Familiar Codex.`);
           });
 
           setTimeout(() => html.find(".vce-summon-search").focus(), 50);
