@@ -986,6 +986,10 @@ export const SummonerFeatures = {
         freeConjure: !!freeConjure,
         importedFromCompendium: !npcData.worldActorId && !!npcData.compendiumUuid,
       },
+      // Summoner posts its own detailed conjure card (HD + Mana cost + Avatar
+      // Emergence + Second Nature duration). Suppress the engine's generic
+      // "{caster} conjures {creature} (Summon)" to avoid double chat messages.
+      suppressChat: true,
     });
     if (!spawnResult.success) {
       ui.notifications.error(`Failed to summon: ${spawnResult.error ?? "unknown error"}`);

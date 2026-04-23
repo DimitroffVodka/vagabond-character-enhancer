@@ -36,9 +36,12 @@ export const CompanionSpawner = {
    * @param {object} [opts.cost] - { mana?, ritual?, duration? }
    * @param {object} [opts.duration] - { rounds } for timed companions
    * @param {object} [opts.meta] - source-specific extras
+   * @param {boolean} [opts.suppressChat=false] - if true, skip the generic "conjures X" chat message
+   *   (use when the feature adapter posts its own detailed chat card — e.g. Summoner's HD + Mana
+   *   breakdown, Familiar's ritual card). Dismiss notifications are NOT affected by this flag.
    * @returns {Promise<{tokenId, actorId, success, error?}>}
    */
-  async spawn({ caster, sourceId, creatureUuid, tokenData = {}, cost = {}, duration = null, meta = {} }) {
+  async spawn({ caster, sourceId, creatureUuid, tokenData = {}, cost = {}, duration = null, meta = {}, suppressChat = false }) {
     const sourceMeta = getSourceMeta(sourceId);
     if (sourceMeta === COMPANION_SOURCES.legacy) {
       return { success: false, error: `Unknown sourceId: ${sourceId}` };
@@ -127,12 +130,14 @@ export const CompanionSpawner = {
       return { tokenId, actorId, success: false, error: flagResult.error };
     }
 
-    // Chat notification
+    // Chat notification — suppressible for features with their own detailed cards
     const worldActor = game.actors.get(actorId);
-    ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ actor: caster }),
-      content: `<div class="vce-companion-spawned"><strong>${caster.name}</strong> ${sourceMeta.label === "Hireling" ? "engages" : "conjures"} <strong>${worldActor?.name ?? "a companion"}</strong> <em>(${sourceMeta.label})</em>.</div>`,
-    });
+    if (!suppressChat) {
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor: caster }),
+        content: `<div class="vce-companion-spawned"><strong>${caster.name}</strong> ${sourceMeta.label === "Hireling" ? "engages" : "conjures"} <strong>${worldActor?.name ?? "a companion"}</strong> <em>(${sourceMeta.label})</em>.</div>`,
+      });
+    }
 
     log("CompanionSpawner", `Spawned ${sourceId} ${worldActor?.name ?? actorId} for ${caster.name}`);
     return { tokenId, actorId, success: true };
