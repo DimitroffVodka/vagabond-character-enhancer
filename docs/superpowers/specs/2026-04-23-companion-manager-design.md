@@ -141,6 +141,12 @@ Replaces duplicate picker code in summoner.mjs and familiar.mjs.
 │  │         HP ▓▓▓▓▓▓▓░░░  18 / 25  ARM 4         │ │
 │  │         Checks & saves via Leadership         │ │
 │  │         [Endure] [Reflex] [Will] [📋 Sheet]   │ │
+│  │         ────── EQUIPPED WEAPONS ──────        │ │
+│  │         LONGSWORD   Melee Attack    1d8       │ │
+│  │         SHORTBOW    Ranged Attack   1d6       │ │
+│  │         ───────────  SPELLS  ──────────        │ │
+│  │         Bless      (2 Mana)                   │ │
+│  │         Light      (1 Mana)                   │ │
 │  └─────────────────────────────────────────────┘ │
 │                                                    │
 └────────────────────────────────────────────────────┘
@@ -393,15 +399,25 @@ Each adapter PR gets its own spec + plan using the same workflow.
 
 ---
 
-## 11. Risks & Open Questions
+## 11. Risks & Resolved Questions
 
 **Risk 1 — System Summon tab conflict.** The `[data-tab="vce-summon"]` tab is actually VCE-owned (prefix confirms) — not a system tab. In the initial exploration I assumed the system provided it, but the `vce-` prefix means we injected it ourselves. **Decision:** rename the tab key from `vce-summon` to `vce-companions`, update the tab label, and replace the render pipeline cleanly. No system conflict. Task 1 of the plan should confirm this is VCE-owned and find the current injection site.
 
 **Risk 2 — Familiar flag storage migration.** Current familiar stores state in `flags.vagabond-character-enhancer.activeFamiliar` (single object, caster-side). New model stores on the familiar token's world actor. Need to write a small one-time migration on ready hook or continue reading both locations.
 
-**Open Q 1 — Hireling cards in Companions tab: should we show their full action list?** Hirelings have complex sheets (many weapons, perks, spells). Maybe only show saves + open-sheet button, not actions. **Defer decision; start without action list and add if requested.**
+**Q1 (resolved) — Hireling action list.** Show **equipped weapons and prepared/equipped spells** on the hireling card, not the full sheet. Mirror the way a PC surfaces usable actions:
+- Pull `actor.items` filtered to `type: "weapon"` where `system.equipped === true`
+- Pull `actor.items` filtered to `type: "spell"` (all spells — hirelings don't have "prepared" state, all are available)
+- Render using the existing `.vce-bf-action` pattern (click → roll, routed through Leadership per v0.3.4)
+- Non-equipped weapons, inventory items, perks, abilities → not shown on the card (player opens the full sheet via the `📋 Sheet` button for those)
 
-**Open Q 2 — Multi-summon support.** Summoner class currently allows only one summon at a time. The engine supports N, but we need to confirm whether class rules actually permit multiple concurrent summons. **Start with one-at-a-time enforced per sourceId; relax later if rules allow.**
+Note: companions from summoner/familiar/beast/etc. keep their creature-style action list (MAIN / MELEE / damage-die format) since they're NPC-type actors. Only hirelings (character-type) use the equipped-weapons-and-spells pattern.
+
+**Q2 (resolved) — Multi-companion vs multi-summon.** 
+- **Multiple companions of different sources: ALLOWED.** A PC can simultaneously have 1 summon + 1 familiar + 1 hireling + 1 animal companion.
+- **Multiple of the same source: BLOCKED.** Attempting to cast Summoner's summon while an active summon exists triggers an auto-dismiss-and-replace flow (with a confirm prompt). Same for Familiar ritual, Beast spell, etc.
+- Enforcement: `CompanionSpawner.spawn()` checks `getCompanionsFor(caster).filter(c => c.sourceId === config.sourceId)`. If one exists, prompt "Replace active {source}?" before dismissing the old and spawning the new.
+- This is **rules-accurate** for Summoner (one summon at a time) and matches Familiar's "recast replaces previous" behavior.
 
 ---
 
