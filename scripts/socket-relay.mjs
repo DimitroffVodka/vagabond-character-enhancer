@@ -111,6 +111,28 @@ async function _handleRequest(data) {
       return { ok: true };
     }
 
+    case "deleteTokens": {
+      // Batch token delete — used by GatherCompanions on gather.
+      const scene = game.scenes.get(data.sceneId);
+      if (!scene) return { error: "Scene not found" };
+      const existing = (data.tokenIds ?? []).filter(id => scene.tokens.has(id));
+      if (existing.length) {
+        await scene.deleteEmbeddedDocuments("Token", existing);
+      }
+      return { ok: true, deleted: existing.length };
+    }
+
+    case "createTokens": {
+      // Batch token create — used by GatherCompanions on release. Each entry
+      // in data.tokenDataArray is a full token snapshot (from mt.document.toObject).
+      const scene = game.scenes.get(data.sceneId);
+      if (!scene) return { error: "Scene not found" };
+      const tokenDataArray = data.tokenDataArray ?? [];
+      if (!tokenDataArray.length) return { ok: true, created: [] };
+      const created = await scene.createEmbeddedDocuments("Token", tokenDataArray);
+      return { ok: true, created: created.map(t => t.id) };
+    }
+
     case "deleteActor": {
       const actor = game.actors.get(data.actorId);
       if (actor) {

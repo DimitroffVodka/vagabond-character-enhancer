@@ -19,6 +19,7 @@
  */
 
 import { MODULE_ID, log } from "../utils.mjs";
+import { gmRequest } from "../socket-relay.mjs";
 import { CompanionSpawner } from "./companion-spawner.mjs";
 
 const FLAG_GATHERED = "gatheredCompanions";
@@ -110,15 +111,28 @@ export const GatherCompanions = {
       return obj;
     });
 
-    // Animate member tokens to the hero's position
+    // Animate member tokens to the hero's position. Token x/y updates work
+    // for players on tokens they own; for GM-owned or unowned companion tokens,
+    // fall back silently (the delete step below uses the GM proxy anyway).
     const { x, y } = heroToken.document;
-    await Promise.all(memberTokens.map(mt => mt.document.update({ x, y })));
+    await Promise.all(memberTokens.map(async mt => {
+      try { await mt.document.update({ x, y }); }
+      catch (e) { log("GatherCompanions", `Could not animate ${mt.name}: ${e.message}`); }
+    }));
 
     // Let the animation play before deleting
     await new Promise(resolve => setTimeout(resolve, 700));
 
-    // Delete the tokens from the scene
-    await scene.deleteEmbeddedDocuments("Token", memberTokens.map(mt => mt.id));
+    // Delete the tokens from the scene — GM-proxied via socket-relay so
+    // players (who cannot delete scene embedded docs directly) still succeed.
+    const deleteResult = await gmRequest("deleteTokens", {
+      sceneId: scene.id,
+      tokenIds: memberTokens.map(mt => mt.id),
+    });
+    if (deleteResult?.error) {
+      ui.notifications.error(`Could not gather: ${deleteResult.error}`);
+      return false;
+    }
 
     // Store snapshots on the hero so we can release later
     await hero.setFlag(MODULE_ID, FLAG_GATHERED, savedTokenData);
@@ -156,7 +170,15 @@ export const GatherCompanions = {
       return { ...data, x: px + off.x, y: py + off.y };
     });
 
-    await scene.createEmbeddedDocuments("Token", tokenDataArray);
+    // GM-proxied create so players can release without scene-edit permission.
+    const createResult = await gmRequest("createTokens", {
+      sceneId: scene.id,
+      tokenDataArray,
+    });
+    if (createResult?.error) {
+      ui.notifications.error(`Could not release: ${createResult.error}`);
+      return false;
+    }
 
     await hero.unsetFlag(MODULE_ID, FLAG_GATHERED);
 
