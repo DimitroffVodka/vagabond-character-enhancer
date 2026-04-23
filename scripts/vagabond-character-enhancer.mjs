@@ -1487,6 +1487,69 @@ Hooks.once("ready", async () => {
   CompanionManagerTab.init();
   CompanionTerminationManager.init();
 
+  // ── Patch VagabondChatCard.npcAction to route flagged-companion action rolls
+  //    through the controller's mana skill (Mysticism / Arcana). Mirrors the
+  //    pattern used by vagabond-crawler's _fireAction. Without this, clicking
+  //    an action on a companion's NPC sheet rolls the NPC's own stats instead
+  //    of the controlling PC's skill check.
+  //
+  //    Detection order:
+  //      1. actor.controllerActorId flag (v0.4.0+) with companionMeta.sourceId
+  //         → route via SummonerFeatures / FamiliarFeatures
+  //      2. Legacy caster-side flags (activeConjure / activeFamiliar) — same
+  //         fallback the crawler uses, so pre-v0.4.0 companions still route
+  //      3. No flags → call original npcAction (unflagged NPC rolls its own stats)
+  try {
+    const { VagabondChatCard } = globalThis.vagabond?.utils ?? {};
+    if (VagabondChatCard?.npcAction && !VagabondChatCard._vceNpcActionPatched) {
+      const origNpcAction = VagabondChatCard.npcAction.bind(VagabondChatCard);
+      VagabondChatCard.npcAction = async function(actor, action, actionIndex, targetsAtRollTime = []) {
+        try {
+          if (actor?.type === "npc" && action) {
+            // Path 1: companionMeta (v0.4.0+)
+            const controllerId = actor.getFlag(MODULE_ID, "controllerActorId");
+            const meta = actor.getFlag(MODULE_ID, "companionMeta");
+            if (controllerId && meta?.sourceId) {
+              const controller = game.actors.get(controllerId);
+              if (controller) {
+                if (meta.sourceId === "summoner") {
+                  const conjure = controller.getFlag(MODULE_ID, "activeConjure")
+                    ?? { summonActorId: actor.id, summonName: actor.name, summonImg: actor.img, summonHD: actor.system?.hd ?? 1, sceneId: canvas.scene?.id };
+                  return await SummonerFeatures.rollSummonAction(controller, conjure, actionIndex);
+                }
+                if (meta.sourceId === "familiar") {
+                  const familiar = controller.getFlag(MODULE_ID, "activeFamiliar")
+                    ?? { summonActorId: actor.id, summonName: actor.name, summonImg: actor.img, summonHD: 1, familiarSkill: "mysticism" };
+                  return await FamiliarFeatures.rollFamiliarAction(controller, familiar, actionIndex);
+                }
+              }
+            }
+            // Path 2: legacy caster-side flags (pre-v0.4.0 or externally set)
+            for (const pc of game.actors) {
+              if (pc.type !== "character") continue;
+              const conjure = pc.getFlag(MODULE_ID, "activeConjure");
+              if (conjure?.summonActorId === actor.id) {
+                return await SummonerFeatures.rollSummonAction(pc, conjure, actionIndex);
+              }
+              const familiar = pc.getFlag(MODULE_ID, "activeFamiliar");
+              if (familiar?.summonActorId === actor.id) {
+                return await FamiliarFeatures.rollFamiliarAction(pc, familiar, actionIndex);
+              }
+            }
+          }
+        } catch (e) {
+          log("VCE", `npcAction routing failed, falling through to system default: ${e.message}`);
+        }
+        // Fallback: unflagged NPCs roll via system default
+        return origNpcAction(actor, action, actionIndex, targetsAtRollTime);
+      };
+      VagabondChatCard._vceNpcActionPatched = true;
+      log("Ready", "Patched VagabondChatCard.npcAction for companion routing.");
+    }
+  } catch (e) {
+    log("Ready", `Could not patch VagabondChatCard.npcAction: ${e.message}`);
+  }
+
   // Patch modifyMovementCost to ignore walk difficulty for Treads Lightly
   const moveCostModel = CONFIG.RegionBehavior?.dataModels?.modifyMovementCost;
   if (moveCostModel?.prototype?._getTerrainEffects) {
