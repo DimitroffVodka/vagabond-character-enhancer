@@ -68,7 +68,7 @@ export const FamiliarFeatures = {
     // companion is dismissed via CompanionSpawner.dismiss (zeroHP auto-dismiss,
     // ritual-recast replace, Companions tab Dismiss button). Clears the caster-side
     // activeFamiliar flag and deletes the imported compendium actor if applicable.
-    CompanionSpawner.registerDismissHandler(FLAG_FAMILIAR, async (companionActor, { reason, meta, controller }) => {
+    CompanionSpawner.registerDismissHandler("familiar", async (companionActor, { reason, meta, controller }) => {
       if (!controller) return;
       try {
         if (controller.getFlag(MODULE_ID, FLAG_FAMILIAR)) {
@@ -399,7 +399,7 @@ export const FamiliarFeatures = {
     // combat-add, ownership grant, and chat notification.
     const spawnResult = await CompanionSpawner.spawn({
       caster: actor,
-      sourceId: FLAG_FAMILIAR,
+      sourceId: "familiar",
       creatureUuid,
       tokenData: {
         name: npcData.name,
@@ -417,7 +417,7 @@ export const FamiliarFeatures = {
         importedFromCompendium: !npcData.worldActorId && !!npcData.compendiumUuid,
       },
       // Familiar posts its own detailed ritual chat card with HD/skill details.
-      // Suppress the engine's generic "{caster} conjures {creature} (activeFamiliar)"
+      // Suppress the engine's generic "{caster} conjures {creature} (Familiar)"
       // to avoid double chat messages.
       suppressChat: true,
     });
