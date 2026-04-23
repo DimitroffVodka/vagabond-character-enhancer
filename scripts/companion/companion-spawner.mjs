@@ -12,6 +12,26 @@ import { gmRequest } from "../socket-relay.mjs";
 import { COMPANION_SOURCES, getSourceMeta } from "./companion-sources.mjs";
 
 /**
+ * Map a creature's `system.senses` string to a token sight config.
+ * - "Darksight" (case-insensitive) → enabled, range: null (infinite), mode: "darkvision"
+ * - empty / none                   → enabled basic vision (range 0, mode "basic")
+ *
+ * Future senses ("Tremorsense", "Blindsight", etc.) can be added here; for
+ * Phase 1 we handle Darksight and default everyone else to basic vision.
+ *
+ * @param {Actor|Object} creature - world actor or compendium document
+ * @returns {object} sight config suitable for TokenDocument
+ */
+function _deriveSightFromSenses(creature) {
+  const senses = (creature?.system?.senses ?? "").toString().toLowerCase();
+  if (senses.includes("darksight") || senses.includes("darkvision")) {
+    return { enabled: true, range: null, visionMode: "darkvision" };
+  }
+  // Basic vision — sees illuminated areas within sight range (0 = only lit squares)
+  return { enabled: true, range: 0, visionMode: "basic" };
+}
+
+/**
  * Per-source dismiss handlers for feature-specific cleanup.
  * Feature adapters (Summoner, Familiar, etc.) register a handler via
  * CompanionSpawner.registerDismissHandler(sourceId, fn) so that dismissal
@@ -84,14 +104,16 @@ export const CompanionSpawner = {
 
     // Default: place adjacent to caster, 1 grid offset right.
     // Callers can override any property (including x/y) via tokenData.
-    // Vision defaults ON so the controlling player can see what the companion
-    // sees — casters can override via tokenData.sight.
+    // Vision defaults ON and is tuned to the creature's senses so the
+    // controlling player can see what the companion sees.
     const gridSize = scene.grid.size;
+    const creatureActor = game.actors.get(actorId) ?? doc;
+    const sightConfig = _deriveSightFromSenses(creatureActor);
     const defaultTokenData = {
       actorId,
       x: casterPos.x + gridSize,
       y: casterPos.y,
-      sight: { enabled: true },
+      sight: sightConfig,
       ...tokenData,
     };
 
