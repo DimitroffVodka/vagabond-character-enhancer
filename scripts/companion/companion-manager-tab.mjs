@@ -24,6 +24,16 @@ import { CompanionSpawner } from "./companion-spawner.mjs";
 import { SummonerFeatures } from "../class-features/summoner.mjs";
 import { FamiliarFeatures } from "../perk-features/familiar.mjs";
 
+/**
+ * Per-PC conjure-dialog locks.
+ * Prevents double-clicking "Conjure Summon" / "Conjure Familiar" from opening
+ * two dialogs at once. Keys are PC actor IDs; presence means a dialog is open.
+ */
+const _openConjureLocks = {
+  summoner: new Set(),
+  familiar: new Set(),
+};
+
 export const CompanionManagerTab = {
   init() {
     Hooks.on("renderApplicationV2", this._onRenderSheet.bind(this));
@@ -360,13 +370,28 @@ export const CompanionManagerTab = {
 
   _bindEvents(panel, pc) {
     // --- Action bar buttons (Conjure Summon / Conjure Familiar) ---
-    panel.querySelector('[data-action="conjure-summon"]')?.addEventListener("click", (ev) => {
+    // Lock prevents double-clicking from opening two dialogs. showConjureDialog
+    // returns a Promise that resolves on close/cancel/pick, so the lock clears
+    // naturally when the dialog finishes.
+    panel.querySelector('[data-action="conjure-summon"]')?.addEventListener("click", async (ev) => {
       ev.preventDefault();
-      SummonerFeatures.showConjureDialog(pc);
+      if (_openConjureLocks.summoner.has(pc.id)) return;
+      _openConjureLocks.summoner.add(pc.id);
+      try {
+        await SummonerFeatures.showConjureDialog(pc);
+      } finally {
+        _openConjureLocks.summoner.delete(pc.id);
+      }
     });
-    panel.querySelector('[data-action="conjure-familiar"]')?.addEventListener("click", (ev) => {
+    panel.querySelector('[data-action="conjure-familiar"]')?.addEventListener("click", async (ev) => {
       ev.preventDefault();
-      FamiliarFeatures.showConjureDialog(pc);
+      if (_openConjureLocks.familiar.has(pc.id)) return;
+      _openConjureLocks.familiar.add(pc.id);
+      try {
+        await FamiliarFeatures.showConjureDialog(pc);
+      } finally {
+        _openConjureLocks.familiar.delete(pc.id);
+      }
     });
 
     panel.querySelectorAll(".vce-companion-card").forEach(card => {
