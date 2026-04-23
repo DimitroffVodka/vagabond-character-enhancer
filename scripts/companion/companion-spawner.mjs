@@ -32,6 +32,37 @@ function _deriveSightFromSenses(creature) {
 }
 
 /**
+ * Pick the token's default movement action by comparing walk speed to
+ * each alternate movement type on the NPC's system.speedValues. Whichever
+ * is fastest wins; walk wins ties.
+ *
+ * Example: Bee, Giant has walk 10 / fly 50 → default movementAction: "fly".
+ * A standard beast with walk 30 only → default movementAction: "walk".
+ *
+ * @param {Actor|Object} creature
+ * @returns {string} one of: walk, fly, swim, climb, burrow
+ */
+function _deriveDefaultMovementAction(creature) {
+  const walk = Number(creature?.system?.speed ?? 0) || 0;
+  const sv = creature?.system?.speedValues ?? {};
+  const candidates = [
+    { action: "walk",   speed: walk },
+    { action: "fly",    speed: Number(sv.fly    ?? 0) || 0 },
+    { action: "swim",   speed: Number(sv.swim   ?? 0) || 0 },
+    { action: "climb",  speed: Number(sv.climb  ?? 0) || 0 },
+    { action: "burrow", speed: Number(sv.burrow ?? 0) || 0 },
+  ];
+  // Highest speed wins; prefer walk on ties
+  candidates.sort((a, b) => {
+    if (b.speed !== a.speed) return b.speed - a.speed;
+    if (a.action === "walk") return -1;
+    if (b.action === "walk") return 1;
+    return 0;
+  });
+  return candidates[0].speed > 0 ? candidates[0].action : "walk";
+}
+
+/**
  * Per-source dismiss handlers for feature-specific cleanup.
  * Feature adapters (Summoner, Familiar, etc.) register a handler via
  * CompanionSpawner.registerDismissHandler(sourceId, fn) so that dismissal
@@ -109,11 +140,13 @@ export const CompanionSpawner = {
     const gridSize = scene.grid.size;
     const creatureActor = game.actors.get(actorId) ?? doc;
     const sightConfig = _deriveSightFromSenses(creatureActor);
+    const movementAction = _deriveDefaultMovementAction(creatureActor);
     const defaultTokenData = {
       actorId,
       x: casterPos.x + gridSize,
       y: casterPos.y,
       sight: sightConfig,
+      movementAction,
       ...tokenData,
     };
 
