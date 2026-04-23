@@ -84,17 +84,25 @@ export const CompanionSpawner = {
 
     // Default: place adjacent to caster, 1 grid offset right.
     // Callers can override any property (including x/y) via tokenData.
+    // Vision defaults ON so the controlling player can see what the companion
+    // sees — casters can override via tokenData.sight.
     const gridSize = scene.grid.size;
     const defaultTokenData = {
       actorId,
       x: casterPos.x + gridSize,
       y: casterPos.y,
+      sight: { enabled: true },
       ...tokenData,
     };
 
+    // grantOwnershipFrom tells the GM proxy to grant OWNER on the world actor
+    // to every user who owns the caster — not just the requester. Handles the
+    // GM-testing case where the click comes from the GM but ownership should
+    // flow to the actual player(s) controlling the caster.
     const placeResult = await gmRequest("placeToken", {
       sceneId: scene.id,
       tokenData: defaultTokenData,
+      grantOwnershipFrom: caster.id,
     });
     if (placeResult.error) return { success: false, error: placeResult.error };
 

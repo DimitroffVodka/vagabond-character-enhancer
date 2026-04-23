@@ -49,14 +49,35 @@ async function _handleRequest(data) {
       const tokenData = { ...data.tokenData };
       // Ensure the token is actorLink: false so HP is per-token
       tokenData.actorLink = false;
-      // Ensure the requesting player has OWNER on the world actor so they
-      // can move/control the resulting unlinked token. Covers the case where
-      // the summon's actor was NOT freshly imported (no ownership grant in
-      // that path) and already existed with GM-only permissions.
-      if (data.userId && tokenData.actorId) {
+
+      // Build the set of users who should receive OWNER on the world actor:
+      //   - data.userId: the requester (legacy v0.3.4 behaviour)
+      //   - every user who owns the caster (if data.grantOwnershipFrom given):
+      //     covers the case where a GM triggers a spawn on behalf of a player
+      //     — the player who owns the caster must own the companion too.
+      if (tokenData.actorId) {
         const worldActor = game.actors.get(tokenData.actorId);
-        if (worldActor && (worldActor.ownership?.[data.userId] ?? 0) < 3) {
-          await worldActor.update({ [`ownership.${data.userId}`]: 3 });
+        if (worldActor) {
+          const grantTo = new Set();
+          if (data.userId) grantTo.add(data.userId);
+          if (data.grantOwnershipFrom) {
+            const caster = game.actors.get(data.grantOwnershipFrom);
+            if (caster?.ownership) {
+              for (const [uid, level] of Object.entries(caster.ownership)) {
+                if (uid === "default") continue;
+                if (level >= 3) grantTo.add(uid);
+              }
+            }
+          }
+          const ownershipUpdate = {};
+          for (const uid of grantTo) {
+            if ((worldActor.ownership?.[uid] ?? 0) < 3) {
+              ownershipUpdate[`ownership.${uid}`] = 3;
+            }
+          }
+          if (Object.keys(ownershipUpdate).length) {
+            await worldActor.update(ownershipUpdate);
+          }
         }
       }
       const [tokenDoc] = await scene.createEmbeddedDocuments("Token", [tokenData]);
