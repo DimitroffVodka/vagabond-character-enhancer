@@ -16,7 +16,7 @@
  * undead; applies the Undead template AE after spawn.
  */
 
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { CompanionSpawner } from "../companion/companion-spawner.mjs";
 import { CorpsePicker } from "../companion/corpse-picker.mjs";
 import { applyUndeadTemplate } from "../companion/undead-template.mjs";
@@ -24,6 +24,10 @@ import { FocusManager } from "../focus/focus-manager.mjs";
 
 const FOCUS_KEY = "spell_raise";
 const SOURCE_ID = "spell-raise";
+
+// Zombie, Boomer from the Vagabond system bestiary — used by the Infesting
+// Burst perk to override the raised creature with a Boomer stat block.
+const BOOMER_UUID = "Compendium.vagabond.bestiary.Actor.hLO69Zjvz7WaJAmO";
 
 export const RaiseSpell = {
   init() {
@@ -80,16 +84,39 @@ export const RaiseSpell = {
       return;
     }
 
-    // Open corpse picker single-select (one raise per cast; player re-casts for more)
-    const picked = await CorpsePicker.pick({
-      title: `Raise — ${remainingHD} HD remaining of ${maxHD}`,
-      maxHD: remainingHD,
-      multi: false,
-      fallbackPack: "vagabond-character-enhancer.vce-beasts",
-    });
-    if (!picked || !picked.length) return;
+    // Infesting Burst perk: offer to raise the corpse as a Boomer instead.
+    // If the caster accepts, we bypass the corpse picker and spawn the
+    // Zombie, Boomer system actor directly (Boomer's own HD 3 is used for
+    // the budget check).
+    const features = getFeatures(caster);
+    let uuid;
+    if (features?.perk_infestingBurst) {
+      const boomerHD = 3;
+      const useBoomer = await foundry.applications.api.DialogV2.confirm({
+        window: { title: "Infesting Burst" },
+        content: `<p>Raise this one as a <strong>Boomer</strong>? (HD ${boomerHD}, explodes for 2d6 in Near aura and dies.)</p><p><em>Yes = summon Zombie, Boomer. No = pick a specific corpse.</em></p>`,
+        rejectClose: false,
+      });
+      if (useBoomer) {
+        if (boomerHD > remainingHD) {
+          ui.notifications.warn(`Boomer HD (${boomerHD}) exceeds remaining budget (${remainingHD}).`);
+          return;
+        }
+        uuid = BOOMER_UUID;
+      }
+    }
 
-    const { uuid } = picked[0];
+    if (!uuid) {
+      // Open corpse picker single-select (one raise per cast; player re-casts for more)
+      const picked = await CorpsePicker.pick({
+        title: `Raise — ${remainingHD} HD remaining of ${maxHD}`,
+        maxHD: remainingHD,
+        multi: false,
+        fallbackPack: "vagabond-character-enhancer.vce-beasts",
+      });
+      if (!picked || !picked.length) return;
+      uuid = picked[0].uuid;
+    }
 
     const result = await CompanionSpawner.spawn({
       caster,

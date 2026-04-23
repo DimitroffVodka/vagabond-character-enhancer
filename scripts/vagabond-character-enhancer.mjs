@@ -122,6 +122,7 @@ import { AnimateSpell } from "./spell-features/animate-spell.mjs";
 import { AnimalCompanion } from "./perk-features/animal-companion.mjs";
 import { ReanimatorPerk } from "./perk-features/reanimator.mjs";
 import { ConjurerPerk } from "./perk-features/conjurer.mjs";
+import { RaisePerks } from "./perk-features/raise-perks.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -1504,6 +1505,7 @@ Hooks.once("ready", async () => {
   AnimalCompanion.init();
   ReanimatorPerk.init();
   ConjurerPerk.init();
+  RaisePerks.init();
 
   // ── Patch VagabondChatCard.npcAction to route flagged-companion action rolls
   //    through the controller's mana skill (Mysticism / Arcana). Mirrors the

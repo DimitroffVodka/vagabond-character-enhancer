@@ -72,6 +72,12 @@ Six new companion-summoning adapters, each built on the Phase 1 `CompanionSpawne
 - **`CompanionSpawner.spawn({ allowMultiple: true })`** — new option skips the same-source replace prompt. Used by Beast and Raise for cumulative-budget stacking.
 - **Socket relay ops** — `createActor` (raw-data actor creation for Animate) and `createActorAE` (AE create on non-owned actor, for Undead template).
 
+### Phase 2 — Raise-Adjacent Perks
+
+- **Grim Harvest** (`perk_grimHarvest`) — when a PC's spell-cast damage card is followed within 5 s by an NPC's HP dropping to 0 (and the NPC isn't Artificial/Undead/Construct/Object), the PC is healed by the spell's damage. Posts a dedicated chat card. GM-only tracker to avoid multi-client double-heal.
+- **Infesting Burst** (`perk_infestingBurst`) — inline in the Raise spell adapter. When the perk is active and the caster casts Raise, a `DialogV2.confirm` offers to spawn the Zombie, Boomer (`Compendium.vagabond.bestiary.Actor.hLO69Zjvz7WaJAmO`) directly instead of opening the corpse picker. Boomer's HD 3 is checked against the remaining budget.
+- **Necromancer** (`perk_necromancer`) — injects a "Necromancer Heal (+N)" button on every raised-undead companion card (where N = ceil(caster level / 2)). Click to heal the undead. Posts a chat card. Button only appears for the perk's owner.
+
 ## v0.3.4
 
 ### New Feature — Friendly NPC Saves (Controller Routing)

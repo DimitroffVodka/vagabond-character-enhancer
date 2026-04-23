@@ -1894,6 +1894,32 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   color: var(--vce-accent);
 }
 
+/* Necromancer heal button — injected by RaisePerks onto raised-undead cards */
+.vce-necromancer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 5px;
+  padding: 4px 8px;
+  border: 1px solid rgba(180, 60, 60, 0.6);
+  border-radius: 3px;
+  background: rgba(180, 60, 60, 0.15);
+  color: var(--vce-condition-text, #e0a0a0);
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.vce-necromancer-btn:hover {
+  background: rgba(180, 60, 60, 0.3);
+  border-color: rgba(180, 60, 60, 0.85);
+}
+.vce-necromancer-btn i {
+  color: #c43c3c;
+}
+
 .vce-companion-card {
   margin-bottom: 12px;
   border: 1px solid var(--vagabond-c-faint);
