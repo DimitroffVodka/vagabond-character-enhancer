@@ -832,12 +832,20 @@ export const CompanionTerminationManager = {
     // so subsequent HP-to-0 updates won't pass this guard — no double-fire.
     if (!meta?.terminateOn?.length) return;
 
-    // zeroHP trigger — fires when this update changes HP to 0
+    // zeroHP trigger — fires when this update changes HP to 0.
+    //
+    // DEFERRED 250ms: mirrors the pattern in SummonerFeatures / FamiliarFeatures.
+    // The Vagabond system's own updateActor hook runs toggleStatusEffect('dead')
+    // in parallel with this one. For unlinked-token companions, that AE create
+    // resolves its parent UUID via Scene.X.Token.Y.ActorDelta... — which fails
+    // if we've already deleted the token. Throws:
+    //   "undefined id [tokenId] does not exist in the EmbeddedCollection"
+    // Deferring 250ms lets the system's async work finish before we wipe the token.
     if (meta.terminateOn.includes("zeroHP")) {
       const newHP = foundry.utils.getProperty(changes, "system.health.value");
       if (newHP === 0) {
-        log("CompanionTerminationManager", `${actor.name} reached 0 HP — auto-dismissing`);
-        await CompanionSpawner.dismiss(actor, { reason: "defeated" });
+        log("CompanionTerminationManager", `${actor.name} reached 0 HP — auto-dismissing (deferred 250ms)`);
+        setTimeout(() => CompanionSpawner.dismiss(actor, { reason: "defeated" }), 250);
         return;
       }
     }
