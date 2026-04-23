@@ -1,0 +1,23 @@
+<form class="vce-creature-picker">
+  <div class="vce-cp-header">
+    <input type="text" class="vce-cp-search" placeholder="Search…" autocomplete="off">
+  </div>
+
+  <div class="vce-cp-list" tabindex="0">
+    {{#each creatures}}
+      <div class="vce-cp-row" data-uuid="{{uuid}}" role="button" tabindex="0">
+        <img src="{{img}}" class="vce-cp-img" alt="{{name}}">
+        <div class="vce-cp-info">
+          <div class="vce-cp-name">{{name}}</div>
+          <div class="vce-cp-meta">HD {{hd}} · {{size}} · {{sourceLabel}}</div>
+        </div>
+      </div>
+    {{else}}
+      <div class="vce-cp-empty">No creatures match the filter.</div>
+    {{/each}}
+  </div>
+
+  <footer class="vce-cp-footer">
+    <button type="button" class="vce-cp-cancel" data-action="cancel">Cancel</button>
+  </footer>
+</form>
