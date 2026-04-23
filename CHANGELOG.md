@@ -51,6 +51,27 @@ Compress/expand button on every hero's token right-click HUD. Mirrors the Vagabo
 ### Pre-Phase-1 Fix
 - **Familiar banish race** — Familiar's 0-HP banish now deferred 250ms before `removeToken`, mirroring the SummonerFeatures pattern. Eliminates the `undefined id [tokenId] does not exist in EmbeddedCollection` error that fired when the system's `toggleStatusEffect('dead')` tried to resolve the token's parent UUID after we'd deleted it.
 
+### Phase 2 — Feature Adapters
+
+Six new companion-summoning adapters, each built on the Phase 1 `CompanionSpawner` engine. Every adapter registers its own per-source dismiss handler for focus release and synthetic-actor cleanup. All appear in the Companions tab alongside Summoner/Familiar with source-appropriate colour badges.
+
+#### Spells (triggered via `createChatMessage` on spell cast)
+- **Beast** — casts detect the "beast" spell; opens a Beast-filtered creature picker with cumulative HD budget of `max(1, floor(level/2))`. `allowMultiple: true` so each cast stacks another beast in the budget instead of replacing. One shared Focus slot across all active beasts; released on last dismissal.
+- **Raise** — casts detect the "raise" spell; opens the new `CorpsePicker` (defeated scene tokens + `vce-beasts` fallback pool, excludes Artificial/Undead/Construct/Object types). Cumulative HD ≤ caster level; stacks. Applies the new Undead template AE (Darksight, Poison immunity, Sickened immunity, beingType override) to each raised actor after spawn. Shared Focus; released on last dismissal.
+- **Animate** — casts detect the "animate" spell; opens an inventory-item picker (caster's ≤1-Slot items). Creates a synthetic "Animated {item}" NPC on the fly via the new `createActor` socket-relay op (HP 3, Armor 0, beingType "Object", one attack derived from the item). Spawns as a companion with `meta.synthetic = true` so the dismiss handler deletes the ad-hoc actor on release. Single active at a time.
+
+#### Perks (triggered via right-click context menu on the perk item)
+- **Animal Companion** — narrative taming flow. Beast-filtered picker, HD ≤ `floor(level/2)`, single companion, no focus/mana cost. Replace-on-new uses `CompanionSpawner`'s default same-source prompt.
+- **Reanimator** — 10-minute ritual. Reuses `CorpsePicker` (single-select) and applies the Undead template. HD ≤ caster level. Single undead; re-ritual replaces. *Note:* end-of-Shift auto-banish is deferred — Vagabond has no formal Shift tracker yet, so release is manual.
+- **Conjurer** — VCE homebrew. Registers a GM-side `updateActor` watcher that auto-populates every Conjurer PC's defeated-creatures registry (flag `defeatedCreatures`) when any non-Humanlike NPC dies. Context-menu picker shows the registry filtered to HD ≤ caster level. Mana cost = HD (refunded if spawn fails or user cancels replace). Focus acquired on conjure.
+
+### Phase 2 — Shared Infrastructure
+
+- **`undead-template.mjs`** — `applyUndeadTemplate(actor, { sourceName })` installs a tagged AE with the Undead overlay. Used by Raise + Reanimator. GM-proxied via the new `createActorAE` socket-relay op so player-client casts still land.
+- **`corpse-picker.mjs`** + **`templates/corpse-picker.hbs`** — ApplicationV2 dialog. Finds defeated tokens on the active scene + defeated combatants across scenes. Supports single- and multi-select modes (though Phase 2 adapters use single). Optional compendium fallback pool.
+- **`CompanionSpawner.spawn({ allowMultiple: true })`** — new option skips the same-source replace prompt. Used by Beast and Raise for cumulative-budget stacking.
+- **Socket relay ops** — `createActor` (raw-data actor creation for Animate) and `createActorAE` (AE create on non-owned actor, for Undead template).
+
 ## v0.3.4
 
 ### New Feature — Friendly NPC Saves (Controller Routing)

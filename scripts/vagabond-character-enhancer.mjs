@@ -114,6 +114,14 @@ import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companio
 import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
 import { CompanionTerminationManager } from "./companion/companion-termination.mjs";
 import { GatherCompanions } from "./companion/gather-companions.mjs";
+// Phase 2 spell adapters
+import { BeastSpell } from "./spell-features/beast-spell.mjs";
+import { RaiseSpell } from "./spell-features/raise-spell.mjs";
+import { AnimateSpell } from "./spell-features/animate-spell.mjs";
+// Phase 2 perk adapters
+import { AnimalCompanion } from "./perk-features/animal-companion.mjs";
+import { ReanimatorPerk } from "./perk-features/reanimator.mjs";
+import { ConjurerPerk } from "./perk-features/conjurer.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -1488,6 +1496,14 @@ Hooks.once("ready", async () => {
   CompanionManagerTab.init();
   CompanionTerminationManager.init();
   GatherCompanions.init();
+  // Phase 2: spell adapters
+  BeastSpell.init();
+  RaiseSpell.init();
+  AnimateSpell.init();
+  // Phase 2: perk adapters
+  AnimalCompanion.init();
+  ReanimatorPerk.init();
+  ConjurerPerk.init();
 
   // ── Patch VagabondChatCard.npcAction to route flagged-companion action rolls
   //    through the controller's mana skill (Mysticism / Arcana). Mirrors the
