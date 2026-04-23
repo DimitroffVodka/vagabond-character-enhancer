@@ -11,6 +11,19 @@ import { MODULE_ID, log } from "../utils.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 import { COMPANION_SOURCES, getSourceMeta } from "./companion-sources.mjs";
 
+/**
+ * Per-source dismiss handlers for feature-specific cleanup.
+ * Feature adapters (Summoner, Familiar, etc.) register a handler via
+ * CompanionSpawner.registerDismissHandler(sourceId, fn) so that dismissal
+ * from any entry point (Companions tab Dismiss button, zeroHP auto-dismiss,
+ * replace-on-spawn) correctly releases focus, removes Soulbonder AEs, clears
+ * caster-side state flags, etc.
+ *
+ * Handler signature: async (companionActor, { reason, meta, controller }) => void
+ * Fired BEFORE the generic dismiss logic (token removal + flag clear + chat).
+ */
+const _dismissHandlers = new Map();
+
 export const CompanionSpawner = {
   /**
    * Spawn a companion.
@@ -138,6 +151,21 @@ export const CompanionSpawner = {
     const controllerId = actor.getFlag(MODULE_ID, "controllerActorId");
     const controller = controllerId ? game.actors.get(controllerId) : null;
 
+    // Source-specific cleanup BEFORE generic dismissal.
+    // Handlers release focus, remove source-specific AEs, clear caster-side
+    // state flags (e.g. summoner's activeConjure, familiar's activeFamiliar).
+    const sourceId = meta?.sourceId;
+    if (sourceId) {
+      const handler = _dismissHandlers.get(sourceId);
+      if (handler) {
+        try {
+          await handler(actor, { reason, meta, controller });
+        } catch (e) {
+          log("CompanionSpawner", `Dismiss handler for "${sourceId}" failed: ${e.message}`);
+        }
+      }
+    }
+
     // Remove token from scene
     if (meta?.sceneId && meta?.tokenId) {
       try {
@@ -234,5 +262,25 @@ export const CompanionSpawner = {
     }
 
     return out;
+  },
+
+  /**
+   * Register a source-specific dismiss handler.
+   *
+   * The handler runs BEFORE the generic dismiss logic (token removal + flag
+   * clear + chat notification). Use for source-specific cleanup: releasing
+   * focus, removing source-specific AEs, clearing caster-side state flags.
+   *
+   * Idempotent — registering the same sourceId replaces the prior handler.
+   *
+   * @param {string} sourceId - Must match a key in COMPANION_SOURCES
+   * @param {(actor: Actor, ctx: {reason: string, meta: object, controller: Actor|null}) => Promise<void>} handler
+   */
+  registerDismissHandler(sourceId, handler) {
+    if (typeof handler !== "function") {
+      throw new Error(`registerDismissHandler: handler for "${sourceId}" must be a function`);
+    }
+    _dismissHandlers.set(sourceId, handler);
+    log("CompanionSpawner", `Registered dismiss handler for source: ${sourceId}`);
   },
 };
