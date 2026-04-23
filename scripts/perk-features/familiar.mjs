@@ -38,8 +38,17 @@ export const FamiliarFeatures = {
   /* -------------------------------------------- */
 
   registerHooks() {
-    // Watch familiar actor HP for 0 HP banishment
-    Hooks.on("updateActor", async (actor, changes) => {
+    // Watch familiar actor HP for 0 HP banishment.
+    //
+    // Deferred banish: mirrors the pattern in SummonerFeatures. The system's
+    // own updateActor hook runs actor.toggleStatusEffect('dead', { active: true })
+    // in parallel with this one. For an unlinked-token familiar, that AE create
+    // needs to resolve its parent UUID (Scene.X.Token.Y.ActorDelta...) — but if
+    // we delete the token first, Foundry throws
+    //   "undefined id [tokenId] does not exist in the EmbeddedCollection"
+    // during parent resolution. Deferring the banish 250ms lets the system's
+    // async toggleStatusEffect finish before we wipe the token.
+    Hooks.on("updateActor", (actor, changes) => {
       if (actor.type !== "npc") return;
       if (!game.user.isGM) return;
 
@@ -49,7 +58,7 @@ export const FamiliarFeatures = {
       for (const char of game.actors.filter(a => a.type === "character")) {
         const familiar = char.getFlag(MODULE_ID, FLAG_FAMILIAR);
         if (familiar?.summonActorId === actor.id) {
-          await this.banishFamiliar(char, "Defeated (0 HP)");
+          setTimeout(() => this.banishFamiliar(char, "Defeated (0 HP)"), 250);
           break;
         }
       }
