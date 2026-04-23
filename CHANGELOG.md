@@ -1,5 +1,56 @@
 # Changelog
 
+## v0.4.0 — In Progress
+
+### New Feature — CompanionManager (Phase 1)
+
+Replaces the old per-companion Summon tab with a unified **Companions** tab on every character sheet. One card per active companion (summons, familiars, hirelings), source-agnostic: color-coded badge, HP bar with gradient, armor, active statuses, controller attribution, save buttons (Endure/Reflex/Will), and actions list (NPC system actions for summons/familiars; equipped weapons + spells for hirelings).
+
+#### Engine
+- **`CompanionSpawner`** — unified spawn/dismiss/query engine. Consolidates `placeToken` + `updateActorFlags` + combat-add logic previously duplicated between Summoner and Familiar. Replace-on-same-source prompt. GM-proxied via socket relay.
+- **`CreaturePicker`** — shared ApplicationV2 dialog with filter config (types, sizes, maxHD, pack, customFilter). Uses compendium `getIndex` for performance. Replaces inline picker code in summoner.mjs and familiar.mjs.
+- **Source registry** (`companion-sources.mjs`) — pure-data definitions for each source (`summoner`, `familiar`, `spell-beast`, `spell-animate`, `spell-raise`, `perk-conjurer`, `perk-reanimator`, `perk-animal-companion`, `hireling-manual`, `legacy` fallback). Badge color, skill routing, termination rules per source.
+- **Per-source dismiss handler API** — `CompanionSpawner.registerDismissHandler(sourceId, fn)`. Fires before generic dismiss; feature adapters clean up focus slots, Soulbonder AEs, caster-side state flags. Ensures focus is released on every dismiss path (Companions tab Dismiss, zeroHP auto-dismiss, replace-on-spawn).
+- **`CompanionTerminationManager`** — GM-side `updateActor` listener. Auto-dismisses flagged companions on HP-to-0 transitions. 250ms deferred dismissal prevents the system `toggleStatusEffect('dead')` race that threw `undefined id [tokenId] does not exist in EmbeddedCollection` errors.
+
+#### Refactors
+- **Summoner** uses `CompanionSpawner.spawn({ sourceId: "summoner", ... })`. Keeps `activeConjure` caster flag for backward compat with Second Nature / Guardian Force / mana-drain hooks. Registers a dismiss handler for focus release + Soulbonder cleanup. Legacy 0-HP auto-banish hook guarded so it skips new `companionMeta` companions (no double-fire).
+- **Familiar** same treatment. Keeps `activeFamiliar` caster flag. Legacy 0-HP hook already 250ms-deferred (pre-Phase-1 fix) and now additionally guarded against double-dismiss.
+
+#### UX
+- **Feature-gated Conjure buttons** — Companions tab shows "Conjure Summon" for actors with `features.summoner_creatureCodex`, "Conjure Familiar" for `features.perk_familiar`. Single source of truth for summoning; the Familiar perk's right-click context-menu Conjure options were removed.
+- **Double-click lock** on Conjure buttons — per-PC async lock prevents a second dialog from opening while the first is still resolving.
+- **Right-click to favorite** — any creature row in the Conjure Summon / Conjure Familiar dialogs can be right-clicked to toggle its Creature Codex (`summonCodex`) or Familiar Codex (`familiarCodex`) membership. Favorited rows sort to the top on next open and are reordered in-place instantly when toggled.
+
+### NPC Action Routing
+- **`VagabondChatCard.npcAction` patched** so any click on a companion's action — whether from the Companions tab card, the NPC's own sheet, the crawler strip, or direct API calls — routes the d20 check through the controller PC's Mana Skill (Mysticism/Arcana). Mirrors the routing pattern in vagabond-crawler's `_fireAction`. Unflagged NPCs roll their own stats (no change).
+
+### Token Configuration at Spawn
+- **Vision from senses** — `CompanionSpawner` reads the creature's `system.senses` string and builds `sight` config. `Darksight` → enabled, range: null (infinite), mode: darkvision. No special sense → enabled basic vision.
+- **Movement action** — `CompanionSpawner` picks the fastest mode from (walk, fly, swim, climb, burrow) and sets it as the token's default `movementAction`. A Bee, Giant (walk 10 / fly 50) spawns with `movementAction: "fly"`.
+- **Ownership** — `placeToken` gains a `grantOwnershipFrom` param. Every user with OWNER on the caster actor receives OWNER on the companion world actor. Handles the GM-testing case where clicks originate from the GM but ownership should flow to the actual player(s) controlling the caster.
+
+### New Feature — Gather Companions
+Compress/expand button on every hero's token right-click HUD. Mirrors the Vagabond system's `_gatherParty` pattern but scoped to VCE-flagged companions via `CompanionSpawner.getCompanionsFor(hero)`:
+- **Gather** — snapshots each companion token's full document (preserves delta for unlinked tokens: HP, conditions, imbues), animates them to the hero, deletes them, stores snapshots on `hero.flags.vagabond-character-enhancer.gatheredCompanions`.
+- **Release** — recreates tokens from snapshots in a spiral around the hero, preserving all state.
+- GM-proxied `createTokens` / `deleteTokens` socket-relay ops so players (who can't edit scene embedded docs) can gather and release their own companions.
+- Replaces `GatherFriendlies` in the **vagabond-crawler** module (which just teleported). The crawler version is gated behind a VCE-inactive check so standalone crawler installs keep their feature.
+
+### Compatibility
+- v0.3.4 `controllerActorId` / `controllerType` flags unchanged. Existing flagged NPCs render in the new tab with a "Companion" fallback badge (or "Hireling" for `controllerType === "hireling"`). Re-cast the originating spell/perk to attach source-specific metadata (`companionMeta`).
+- Existing save-routing (v0.3.4) works unchanged.
+- Existing summoner/familiar hook code (Second Nature, Guardian Force, mana drain, ritual recast) continues to read the legacy caster-side `activeConjure` / `activeFamiliar` flags.
+
+### Internal
+- New files: `scripts/companion/{companion-sources,companion-spawner,companion-termination,companion-manager-tab,creature-picker,gather-companions}.mjs`, `templates/creature-picker.hbs`.
+- CSS additions for `.vce-companion-card`, `.vce-companion-type-badge`, `.vce-save-btn`, `.vce-companion-actions-bar`, `.vce-companion-conjure-btn`, HP gradient, empty state.
+- Socket relay additions: `createTokens` (batch), `deleteTokens` (batch), `grantOwnershipFrom` on `placeToken`.
+- Suppressible chat notification on `CompanionSpawner.spawn({ suppressChat: true })` — used by Summoner and Familiar so their own detailed chat cards aren't duplicated.
+
+### Pre-Phase-1 Fix
+- **Familiar banish race** — Familiar's 0-HP banish now deferred 250ms before `removeToken`, mirroring the SummonerFeatures pattern. Eliminates the `undefined id [tokenId] does not exist in EmbeddedCollection` error that fired when the system's `toggleStatusEffect('dead')` tried to resolve the token's parent UUID after we'd deleted it.
+
 ## v0.3.4
 
 ### New Feature — Friendly NPC Saves (Controller Routing)
