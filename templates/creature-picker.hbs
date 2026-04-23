@@ -3,11 +3,19 @@
     {{#if showSearch}}
       <input type="text" class="vce-cp-search" placeholder="Search creatures…" autocomplete="off">
     {{/if}}
-    {{#if maxHDLabel}}
-      <p class="vce-cp-budget">{{maxHDLabel}}{{#if hasFavorites}} · Right-click a row to favorite.{{/if}}</p>
+    {{#if multi}}
+      <p class="vce-cp-budget">
+        {{maxHDLabel}} — Selected: <span class="vce-cp-selected-count">0</span>
+        · HD used: <span class="vce-cp-used-hd">0</span>
+        {{#if hasFavorites}} · Right-click a row to favorite.{{/if}}
+      </p>
     {{else}}
-      {{#if hasFavorites}}
-        <p class="vce-cp-budget">Right-click a row to favorite.</p>
+      {{#if maxHDLabel}}
+        <p class="vce-cp-budget">{{maxHDLabel}}{{#if hasFavorites}} · Right-click a row to favorite.{{/if}}</p>
+      {{else}}
+        {{#if hasFavorites}}
+          <p class="vce-cp-budget">Right-click a row to favorite.</p>
+        {{/if}}
       {{/if}}
     {{/if}}
   </div>
@@ -56,6 +64,11 @@
   </div>
 
   <footer class="vce-cp-footer">
+    {{#if multi}}
+      <button type="button" class="vce-cp-confirm" data-action="confirm">
+        <i class="fas fa-check"></i> Summon Selected
+      </button>
+    {{/if}}
     <button type="button" class="vce-cp-cancel" data-action="cancel">Cancel</button>
   </footer>
 </form>

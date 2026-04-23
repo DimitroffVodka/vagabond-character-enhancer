@@ -130,10 +130,11 @@ export const AnimalCompanion = {
     const level = Number(actor.system?.level ?? 1) || 1;
     const maxHD = Math.max(1, Math.floor(level / 2));
 
-    const picked = await CreaturePicker.pick({
+    const picks = await CreaturePicker.pick({
       title: `${actor.name} — Tame Animal Companion (HD ≤ ${maxHD})`,
       caster: actor,
       favoritesFlag: "animalCompanionCodex",
+      // Single-select: Animal Companion allows only one companion at a time
       filter: {
         types: ["beast"],
         maxHD,
@@ -143,7 +144,8 @@ export const AnimalCompanion = {
         ],
       },
     });
-    if (!picked) return;
+    if (!picks || !picks.length) return;
+    const picked = picks[0];
 
     const result = await CompanionSpawner.spawn({
       caster: actor,

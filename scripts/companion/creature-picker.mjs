@@ -30,6 +30,8 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     this._opts = opts;
     this._resolve = resolve;
     this._closedWithoutSelect = true;
+    // Multi-select state: each entry is { uuid, name, hd }
+    this._picks = [];
   }
 
   static PARTS = {
@@ -51,6 +53,7 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     return {
       creatures,
       hasFavorites: !!this._opts.favoritesFlag,
+      multi: !!this._opts.multi,
       maxHDLabel: this._opts.filter?.maxHD != null ? `Max HD: ${this._opts.filter.maxHD}` : "",
       showSearch: creatures.length > 5,
     };
@@ -197,14 +200,18 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     });
     if (search) setTimeout(() => search.focus(), 60);
 
-    // Row click — select + resolve
+    // Row click — single or multi select
     root.querySelectorAll(".vce-cp-row").forEach(row => {
       row.addEventListener("click", () => {
-        const uuid = row.dataset.uuid;
-        const name = row.dataset.name;
-        this._closedWithoutSelect = false;
-        this._resolve({ uuid, name });
-        this.close();
+        if (this._opts.multi) {
+          this._togglePick(row);
+        } else {
+          const uuid = row.dataset.uuid;
+          const name = row.dataset.name;
+          this._closedWithoutSelect = false;
+          this._resolve([{ uuid, name }]);
+          this.close();
+        }
       });
       // Keyboard activation
       row.addEventListener("keydown", (ev) => {
@@ -219,8 +226,53 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     });
 
+    // Multi-select confirm button
+    root.querySelector('[data-action="confirm"]')?.addEventListener("click", () => {
+      if (!this._picks.length) {
+        ui.notifications.warn("Select at least one creature.");
+        return;
+      }
+      this._closedWithoutSelect = false;
+      this._resolve(this._picks.map(p => ({ uuid: p.uuid, name: p.name })));
+      this.close();
+    });
+
     // Cancel button
     root.querySelector('[data-action="cancel"]')?.addEventListener("click", () => this.close());
+  }
+
+  _togglePick(row) {
+    const uuid = row.dataset.uuid;
+    const name = row.dataset.name;
+    const hd = parseInt(row.dataset.hd) || 0;
+    const idx = this._picks.findIndex(p => p.uuid === uuid);
+    if (idx >= 0) {
+      // Deselect
+      this._picks.splice(idx, 1);
+      row.classList.remove("vce-cp-selected");
+    } else {
+      // Check HD budget
+      const maxHD = this._opts.filter?.maxHD;
+      if (typeof maxHD === "number") {
+        const used = this._picks.reduce((s, p) => s + p.hd, 0);
+        if (used + hd > maxHD) {
+          ui.notifications.warn(`HD budget exceeded (${used + hd} / ${maxHD}).`);
+          return;
+        }
+      }
+      this._picks.push({ uuid, name, hd });
+      row.classList.add("vce-cp-selected");
+    }
+    this._updateBudget();
+  }
+
+  _updateBudget() {
+    const root = this.element;
+    const used = this._picks.reduce((s, p) => s + p.hd, 0);
+    const label = root.querySelector(".vce-cp-used-hd");
+    if (label) label.textContent = String(used);
+    const count = root.querySelector(".vce-cp-selected-count");
+    if (count) count.textContent = String(this._picks.length);
   }
 
   async _toggleFavorite(row) {
@@ -272,8 +324,11 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
  * @param {string} [opts.title]
  * @param {Actor} [opts.caster] - required if favoritesFlag is set
  * @param {string} [opts.favoritesFlag] - flag key on caster; array of creature names
+ * @param {boolean} [opts.multi] - if true, user selects multiple creatures with
+ *   HD budget tracking; returns an array of picks on confirm
  * @param {object} opts.filter - { types, sizes, maxHD, pack, packs[], customFilter }
- * @returns {Promise<{uuid: string, name: string} | null>}
+ * @returns {Promise<Array<{uuid: string, name: string}> | null>} array of picks or null on cancel.
+ *   Single-select still returns an array of length 1 for API consistency.
  */
 export const CreaturePicker = {
   async pick(opts = {}) {

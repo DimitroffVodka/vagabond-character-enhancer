@@ -86,12 +86,14 @@ export const BeastSpell = {
       return;
     }
 
-    // Open creature picker filtered to Beast type + remaining budget.
-    // Loads from world NPCs + vce-beasts + the system bestiary (92 beasts).
-    const picked = await CreaturePicker.pick({
+    // Multi-select picker: caster picks any combination of beasts whose
+    // cumulative HD fits the remaining budget. Loads from world NPCs +
+    // vce-beasts + the system bestiary (92 beasts).
+    const picks = await CreaturePicker.pick({
       title: `Beast — ${remainingHD} HD remaining of ${maxHD}`,
       caster,
       favoritesFlag: "beastSpellCodex",
+      multi: true,
       filter: {
         types: ["beast"],
         maxHD: remainingHD,
@@ -101,22 +103,36 @@ export const BeastSpell = {
         ],
       },
     });
-    if (!picked) return; // user cancelled
+    if (!picks || !picks.length) return; // user cancelled
 
-    const result = await CompanionSpawner.spawn({
-      caster,
-      sourceId: SOURCE_ID,
-      creatureUuid: picked.uuid,
-      meta: { hd: null, spellCast: true },
-      allowMultiple: true, // cumulative budget — don't prompt to replace
-      suppressChat: false,
-    });
-    if (!result.success) {
-      ui.notifications.error(`Could not summon beast: ${result.error ?? "unknown error"}`);
+    // Spawn each pick. allowMultiple lets them stack without replace prompts.
+    let summoned = 0;
+    for (const pick of picks) {
+      const result = await CompanionSpawner.spawn({
+        caster,
+        sourceId: SOURCE_ID,
+        creatureUuid: pick.uuid,
+        meta: { hd: null, spellCast: true },
+        allowMultiple: true,
+        suppressChat: true, // batch summary posted below
+      });
+      if (result.success) summoned++;
+      else log("BeastSpell", `Could not summon ${pick.name}: ${result.error}`);
+    }
+
+    if (!summoned) {
+      ui.notifications.error("Could not summon any beasts from the selection.");
       return;
     }
 
-    // Acquire focus on first beast; subsequent casts inherit the same focus slot
+    // Batch chat summary
+    const names = picks.map(p => p.name).join(", ");
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: caster }),
+      content: `<div class="vce-companion-spawned"><strong>${caster.name}</strong> casts <strong>Beast</strong> and summons: <em>${names}</em>.</div>`,
+    });
+
+    // Acquire focus on first summon; subsequent casts inherit the same focus slot
     const hasFocus = (caster.getFlag(MODULE_ID, "featureFocus") || [])
       .some(f => f.key === FOCUS_KEY);
     if (!hasFocus) {

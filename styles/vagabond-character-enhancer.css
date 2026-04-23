@@ -1894,6 +1894,29 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   color: var(--vce-accent);
 }
 
+/* CreaturePicker multi-select row highlight */
+.vce-cp-row.vce-cp-selected {
+  background: rgba(212, 168, 67, 0.18) !important;
+  border-left: 3px solid var(--vce-accent, #d4a843) !important;
+}
+.vce-cp-row.vce-cp-selected strong {
+  color: var(--vce-accent, #d4a843);
+}
+.vce-cp-confirm {
+  background: rgba(212, 168, 67, 0.18);
+  border: 1px solid var(--vce-accent, #d4a843);
+  color: var(--vagabond-c-text-primary, #BDC1C6);
+  font-family: "Germania", serif;
+  font-weight: bold;
+  padding: 4px 12px;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-right: 6px;
+}
+.vce-cp-confirm:hover {
+  background: rgba(212, 168, 67, 0.32);
+}
+
 /* Necromancer heal button — injected by RaisePerks onto raised-undead cards */
 .vce-necromancer-btn {
   display: flex;
