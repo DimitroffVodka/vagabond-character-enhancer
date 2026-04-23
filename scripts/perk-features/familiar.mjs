@@ -14,18 +14,13 @@
 
 import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { gmRequest } from "../socket-relay.mjs";
-import { CONTROLLER_TYPES } from "../companion/save-routing.mjs";
+import { CompanionSpawner } from "../companion/companion-spawner.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
 /* -------------------------------------------- */
 
 const FLAG_FAMILIAR = "activeFamiliar";
-
-const SIZE_MAP = {
-  tiny: 0.5, small: 1, medium: 1, large: 2,
-  huge: 3, giant: 4, gargantuan: 4, colossal: 5
-};
 
 /* -------------------------------------------- */
 /*  FamiliarFeatures                             */
@@ -55,12 +50,37 @@ export const FamiliarFeatures = {
       const newHP = changes.system?.health?.value ?? changes["system.health.value"];
       if (newHP === undefined || newHP > 0) return;
 
+      // v0.4.0: CompanionTerminationManager owns dismissal for companions with
+      // companionMeta. This hook only handles legacy v0.3.4 familiars where the
+      // flag shape is only controllerActorId + activeFamiliar on the caster.
+      if (actor.getFlag(MODULE_ID, "companionMeta")) return;
+
       for (const char of game.actors.filter(a => a.type === "character")) {
         const familiar = char.getFlag(MODULE_ID, FLAG_FAMILIAR);
         if (familiar?.summonActorId === actor.id) {
           setTimeout(() => this.banishFamiliar(char, "Defeated (0 HP)"), 250);
           break;
         }
+      }
+    });
+
+    // Register source-specific dismiss cleanup — fires whenever a familiar-sourced
+    // companion is dismissed via CompanionSpawner.dismiss (zeroHP auto-dismiss,
+    // ritual-recast replace, Companions tab Dismiss button). Clears the caster-side
+    // activeFamiliar flag and deletes the imported compendium actor if applicable.
+    CompanionSpawner.registerDismissHandler(FLAG_FAMILIAR, async (companionActor, { reason, meta, controller }) => {
+      if (!controller) return;
+      try {
+        if (controller.getFlag(MODULE_ID, FLAG_FAMILIAR)) {
+          await controller.unsetFlag(MODULE_ID, FLAG_FAMILIAR);
+        }
+        // Delete imported compendium actor if applicable
+        if (meta?.meta?.importedFromCompendium && companionActor?.id) {
+          try { await gmRequest("deleteActor", { actorId: companionActor.id }); }
+          catch (e) { log("Familiar", `Could not delete imported actor on dismiss: ${e.message}`); }
+        }
+      } catch (e) {
+        log("Familiar", `Familiar dismiss handler error: ${e.message}`);
       }
     });
 
@@ -356,27 +376,7 @@ export const FamiliarFeatures = {
     });
     if (!familiarSkill) return; // Cancelled
 
-    // Get or import the source actor (via GM relay if player)
-    let sourceActorId = npcData.worldActorId;
-    let importedFromCompendium = false;
-
-    if (!sourceActorId && npcData.compendiumUuid) {
-      try {
-        const result = await gmRequest("importActor", { uuid: npcData.compendiumUuid });
-        sourceActorId = result.actorId;
-        importedFromCompendium = true;
-      } catch (e) {
-        ui.notifications.error(`Failed to import creature: ${e.message}`);
-        return;
-      }
-    }
-
-    if (!sourceActorId) {
-      ui.notifications.error("Could not resolve source actor for familiar.");
-      return;
-    }
-
-    // Place token on canvas (via GM relay if player)
+    // Validate caster has a token on canvas
     const casterToken = actor.getActiveTokens()?.[0];
     if (!casterToken) {
       ui.notifications.warn("No caster token on canvas.");
@@ -384,47 +384,51 @@ export const FamiliarFeatures = {
     }
 
     const gridSize = canvas.grid?.size ?? 100;
-    const sizeMultiplier = SIZE_MAP[npcData.size?.toLowerCase()] ?? 1;
 
-    let tokenId;
-    try {
-      const result = await gmRequest("placeToken", {
-        sceneId: canvas.scene.id,
-        tokenData: {
-          name: npcData.name,
-          actorId: sourceActorId,
-          texture: { src: npcData.img || "icons/svg/mystery-man.svg" },
-          x: casterToken.document.x + gridSize,
-          y: casterToken.document.y,
-          width: sizeMultiplier,
-          height: sizeMultiplier,
-          disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY
-        }
-      });
-      tokenId = result.tokenId;
-    } catch (e) {
-      ui.notifications.error(`Failed to place familiar token: ${e.message}`);
-      if (importedFromCompendium) {
-        try { await gmRequest("deleteActor", { actorId: sourceActorId }); } catch { /* best effort */ }
-      }
+    // Resolve creature UUID (world actor OR compendium)
+    const creatureUuid = npcData.worldActorId
+      ? `Actor.${npcData.worldActorId}`
+      : npcData.compendiumUuid;
+    if (!creatureUuid) {
+      ui.notifications.error("Could not resolve creature for familiar.");
       return;
     }
 
-    // Stamp controller flags so the familiar's saves route through its caster.
-    // Atomic via updateActorFlags. Non-fatal — the familiar works without routing,
-    // and the player can Set Save Controller manually if the stamp fails.
-    try {
-      await gmRequest("updateActorFlags", {
-        actorId: sourceActorId,
-        scope:   MODULE_ID,
-        flags: {
-          controllerActorId: actor.id,
-          controllerType:    CONTROLLER_TYPES.COMPANION
-        }
-      });
-    } catch (e) {
-      console.warn(`${MODULE_ID} | Familiar | Failed to stamp controller flags on ${npcData.name}:`, e);
+    // Delegate spawn to CompanionSpawner: handles import, placeToken,
+    // flag stamping (controllerActorId + controllerType + companionMeta),
+    // combat-add, ownership grant, and chat notification.
+    const spawnResult = await CompanionSpawner.spawn({
+      caster: actor,
+      sourceId: FLAG_FAMILIAR,
+      creatureUuid,
+      tokenData: {
+        name: npcData.name,
+        texture: { src: npcData.img || "icons/svg/mystery-man.svg" },
+        x: casterToken.document.x + gridSize,
+        y: casterToken.document.y,
+        width: 1,
+        height: 1,
+        disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY,
+      },
+      meta: {
+        hd: npcData.hd ?? 1,
+        ritual: true,
+        familiarSkill,
+        importedFromCompendium: !npcData.worldActorId && !!npcData.compendiumUuid,
+      },
+      // Familiar posts its own detailed ritual chat card with HD/skill details.
+      // Suppress the engine's generic "{caster} conjures {creature} (activeFamiliar)"
+      // to avoid double chat messages.
+      suppressChat: true,
+    });
+    if (!spawnResult.success) {
+      ui.notifications.error(`Failed to conjure familiar: ${spawnResult.error ?? "unknown error"}`);
+      return;
     }
+
+    const sourceActorId = spawnResult.actorId;
+    const tokenId = spawnResult.tokenId;
+    const importedFromCompendium = !npcData.worldActorId && !!npcData.compendiumUuid;
 
     // Store familiar state
     await actor.setFlag(MODULE_ID, FLAG_FAMILIAR, {
