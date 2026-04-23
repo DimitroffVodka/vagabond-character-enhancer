@@ -113,6 +113,7 @@ import { RangeValidator } from "./range-validator.mjs";
 import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companion/save-routing-patch.mjs";
 import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
 import { CompanionTerminationManager } from "./companion/companion-termination.mjs";
+import { GatherCompanions } from "./companion/gather-companions.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -1486,6 +1487,7 @@ Hooks.once("ready", async () => {
   FamiliarFeatures.registerHooks();
   CompanionManagerTab.init();
   CompanionTerminationManager.init();
+  GatherCompanions.init();
 
   // ── Patch VagabondChatCard.npcAction to route flagged-companion action rolls
   //    through the controller's mana skill (Mysticism / Arcana). Mirrors the
