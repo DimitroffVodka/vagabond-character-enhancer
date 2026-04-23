@@ -111,6 +111,8 @@ import { FamiliarFeatures } from "./perk-features/familiar.mjs";
 import { registerSocketRelay } from "./socket-relay.mjs";
 import { RangeValidator } from "./range-validator.mjs";
 import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companion/save-routing-patch.mjs";
+import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
+import { CompanionTerminationManager } from "./companion/companion-termination.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -1482,6 +1484,8 @@ Hooks.once("ready", async () => {
   EffectOnlyHandler.registerHooks();
   SummonerFeatures.registerHooks();
   FamiliarFeatures.registerHooks();
+  CompanionManagerTab.init();
+  CompanionTerminationManager.init();
 
   // Patch modifyMovementCost to ignore walk difficulty for Treads Lightly
   const moveCostModel = CONFIG.RegionBehavior?.dataModels?.modifyMovementCost;

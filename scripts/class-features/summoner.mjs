@@ -102,11 +102,11 @@ export const SummonerFeatures = {
   _candidateCacheMaxHD: 0,
 
   registerHooks() {
-    // Inject Summon tab on character sheet renders
+    // v0.4.0: Summon tab retired — replaced by CompanionManagerTab (scripts/companion/companion-manager-tab.mjs).
+    // The full _injectSummonTab method is kept in this file for reference but is no longer called.
     Hooks.on("renderApplicationV2", (app) => {
-      if (app.document?.type === "character") {
-        this._injectSummonTab(app);
-      }
+      if (app.document?.type !== "character") return;
+      // this._injectSummonTab(app);
     });
 
     // Combat round: drain mana / tick Second Nature countdown / Guardian Force countdown
