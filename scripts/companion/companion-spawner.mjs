@@ -147,13 +147,27 @@ export const CompanionSpawner = {
     const creatureActor = game.actors.get(actorId) ?? doc;
     const sightConfig = _deriveSightFromSenses(creatureActor);
     const movementAction = _deriveDefaultMovementAction(creatureActor);
+
+    // Pull defaults from the creature's prototypeToken so the spawned token
+    // has the correct portrait, size, and FRIENDLY disposition unless the
+    // caller overrides via tokenData.
+    const proto = creatureActor?.prototypeToken;
+    const protoTexture = proto?.texture?.src
+      ? { src: proto.texture.src, scaleX: proto.texture.scaleX ?? 1, scaleY: proto.texture.scaleY ?? 1 }
+      : { src: creatureActor?.img || "icons/svg/mystery-man.svg" };
+
     const defaultTokenData = {
       actorId,
       x: casterPos.x + gridSize,
       y: casterPos.y,
+      name: creatureActor?.name ?? "Companion",
+      texture: protoTexture,
+      width: proto?.width ?? 1,
+      height: proto?.height ?? 1,
+      disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY,
       sight: sightConfig,
       movementAction,
-      ...tokenData,
+      ...tokenData, // caller overrides win (e.g. custom x/y, size, name)
     };
 
     // grantOwnershipFrom tells the GM proxy to grant OWNER on the world actor

@@ -86,13 +86,19 @@ export const BeastSpell = {
       return;
     }
 
-    // Open creature picker filtered to Beast type + remaining budget
+    // Open creature picker filtered to Beast type + remaining budget.
+    // Loads from world NPCs + vce-beasts + the system bestiary (92 beasts).
     const picked = await CreaturePicker.pick({
       title: `Beast — ${remainingHD} HD remaining of ${maxHD}`,
+      caster,
+      favoritesFlag: "beastSpellCodex",
       filter: {
         types: ["beast"],
         maxHD: remainingHD,
-        pack: "vagabond-character-enhancer.vce-beasts",
+        packs: [
+          "vagabond-character-enhancer.vce-beasts",
+          "vagabond.bestiary",
+        ],
       },
     });
     if (!picked) return; // user cancelled

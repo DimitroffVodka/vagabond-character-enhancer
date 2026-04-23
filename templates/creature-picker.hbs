@@ -1,20 +1,58 @@
 <form class="vce-creature-picker">
   <div class="vce-cp-header">
-    <input type="text" class="vce-cp-search" placeholder="Search…" autocomplete="off">
+    {{#if showSearch}}
+      <input type="text" class="vce-cp-search" placeholder="Search creatures…" autocomplete="off">
+    {{/if}}
+    {{#if maxHDLabel}}
+      <p class="vce-cp-budget">{{maxHDLabel}}{{#if hasFavorites}} · Right-click a row to favorite.{{/if}}</p>
+    {{else}}
+      {{#if hasFavorites}}
+        <p class="vce-cp-budget">Right-click a row to favorite.</p>
+      {{/if}}
+    {{/if}}
   </div>
 
-  <div class="vce-cp-list" tabindex="0">
-    {{#each creatures}}
-      <div class="vce-cp-row" data-uuid="{{uuid}}" role="button" tabindex="0">
-        <img src="{{img}}" class="vce-cp-img" alt="{{name}}">
-        <div class="vce-cp-info">
-          <div class="vce-cp-name">{{name}}</div>
-          <div class="vce-cp-meta">HD {{hd}} · {{size}} · {{sourceLabel}}</div>
-        </div>
-      </div>
-    {{else}}
-      <div class="vce-cp-empty">No creatures match the filter.</div>
-    {{/each}}
+  <div class="vce-bd-scroll" style="max-height:400px; overflow-y:auto;">
+    <table class="vce-bd-table" role="grid">
+      <thead>
+        <tr class="vce-bd-header-row">
+          {{#if hasFavorites}}<th class="vce-bd-th vce-bd-th-center" scope="col" style="width:24px;"></th>{{/if}}
+          <th class="vce-bd-th vce-bd-th-img" scope="col"></th>
+          <th class="vce-bd-th" scope="col">Creature</th>
+          <th class="vce-bd-th vce-bd-th-center" scope="col">HD</th>
+          <th class="vce-bd-th vce-bd-th-center" scope="col">Type</th>
+          <th class="vce-bd-th vce-bd-th-center" scope="col">Armor</th>
+          <th class="vce-bd-th" scope="col">Speed</th>
+          <th class="vce-bd-th" scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each creatures}}
+          <tr class="vce-cp-row" data-uuid="{{uuid}}" data-name="{{name}}" data-hd="{{hd}}" data-beingtype="{{beingType}}" role="button" tabindex="0">
+            {{#if ../hasFavorites}}
+              <td class="vce-bd-cell vce-bd-cell-center vce-cp-fav">
+                {{#if isFavorite}}
+                  <i class="fas fa-star" style="color:#d4a843;" title="Favorited — right-click to unfavorite"></i>
+                {{else}}
+                  <i class="far fa-star" style="opacity:0.35;" title="Right-click to favorite"></i>
+                {{/if}}
+              </td>
+            {{/if}}
+            <td class="vce-bd-cell vce-bd-cell-img">
+              <img src="{{img}}" class="vce-bd-beast-img" alt="{{name}}" />
+            </td>
+            <td class="vce-bd-cell"><strong>{{name}}</strong></td>
+            <td class="vce-bd-cell vce-bd-cell-center">{{hd}}</td>
+            <td class="vce-bd-cell vce-bd-cell-center">{{beingType}}</td>
+            <td class="vce-bd-cell vce-bd-cell-center">{{armor}}</td>
+            <td class="vce-bd-cell">{{speedStr}}</td>
+            <td class="vce-bd-cell vce-bd-cell-actions">{{actionsStr}}</td>
+          </tr>
+        {{else}}
+          <tr><td colspan="8" class="vce-bd-cell" style="text-align:center;opacity:0.6;padding:12px;">No creatures match the filter.</td></tr>
+        {{/each}}
+      </tbody>
+    </table>
   </div>
 
   <footer class="vce-cp-footer">

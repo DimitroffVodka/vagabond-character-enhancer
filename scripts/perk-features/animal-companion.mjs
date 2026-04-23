@@ -132,10 +132,15 @@ export const AnimalCompanion = {
 
     const picked = await CreaturePicker.pick({
       title: `${actor.name} — Tame Animal Companion (HD ≤ ${maxHD})`,
+      caster: actor,
+      favoritesFlag: "animalCompanionCodex",
       filter: {
         types: ["beast"],
         maxHD,
-        pack: "vagabond-character-enhancer.vce-beasts",
+        packs: [
+          "vagabond-character-enhancer.vce-beasts",
+          "vagabond.bestiary",
+        ],
       },
     });
     if (!picked) return;
