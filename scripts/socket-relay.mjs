@@ -143,6 +143,21 @@ async function _handleRequest(data) {
       return { ok: true, created: created.map(t => t.id) };
     }
 
+    case "createActor": {
+      // Create a new world actor from raw data (no compendium lookup).
+      // Used by the Animate spell adapter to spawn a synthetic "Animated X"
+      // actor whose stats are derived from an inventory item, not pulled
+      // from any pack.
+      if (!data.actorData) return { error: "createActor: actorData required" };
+      const actorData = { ...data.actorData };
+      if (data.userId) {
+        actorData.ownership = { ...(actorData.ownership || {}), [data.userId]: 3 };
+      }
+      const [created] = await Actor.create([actorData], { renderSheet: false });
+      if (!created) return { error: "Actor.create returned no result" };
+      return { actorId: created.id };
+    }
+
     case "deleteActor": {
       const actor = game.actors.get(data.actorId);
       if (actor) {
