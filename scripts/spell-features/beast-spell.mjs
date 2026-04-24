@@ -29,43 +29,95 @@ const SOURCE_ID = "spell-beast";
 export const BeastSpell = {
   init() {
     Hooks.on("createChatMessage", (msg) => this._onChatMessage(msg));
-    Hooks.on("updateActor", (actor, changes) => this._onFocusToggle(actor, changes));
+    // Snapshot old focus.spellIds BEFORE the update lands, so we can reliably
+    // detect whether Beast was just added or removed.
+    Hooks.on("preUpdateActor", (actor, changes, options) => {
+      if (actor.type !== "character") return;
+      const touchesFocus = foundry.utils.getProperty(changes, "system.focus.spellIds") !== undefined;
+      if (!touchesFocus) return;
+      options._vceBeastOldFocusIds = [...(actor.system?.focus?.spellIds ?? [])];
+    });
+    Hooks.on("updateActor", (actor, changes, options) => this._onFocusToggle(actor, changes, options));
     this._registerDismissHandler();
     this._registerManaDrain();
     log("BeastSpell", "Beast spell adapter registered.");
   },
 
   /**
-   * Detect when a PC adds a Beast spell to system.focus.spellIds (i.e.,
-   * clicks the "Focus this spell" button) and trigger the summon flow.
-   * Cancels the focus if the player cancels the picker.
+   * Detect focus toggles on the Beast spell.
+   *   - Added to system.focus.spellIds → trigger summon flow (open picker)
+   *   - Removed from system.focus.spellIds → dismiss all active summons
+   * Uses the old focus array snapshotted by preUpdateActor.
    */
-  async _onFocusToggle(actor, changes) {
+  async _onFocusToggle(actor, changes, options) {
     if (actor.type !== "character") return;
     if (!actor.isOwner) return;
     const newSpellIds = foundry.utils.getProperty(changes, "system.focus.spellIds");
     if (!Array.isArray(newSpellIds)) return;
 
-    // Find the Beast spell on the actor
     const beastSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "beast");
     if (!beastSpell) return;
 
-    // Detect ADD: beastSpell is in newSpellIds but wasn't in the previous state
-    const wasActive = (actor._source?.system?.focus?.spellIds ?? []).includes(beastSpell.id);
+    const oldSpellIds = options?._vceBeastOldFocusIds ?? [];
+    const wasActive = oldSpellIds.includes(beastSpell.id);
     const nowActive = newSpellIds.includes(beastSpell.id);
-    if (wasActive || !nowActive) return;
 
-    // Skip if we're already handling a cast (prevents double-trigger on
-    // Cast-then-Focus sequence — the createChatMessage hook will run first)
-    if (this._handlingTrigger?.has(actor.id)) return;
-
-    // Trigger summon flow
-    (this._handlingTrigger ??= new Set()).add(actor.id);
-    try {
-      await this.trigger(actor);
-    } finally {
-      this._handlingTrigger.delete(actor.id);
+    // ADDED — Focus just clicked ON
+    if (!wasActive && nowActive) {
+      if (this._handlingTrigger?.has(actor.id)) return;
+      (this._handlingTrigger ??= new Set()).add(actor.id);
+      try {
+        await this.trigger(actor);
+      } finally {
+        this._handlingTrigger.delete(actor.id);
+      }
+      return;
     }
+
+    // REMOVED — Focus just clicked OFF
+    if (wasActive && !nowActive) {
+      const active = CompanionSpawner.getCompanionsFor(actor).filter(c => c.sourceId === SOURCE_ID);
+      if (!active.length) return;
+      // Dismiss all active beasts. _dropFocusAndDismiss also unsets spellIds
+      // defensively, but here the player already did that via the UI.
+      for (const c of active) {
+        await CompanionSpawner.dismiss(c.actor, { reason: "focus-dropped" });
+      }
+      try { await FocusManager.releaseFeatureFocus(actor, FOCUS_KEY); }
+      catch (e) { log("BeastSpell", `Could not release focus slot: ${e.message}`); }
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+          <div class="card-body"><section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <strong>${actor.name}</strong> drops Focus on <strong>Beast</strong>; all summons depart.
+            </div>
+          </section></div>
+        </div>`,
+      });
+    }
+  },
+
+  /**
+   * Check whether a PC is currently focused on the Beast spell.
+   * Unified check across BOTH focus trackers:
+   *   1. System `system.focus.spellIds` — populated by the "Focus this spell"
+   *      button on the spell card
+   *   2. VCE `featureFocus` flag array — populated by BeastSpell's own focus
+   *      acquisition dialog (after casting via the tab button)
+   * Either indicates active Focus for upkeep purposes.
+   */
+  _isFocusingBeast(actor) {
+    // System focus
+    const beastSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "beast");
+    if (beastSpell) {
+      const spellIds = actor.system?.focus?.spellIds ?? [];
+      if (spellIds.includes(beastSpell.id)) return true;
+    }
+    // VCE focus
+    const ff = actor.getFlag(MODULE_ID, "featureFocus") ?? [];
+    if (ff.some(f => f.key === FOCUS_KEY)) return true;
+    return false;
   },
 
   /**
@@ -78,38 +130,59 @@ export const BeastSpell = {
       if (!("round" in changes)) return;
       if (!game.user.isGM && game.users.find(u => u.isGM && u.active)) return;
 
-      for (const combatant of combat.combatants) {
-        const actor = combatant.actor;
-        if (!actor || actor.type !== "character") continue;
+      // Scan ALL character actors, not just combatants — a caster focused on
+      // Beast from outside combat (rare, but legal) shouldn't escape upkeep,
+      // and hooks fire on every round tick regardless.
+      const casters = game.actors.filter(a => a.type === "character" && this._isFocusingBeast(a));
 
-        const featureFocus = actor.getFlag(MODULE_ID, "featureFocus") || [];
-        const hasFocus = featureFocus.some(f => f.key === FOCUS_KEY);
-        if (!hasFocus) continue;
-
+      for (const actor of casters) {
         const mana = Number(actor.system?.mana?.current ?? 0) || 0;
         if (mana < 1) {
-          // Insufficient mana — banish every active Beast summon
-          const active = CompanionSpawner.getCompanionsFor(actor)
-            .filter(c => c.sourceId === SOURCE_ID);
-          for (const c of active) {
-            await CompanionSpawner.dismiss(c.actor, { reason: "out-of-mana" });
-          }
-          ChatMessage.create({
-            speaker: ChatMessage.getSpeaker({ actor }),
-            content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
-              <div class="card-body"><section class="content-body">
-                <div class="card-description" style="text-align:center;">
-                  <strong>${actor.name}</strong>'s Beast summons depart — insufficient Mana to maintain Focus.
-                </div>
-              </section></div>
-            </div>`,
-          });
+          // Insufficient mana — banish every active Beast summon AND clear
+          // any system focus tracking so the spell card reflects drop-focus.
+          await this._dropFocusAndDismiss(actor, "out-of-mana");
           continue;
         }
         await actor.update({ "system.mana.current": mana - 1 });
         log("BeastSpell", `${actor.name}: 1 Mana drained for Beast focus (${mana} → ${mana - 1})`);
       }
     });
+  },
+
+  /**
+   * Drop system focus on Beast (remove from spellIds), release the VCE focus
+   * slot, and dismiss all active Beast summons. Called when the caster runs
+   * out of mana or the player manually un-focuses.
+   */
+  async _dropFocusAndDismiss(actor, reason) {
+    // Remove Beast from system focus list
+    const beastSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "beast");
+    const ids = actor.system?.focus?.spellIds ?? [];
+    if (beastSpell && ids.includes(beastSpell.id)) {
+      const next = ids.filter(id => id !== beastSpell.id);
+      await actor.update({ "system.focus.spellIds": next });
+    }
+    // Release VCE focus slot (if held)
+    try { await FocusManager.releaseFeatureFocus(actor, FOCUS_KEY); }
+    catch (e) { log("BeastSpell", `Could not release focus slot: ${e.message}`); }
+    // Dismiss every active beast summon
+    const active = CompanionSpawner.getCompanionsFor(actor).filter(c => c.sourceId === SOURCE_ID);
+    for (const c of active) {
+      await CompanionSpawner.dismiss(c.actor, { reason });
+    }
+    if (active.length) {
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+          <div class="card-body"><section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <strong>${actor.name}</strong>'s Beast summons depart —
+              ${reason === "out-of-mana" ? "insufficient Mana to maintain Focus" : "Focus dropped"}.
+            </div>
+          </section></div>
+        </div>`,
+      });
+    }
   },
 
   _registerDismissHandler() {
@@ -221,15 +294,14 @@ export const BeastSpell = {
       content: `<div class="vce-companion-spawned"><strong>${caster.name}</strong> casts <strong>Beast</strong> and summons: <em>${names}</em>.</div>`,
     });
 
-    // Focus acquisition. Beast requires 1 Mana/Turn upkeep. Confirm with the
-    // caster before taking the slot — if they decline, banish the summoned
-    // beasts (spell can't function without Focus per rulebook).
-    const hasFocus = (caster.getFlag(MODULE_ID, "featureFocus") || [])
-      .some(f => f.key === FOCUS_KEY);
-    if (!hasFocus) {
+    // Focus acquisition. Beast requires 1 Mana/Turn upkeep. If the caster
+    // ALREADY focused Beast via the system's "Focus this spell" button (our
+    // updateActor hook trigger path), their system.focus.spellIds already has
+    // Beast — no need to prompt. Only prompt if neither tracker shows focus.
+    if (!this._isFocusingBeast(caster)) {
       const acquire = await foundry.applications.api.DialogV2.confirm({
         window: { title: "Beast — Focus" },
-        content: `<p>Acquire a Focus slot to maintain <strong>${summoned} beast${summoned === 1 ? "" : "s"}</strong>?</p>
+        content: `<p>Focus on Beast to maintain <strong>${summoned} beast${summoned === 1 ? "" : "s"}</strong>?</p>
                   <p><em>Costs 1 Mana per Turn of upkeep. Cancelling dismisses the summoned beasts.</em></p>`,
         rejectClose: false,
       });
@@ -241,6 +313,22 @@ export const BeastSpell = {
           await CompanionSpawner.dismiss(c.actor, { reason: "focus-declined" });
         }
         return;
+      }
+      // Add Beast to the system's focus list so the spell card shows focused
+      // state and the mana drain ticks. Also acquire VCE focus slot so the
+      // caster's featureFocus panel is consistent.
+      const beastSpell = caster.items.find(i => i.type === "spell" && i.name.toLowerCase() === "beast");
+      if (beastSpell) {
+        const ids = caster.system?.focus?.spellIds ?? [];
+        if (!ids.includes(beastSpell.id)) {
+          // Suppress the focus-toggle hook's summon re-trigger (we're in it)
+          (this._handlingTrigger ??= new Set()).add(caster.id);
+          try {
+            await caster.update({ "system.focus.spellIds": [...ids, beastSpell.id] });
+          } finally {
+            this._handlingTrigger.delete(caster.id);
+          }
+        }
       }
       try {
         await FocusManager.acquireFeatureFocus(
