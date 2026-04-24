@@ -21,23 +21,23 @@
     {{/if}}
   </div>
 
-  <div class="vce-bd-scroll" style="max-height:400px; overflow-y:auto;">
-    <table class="vce-bd-table" role="grid">
+  <div class="vce-bd-scroll vce-cp-scroll" style="max-height:400px; overflow-y:auto;">
+    <table class="vce-bd-table vce-cp-table" role="grid">
       <thead>
         <tr class="vce-bd-header-row">
-          {{#if hasFavorites}}<th class="vce-bd-th vce-bd-th-center" scope="col" style="width:24px;"></th>{{/if}}
+          {{#if hasFavorites}}<th class="vce-bd-th vce-bd-th-center vce-cp-sort" data-sort="fav" scope="col" style="width:24px;" title="Sort by favorite">★</th>{{/if}}
           <th class="vce-bd-th vce-bd-th-img" scope="col"></th>
-          <th class="vce-bd-th" scope="col">Creature</th>
-          <th class="vce-bd-th vce-bd-th-center" scope="col">HD</th>
-          <th class="vce-bd-th vce-bd-th-center" scope="col">Type</th>
-          <th class="vce-bd-th vce-bd-th-center" scope="col">Armor</th>
-          <th class="vce-bd-th" scope="col">Speed</th>
+          <th class="vce-bd-th vce-cp-sort" data-sort="name" scope="col">Creature <span class="vce-cp-sort-arrow"></span></th>
+          <th class="vce-bd-th vce-bd-th-center vce-cp-sort" data-sort="hd" scope="col">HD <span class="vce-cp-sort-arrow"></span></th>
+          <th class="vce-bd-th vce-bd-th-center vce-cp-sort" data-sort="beingtype" scope="col">Type <span class="vce-cp-sort-arrow"></span></th>
+          <th class="vce-bd-th vce-bd-th-center vce-cp-sort" data-sort="armor" scope="col">Armor <span class="vce-cp-sort-arrow"></span></th>
+          <th class="vce-bd-th vce-cp-sort" data-sort="speed" scope="col">Speed <span class="vce-cp-sort-arrow"></span></th>
           <th class="vce-bd-th" scope="col">Actions</th>
         </tr>
       </thead>
       <tbody>
         {{#each creatures}}
-          <tr class="vce-cp-row" data-uuid="{{uuid}}" data-name="{{name}}" data-hd="{{hd}}" data-beingtype="{{beingType}}" role="button" tabindex="0">
+          <tr class="vce-cp-row" data-uuid="{{uuid}}" data-name="{{name}}" data-hd="{{hd}}" data-beingtype="{{beingType}}" data-armor="{{armor}}" data-speed="{{speed}}" data-favorite="{{#if isFavorite}}1{{else}}0{{/if}}" role="button" tabindex="0">
             {{#if ../hasFavorites}}
               <td class="vce-bd-cell vce-bd-cell-center vce-cp-fav">
                 {{#if isFavorite}}

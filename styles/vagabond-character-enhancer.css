@@ -1970,6 +1970,38 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   cursor: pointer;
 }
 
+/* CreaturePicker sticky header + sortable columns */
+.vce-cp-scroll {
+  position: relative;
+}
+.vce-cp-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--vagabond-c-inset-2, #2a2a2a);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 0 0 var(--vagabond-c-tan, #a2a2a2);
+}
+.vce-cp-sort {
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s;
+}
+.vce-cp-sort:hover {
+  background: var(--vagabond-c-tan-lite, rgba(172,172,172,0.35));
+}
+.vce-cp-sort-arrow {
+  display: inline-block;
+  min-width: 12px;
+  font-size: 10px;
+  color: var(--vce-accent, #d4a843);
+  opacity: 0;
+  margin-left: 2px;
+}
+.vce-cp-sort.vce-cp-sort-active .vce-cp-sort-arrow {
+  opacity: 1;
+}
+
 /* CreaturePicker multi-select row highlight */
 .vce-cp-row.vce-cp-selected {
   background: rgba(212, 168, 67, 0.18) !important;

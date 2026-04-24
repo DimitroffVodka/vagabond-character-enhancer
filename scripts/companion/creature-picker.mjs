@@ -200,6 +200,23 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     super._onRender?.(context, options);
     const root = this.element;
 
+    // Sortable columns — click a header to sort; click again to toggle direction.
+    // Favorites always float to the top regardless of sort direction, so the
+    // Creature Codex stays useful.
+    const tbody = root.querySelector(".vce-cp-table tbody");
+    root.querySelectorAll(".vce-cp-sort").forEach(th => {
+      th.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        const key = th.dataset.sort;
+        if (!key || !tbody) return;
+        const prevKey = this._sortKey;
+        const prevDir = this._sortDir ?? "asc";
+        this._sortKey = key;
+        this._sortDir = (prevKey === key && prevDir === "asc") ? "desc" : "asc";
+        this._applySort(root, tbody);
+      });
+    });
+
     // Search filter (live)
     const search = root.querySelector(".vce-cp-search");
     search?.addEventListener("input", (ev) => {
@@ -351,6 +368,55 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     ui.notifications.info(`${isFav ? "Removed" : "Added"} ${name} ${isFav ? "from" : "to"} favorites.`);
+  }
+
+  /**
+   * Reorder tbody rows according to the current sort key + direction.
+   * Favorites always come first (within their group, the chosen sort applies).
+   * Numeric columns (hd, armor, speed) sort as numbers; others lexically.
+   */
+  _applySort(root, tbody) {
+    const key = this._sortKey;
+    const dir = this._sortDir === "desc" ? -1 : 1;
+    const rows = Array.from(tbody.querySelectorAll(".vce-cp-row"));
+
+    const numericKeys = new Set(["hd", "armor", "speed"]);
+
+    rows.sort((a, b) => {
+      // Favorites first regardless of sort
+      const af = a.dataset.favorite === "1" ? 0 : 1;
+      const bf = b.dataset.favorite === "1" ? 0 : 1;
+      if (af !== bf) return af - bf;
+
+      let av, bv;
+      if (key === "fav") {
+        // Fav column: already handled above; within-group fall back to name
+        return a.dataset.name.localeCompare(b.dataset.name) * dir;
+      }
+      if (numericKeys.has(key)) {
+        av = Number(a.dataset[key]) || 0;
+        bv = Number(b.dataset[key]) || 0;
+        return (av - bv) * dir;
+      }
+      av = (a.dataset[key] ?? "").toLowerCase();
+      bv = (b.dataset[key] ?? "").toLowerCase();
+      return av.localeCompare(bv) * dir;
+    });
+
+    // Re-append in sorted order
+    for (const row of rows) tbody.appendChild(row);
+
+    // Update arrow indicators
+    root.querySelectorAll(".vce-cp-sort").forEach(th => {
+      const arrow = th.querySelector(".vce-cp-sort-arrow");
+      if (th.dataset.sort === key) {
+        th.classList.add("vce-cp-sort-active");
+        if (arrow) arrow.textContent = dir === 1 ? "▲" : "▼";
+      } else {
+        th.classList.remove("vce-cp-sort-active");
+        if (arrow) arrow.textContent = "";
+      }
+    });
   }
 
   async close(options) {
