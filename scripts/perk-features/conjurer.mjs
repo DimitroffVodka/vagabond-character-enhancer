@@ -180,6 +180,13 @@ export const ConjurerPerk = {
   },
 
   /**
+   * Public entry point — called from the Companions tab action bar.
+   */
+  async trigger(actor) {
+    return this.showConjureDialog(actor);
+  },
+
+  /**
    * Show the defeated-creature picker dialog. Player picks one, pays Mana = HD,
    * and we spawn via CompanionSpawner.
    */

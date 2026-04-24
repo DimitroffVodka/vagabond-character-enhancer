@@ -123,6 +123,13 @@ export const AnimalCompanion = {
   },
 
   /**
+   * Public entry point — called from the Companions tab action bar.
+   */
+  async trigger(actor) {
+    return this.tameCompanion(actor);
+  },
+
+  /**
    * Open the creature picker to tame a new beast. Replaces any existing
    * companion (rulebook: "taming another beast" replaces previous).
    */

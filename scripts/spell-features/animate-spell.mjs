@@ -65,6 +65,15 @@ export const AnimateSpell = {
     try { await message.setFlag(MODULE_ID, "animateSpellHandled", true); }
     catch { /* non-fatal */ }
 
+    await this.trigger(caster);
+  },
+
+  /**
+   * Public entry point — called from the Companions tab action bar as well
+   * as from the createChatMessage hook.
+   * @param {Actor} caster
+   */
+  async trigger(caster) {
     await this._animateObject(caster);
   },
 

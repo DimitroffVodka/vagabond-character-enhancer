@@ -68,6 +68,16 @@ export const BeastSpell = {
     try { await message.setFlag(MODULE_ID, "beastSpellHandled", true); }
     catch { /* non-fatal */ }
 
+    await this.trigger(caster);
+  },
+
+  /**
+   * Public entry point — called from the Companions tab action bar as well
+   * as from the createChatMessage hook. Opens the multi-select picker and
+   * spawns the chosen beasts.
+   * @param {Actor} caster
+   */
+  async trigger(caster) {
     await this._spawnBeast(caster);
   },
 

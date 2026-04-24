@@ -122,6 +122,13 @@ export const ReanimatorPerk = {
     });
   },
 
+  /**
+   * Public entry point — called from the Companions tab action bar.
+   */
+  async trigger(actor) {
+    return this.performRitual(actor);
+  },
+
   async performRitual(actor) {
     const level = Number(actor.system?.level ?? 1) || 1;
     const maxHD = level;

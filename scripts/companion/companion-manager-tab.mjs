@@ -23,16 +23,69 @@ import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { CompanionSpawner } from "./companion-spawner.mjs";
 import { SummonerFeatures } from "../class-features/summoner.mjs";
 import { FamiliarFeatures } from "../perk-features/familiar.mjs";
+import { BeastSpell } from "../spell-features/beast-spell.mjs";
+import { RaiseSpell } from "../spell-features/raise-spell.mjs";
+import { AnimateSpell } from "../spell-features/animate-spell.mjs";
+import { AnimalCompanion } from "../perk-features/animal-companion.mjs";
+import { ReanimatorPerk } from "../perk-features/reanimator.mjs";
+import { ConjurerPerk } from "../perk-features/conjurer.mjs";
 
 /**
- * Per-PC conjure-dialog locks.
- * Prevents double-clicking "Conjure Summon" / "Conjure Familiar" from opening
- * two dialogs at once. Keys are PC actor IDs; presence means a dialog is open.
+ * Registry of spawn-capable sources the tab action bar renders buttons for.
+ * Each entry decides whether the PC can use it and exposes an onClick.
+ * Source-agnostic: this is the single place to wire new adapters into the UI.
  */
-const _openConjureLocks = {
-  summoner: new Set(),
-  familiar: new Set(),
-};
+const ACTION_BAR_ENTRIES = [
+  // Class feature
+  {
+    id: "summon",
+    label: "Summon",
+    icon: "fas fa-paw",
+    available: (pc, features, spells) => !!features?.summoner_creatureCodex,
+    onClick: (pc) => SummonerFeatures.showConjureDialog(pc),
+  },
+  // Spells — listed by exact spell item name (case-insensitive match)
+  {
+    id: "beast", label: "Beast", icon: "fas fa-dragon",
+    available: (pc, features, spells) => spells.has("beast"),
+    onClick: (pc) => BeastSpell.trigger(pc),
+  },
+  {
+    id: "raise", label: "Raise", icon: "fas fa-skull",
+    available: (pc, features, spells) => spells.has("raise"),
+    onClick: (pc) => RaiseSpell.trigger(pc),
+  },
+  {
+    id: "animate", label: "Animate", icon: "fas fa-hat-wizard",
+    available: (pc, features, spells) => spells.has("animate"),
+    onClick: (pc) => AnimateSpell.trigger(pc),
+  },
+  // Perks
+  {
+    id: "familiar", label: "Familiar", icon: "fas fa-feather",
+    available: (pc, features, spells) => !!features?.perk_familiar,
+    onClick: (pc) => FamiliarFeatures.showConjureDialog(pc),
+  },
+  {
+    id: "animal-companion", label: "Animal Companion", icon: "fas fa-dog",
+    available: (pc, features, spells) => !!features?.perk_animalCompanion,
+    onClick: (pc) => AnimalCompanion.trigger(pc),
+  },
+  {
+    id: "conjurer", label: "Conjurer", icon: "fas fa-eye",
+    available: (pc, features, spells) => !!features?.perk_conjurer,
+    onClick: (pc) => ConjurerPerk.trigger(pc),
+  },
+  {
+    id: "reanimator", label: "Reanimator", icon: "fas fa-skull-crossbones",
+    available: (pc, features, spells) => !!features?.perk_reanimator,
+    onClick: (pc) => ReanimatorPerk.trigger(pc),
+  },
+];
+
+/** Per-PC async locks so double-clicking a button doesn't open two dialogs. */
+const _triggerLocks = new Map(); // key: `${pcId}:${entryId}` → true while open
+
 
 export const CompanionManagerTab = {
   init() {
@@ -158,23 +211,30 @@ export const CompanionManagerTab = {
   },
 
   /**
-   * Build the top-of-tab action bar — feature-gated conjure buttons.
-   * Only shows buttons for the features this PC actually has.
+   * Build the top-of-tab action bar. Enumerates ACTION_BAR_ENTRIES and
+   * renders a button for every source the PC has access to — class features,
+   * spells (detected by item name), perks. Button label is the spell/perk
+   * name itself (not "Conjure X").
    * @param {Actor} pc
-   * @returns {string} HTML fragment (empty if PC has no conjure-capable features)
+   * @returns {string} HTML fragment (empty if PC has no spawn-capable sources)
    */
   _buildActionBarHTML(pc) {
     const features = getFeatures(pc) ?? {};
+    // Index the PC's spells by lowercased name for O(1) lookup from entries
+    const spells = new Set(
+      pc.items
+        .filter(i => i.type === "spell")
+        .map(i => i.name.toLowerCase())
+    );
+
     const buttons = [];
-    if (features.summoner_creatureCodex) {
-      buttons.push(`<button type="button" class="vce-companion-conjure-btn" data-action="conjure-summon">
-        <i class="fas fa-paw"></i> Conjure Summon
-      </button>`);
-    }
-    if (features.perk_familiar) {
-      buttons.push(`<button type="button" class="vce-companion-conjure-btn" data-action="conjure-familiar">
-        <i class="fas fa-feather"></i> Conjure Familiar
-      </button>`);
+    for (const entry of ACTION_BAR_ENTRIES) {
+      if (!entry.available(pc, features, spells)) continue;
+      buttons.push(
+        `<button type="button" class="vce-companion-conjure-btn" data-action-id="${entry.id}">
+          <i class="${entry.icon}"></i> ${entry.label}
+        </button>`
+      );
     }
     if (!buttons.length) return "";
     return `<div class="vce-companion-actions-bar">${buttons.join("")}</div>`;
@@ -369,29 +429,30 @@ export const CompanionManagerTab = {
   },
 
   _bindEvents(panel, pc) {
-    // --- Action bar buttons (Conjure Summon / Conjure Familiar) ---
-    // Lock prevents double-clicking from opening two dialogs. showConjureDialog
-    // returns a Promise that resolves on close/cancel/pick, so the lock clears
-    // naturally when the dialog finishes.
-    panel.querySelector('[data-action="conjure-summon"]')?.addEventListener("click", async (ev) => {
-      ev.preventDefault();
-      if (_openConjureLocks.summoner.has(pc.id)) return;
-      _openConjureLocks.summoner.add(pc.id);
-      try {
-        await SummonerFeatures.showConjureDialog(pc);
-      } finally {
-        _openConjureLocks.summoner.delete(pc.id);
-      }
-    });
-    panel.querySelector('[data-action="conjure-familiar"]')?.addEventListener("click", async (ev) => {
-      ev.preventDefault();
-      if (_openConjureLocks.familiar.has(pc.id)) return;
-      _openConjureLocks.familiar.add(pc.id);
-      try {
-        await FamiliarFeatures.showConjureDialog(pc);
-      } finally {
-        _openConjureLocks.familiar.delete(pc.id);
-      }
+    // --- Action bar buttons (every spawn-capable source the PC has access to) ---
+    // Per-button async lock via _triggerLocks so double-clicking doesn't open
+    // two dialogs. Each adapter's trigger() returns a Promise that resolves
+    // when the dialog finishes (close/cancel/pick).
+    panel.querySelectorAll(".vce-companion-conjure-btn").forEach(btn => {
+      const entryId = btn.dataset.actionId;
+      const entry = ACTION_BAR_ENTRIES.find(e => e.id === entryId);
+      if (!entry) return;
+      btn.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        const key = `${pc.id}:${entryId}`;
+        if (_triggerLocks.has(key)) return;
+        _triggerLocks.set(key, true);
+        btn.disabled = true;
+        try {
+          await entry.onClick(pc);
+        } catch (e) {
+          log("CompanionManagerTab", `Action "${entryId}" failed: ${e.message}`);
+          ui.notifications.error(`${entry.label}: ${e.message}`);
+        } finally {
+          _triggerLocks.delete(key);
+          btn.disabled = false;
+        }
+      });
     });
 
     panel.querySelectorAll(".vce-companion-card").forEach(card => {
