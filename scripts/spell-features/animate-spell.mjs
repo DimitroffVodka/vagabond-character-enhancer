@@ -300,34 +300,20 @@ export const AnimateSpell = {
   /**
    * Derive Object Armor from an inventory item per Core Rulebook p. 12.
    *
-   * Mapping from Vagabond's item schema:
-   *   - `metal` ∈ {none, common, coldIron, silver, adamant, mythral, orichalcum}
-   *   - `equipmentType` ∈ {weapon, armor, gear, ...}
-   *   - `armorType` ∈ {light, medium, heavy}   (armor items only)
+   * Picker already filters to ≤1 Slot items — virtually all 1-slot
+   * weapons in the game are metal (daggers, shortswords, handguns,
+   * katars, handaxes, etc.), so we just treat weapons as Heavy (3) by
+   * default and let special metals bump it up.
    *
-   * Rulebook materials → Armor value:
-   *   Fragile (cloth, paper, glass, crystal)    → 0
-   *   Light   (hide, leather, wood)             → 1
-   *   Medium  (bone, chain, stone)              → 2
-   *   Heavy   (metal)                           → 3
-   *   Dense metal                               → 4
-   *   Titanic metal                             → 5
-   *   Near-Indestructible metal                 → 6
+   * Vagabond `metal` field (item.system.metal) tier mapping:
+   *   none / common / coldIron / silver → Heavy  (3)  baseline metal
+   *   mythral                           → Dense  (4)
+   *   orichalcum                        → Titanic (5)
+   *   adamant                           → Near-Indestructible (6)
    *
-   * First preference is the explicit `metal` field. In the stock
-   * compendium, however, EVERY weapon ships with `metal: "none"` — so
-   * falling back to "non-metal weapon = Light 1" would give a longsword
-   * Armor 1, which is clearly wrong. When `metal === "none"`, we consult
-   * name-based keyword heuristics that cover the common cases:
-   *
-   *   "glass" / "bottle" / "crystal" / "mirror"      → Fragile (0)
-   *   "sword" / "axe" / "hammer" / "mace" / "gun" /  → Heavy  (3)
-   *   "dagger" / "spear" / "pike" / "lance" / ...
-   *   "bow" / "staff" / "club" / "whip" / "sling" /  → Light  (1)
-   *   "net" / "rope"
-   *
-   * User-customized items with `metal` explicitly set bypass the
-   * keyword path entirely.
+   * Armor items honor armorType (light/medium/heavy → 1/2/3).
+   * Non-weapon, non-armor gear (potions, scrolls, bottles) defaults to
+   * Fragile (0) since most ≤1-slot gear is exactly that.
    *
    * @param {Item} item
    * @returns {number} Armor 0-6
@@ -335,42 +321,17 @@ export const AnimateSpell = {
   _deriveObjectArmor(item) {
     const sys = item?.system ?? {};
     const metal = sys.metal ?? "none";
-
-    // Honor explicit metal setting first (user customization).
-    if (metal === "orichalcum") return 6;                       // Near-Indestructible
-    if (metal === "adamant" || metal === "mythral") return 4;   // Dense
-    if (metal !== "none") return 3;                              // Heavy
-
     const isWeapon = item.type === "equipment" && sys.equipmentType === "weapon";
     const isArmor = item.type === "equipment" && sys.equipmentType === "armor";
+
+    // Special metals bump Heavy up the tier ladder
+    if (metal === "adamant") return 6;     // Near-Indestructible
+    if (metal === "orichalcum") return 5;  // Titanic
+    if (metal === "mythral") return 4;     // Dense
+
+    if (isWeapon) return 3;                // Heavy metal default for weapons
     if (isArmor) return ({ light: 1, medium: 2, heavy: 3 })[sys.armorType] ?? 1;
-
-    // Keyword fallback — compendium items all ship with metal=none, so
-    // item.name is our best signal for what the item is actually made of.
-    const n = (item.name ?? "").toLowerCase();
-    const has = (...words) => words.some(w => n.includes(w));
-
-    if (has("glass", "crystal", "mirror", "scroll", "paper", "parchment")) return 0;
-
-    if (has(
-      "sword", "axe", "hammer", "mace", "dagger", "spear", "pike", "lance",
-      "halberd", "morningstar", "flail", "javelin", "gauntlet", "katar",
-      "shotgun", "rifle", "handgun", "pistol", "revolver", " gun",
-      "shield", "buckler", "caestus", "arbalest", "knife", "scimitar",
-      "rapier", "poleblade", "lucerne", "warpick", "warhammer", "glaive",
-      "trident", "mace", "chain", "cleaver", "sabre", "saber"
-    )) return 3;
-
-    if (has(
-      "bow", "staff", "club", "whip", "sling", "net", "rope", "stave",
-      "garotte", "garrote", "darts", "boomerang", "wand", "rod"
-    )) return 1;
-
-    // Unmatched weapon → wood/leather default (safe middle).
-    if (isWeapon) return 1;
-
-    // Non-weapon, non-armor gear (waterskin, rations, potions) → Fragile.
-    return 0;
+    return 0;                               // Fragile default for misc gear
   },
 
   /**
