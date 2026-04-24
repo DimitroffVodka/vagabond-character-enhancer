@@ -159,20 +159,23 @@ export const RaiseSpell = {
 
   /**
    * Infesting Burst post-picker checklist. Returns a NEW picks array with
-   * marked entries swapped to the Boomer UUID (HD 3), or null if the user
-   * cancels. Validates total HD against remainingBudget after substitution.
+   * marked entries swapped to the Boomer UUID (HD 3 stats), or null if the
+   * user cancels.
+   *
+   * Rulebook: "you can choose to raise them up as a Boomer" — the HD budget
+   * is spent when the picker closes; substitution is a stat swap with no
+   * additional HD cost. A HD 1 corpse marked as Boomer becomes a HD 3 Boomer
+   * without busting budget.
    *
    * @param {Array<{uuid, name, hd}>} picks - original picks from CreaturePicker
-   * @param {number} remainingBudget - caster's remaining HD budget for this cast
    * @returns {Promise<Array<{uuid, name, hd, isBoomer}> | null>}
    */
-  async _promptInfestingBurst(picks, remainingBudget) {
+  async _promptInfestingBurst(picks) {
     const BOOMER_HD = 3;
     const rows = picks.map((p, i) => `
       <label class="vce-ib-row" style="display:flex; align-items:center; gap:10px; padding:6px 4px; border-bottom:1px dotted rgba(255,255,255,0.15);">
-        <input type="checkbox" name="pick-${i}" data-idx="${i}" data-orig-hd="${p.hd ?? 0}" />
-        <span style="flex:1;"><strong>${p.name}</strong> <span style="opacity:0.6;font-size:11px;">(original HD ${p.hd ?? 0})</span></span>
-        <span class="vce-ib-hd-note" style="font-size:11px; opacity:0.7;">→ HD ${p.hd ?? 0}</span>
+        <input type="checkbox" name="pick-${i}" data-idx="${i}" />
+        <span style="flex:1;"><strong>${p.name}</strong> <span style="opacity:0.6;font-size:11px;">(HD ${p.hd ?? 0})</span></span>
       </label>
     `).join("");
 
@@ -180,9 +183,8 @@ export const RaiseSpell = {
       <form class="vce-infesting-burst">
         <p><strong>Infesting Burst</strong> — Mark any raises to become <strong>Zombie Boomers</strong> (HD ${BOOMER_HD}, explodes for 2d6 in Near aura then dies).</p>
         <div class="vce-ib-list">${rows}</div>
-        <p class="vce-ib-budget" style="margin-top:8px; font-size:12px;">
-          Budget remaining: <strong>${remainingBudget}</strong> HD &nbsp;·&nbsp;
-          Current pick HD: <strong><span class="vce-ib-used">${picks.reduce((s, p) => s + (p.hd ?? 0), 0)}</span></strong>
+        <p class="vce-ib-hint" style="margin-top:8px; font-size:11px; opacity:0.7; font-style:italic;">
+          Stat substitution only — HD budget was spent in the corpse picker.
         </p>
       </form>
     `;
@@ -194,44 +196,21 @@ export const RaiseSpell = {
         label: "Confirm",
         callback: (ev, button, dialog) => {
           const form = dialog.element.querySelector("form");
-          const marks = picks.map((_, i) => !!form.querySelector(`[name="pick-${i}"]`)?.checked);
-          return marks;
+          return picks.map((_, i) => !!form.querySelector(`[name="pick-${i}"]`)?.checked);
         },
       },
       rejectClose: false,
-      render: (ev, dialog) => {
-        const form = dialog.element.querySelector("form");
-        const used = form.querySelector(".vce-ib-used");
-        const update = () => {
-          let total = 0;
-          for (let i = 0; i < picks.length; i++) {
-            const cb = form.querySelector(`[name="pick-${i}"]`);
-            const origHD = picks[i].hd ?? 0;
-            const hd = cb.checked ? BOOMER_HD : origHD;
-            total += hd;
-            const note = cb.closest(".vce-ib-row")?.querySelector(".vce-ib-hd-note");
-            if (note) note.textContent = cb.checked ? `→ HD ${BOOMER_HD} (Boomer)` : `→ HD ${origHD}`;
-          }
-          if (used) used.textContent = String(total);
-          used.style.color = total > remainingBudget ? "#ff6060" : "";
-        };
-        form.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener("change", update));
-      },
     });
 
     if (result === null || result === undefined) return null;
 
-    // result is array of booleans — apply Boomer substitution, validate budget
-    const updated = picks.map((p, i) => result[i]
-      ? { uuid: BOOMER_UUID, name: "Zombie, Boomer", hd: BOOMER_HD, isBoomer: true }
+    // Substitute marked picks with the Boomer UUID. HD stays as the original
+    // pick's HD for budget-tracking purposes upstream (though nothing downstream
+    // re-checks budget after this).
+    return picks.map((p, i) => result[i]
+      ? { uuid: BOOMER_UUID, name: "Zombie, Boomer", hd: p.hd, isBoomer: true }
       : { ...p, isBoomer: false }
     );
-    const totalHD = updated.reduce((s, p) => s + (p.hd ?? 0), 0);
-    if (totalHD > remainingBudget) {
-      ui.notifications.warn(`Boomer substitution busts HD budget (${totalHD} / ${remainingBudget}). Unmark some to continue.`);
-      return null;
-    }
-    return updated;
   },
 
   _registerDismissHandler() {
@@ -327,7 +306,7 @@ export const RaiseSpell = {
     // Boomer" — per-raise decision.
     const features = getFeatures(caster);
     if (features?.perk_infestingBurst) {
-      const updated = await this._promptInfestingBurst(picks, remainingHD);
+      const updated = await this._promptInfestingBurst(picks);
       if (updated === null) return; // user cancelled
       picks = updated;
     }
