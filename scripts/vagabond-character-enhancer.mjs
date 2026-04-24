@@ -1526,7 +1526,12 @@ Hooks.once("ready", async () => {
       VagabondChatCard.npcAction = async function(actor, action, actionIndex, targetsAtRollTime = []) {
         try {
           if (actor?.type === "npc" && action) {
-            // Path 1: companionMeta (v0.4.0+)
+            // Path 1: companionMeta (v0.4.0+). Route any companion-flagged NPC
+            // through the Summoner's rollSummonAction — it handles the Mana
+            // Skill check against the controller's stats. This covers Beast,
+            // Raise, Animate, Conjurer perk, and any future "Mana Skill"
+            // companion. Summoner/Familiar keep their own dedicated paths
+            // for activeConjure / activeFamiliar flag preservation.
             const controllerId = actor.getFlag(MODULE_ID, "controllerActorId");
             const meta = actor.getFlag(MODULE_ID, "companionMeta");
             if (controllerId && meta?.sourceId) {
@@ -1541,6 +1546,18 @@ Hooks.once("ready", async () => {
                   const familiar = controller.getFlag(MODULE_ID, "activeFamiliar")
                     ?? { summonActorId: actor.id, summonName: actor.name, summonImg: actor.img, summonHD: 1, familiarSkill: "mysticism" };
                   return await FamiliarFeatures.rollFamiliarAction(controller, familiar, actionIndex);
+                }
+                // Generic Mana-Skill companions (Beast, Raise, Animate, Conjurer perk):
+                // reuse the Summoner's rollSummonAction with a synthetic conjure object.
+                if (["spell-beast", "spell-raise", "spell-animate", "perk-conjurer"].includes(meta.sourceId)) {
+                  const synthetic = {
+                    summonActorId: actor.id,
+                    summonName: actor.name,
+                    summonImg: actor.img,
+                    summonHD: actor.system?.hd ?? 1,
+                    sceneId: canvas.scene?.id,
+                  };
+                  return await SummonerFeatures.rollSummonAction(controller, synthetic, actionIndex);
                 }
               }
             }

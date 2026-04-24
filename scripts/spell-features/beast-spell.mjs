@@ -29,8 +29,87 @@ const SOURCE_ID = "spell-beast";
 export const BeastSpell = {
   init() {
     Hooks.on("createChatMessage", (msg) => this._onChatMessage(msg));
+    Hooks.on("updateActor", (actor, changes) => this._onFocusToggle(actor, changes));
     this._registerDismissHandler();
+    this._registerManaDrain();
     log("BeastSpell", "Beast spell adapter registered.");
+  },
+
+  /**
+   * Detect when a PC adds a Beast spell to system.focus.spellIds (i.e.,
+   * clicks the "Focus this spell" button) and trigger the summon flow.
+   * Cancels the focus if the player cancels the picker.
+   */
+  async _onFocusToggle(actor, changes) {
+    if (actor.type !== "character") return;
+    if (!actor.isOwner) return;
+    const newSpellIds = foundry.utils.getProperty(changes, "system.focus.spellIds");
+    if (!Array.isArray(newSpellIds)) return;
+
+    // Find the Beast spell on the actor
+    const beastSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "beast");
+    if (!beastSpell) return;
+
+    // Detect ADD: beastSpell is in newSpellIds but wasn't in the previous state
+    const wasActive = (actor._source?.system?.focus?.spellIds ?? []).includes(beastSpell.id);
+    const nowActive = newSpellIds.includes(beastSpell.id);
+    if (wasActive || !nowActive) return;
+
+    // Skip if we're already handling a cast (prevents double-trigger on
+    // Cast-then-Focus sequence — the createChatMessage hook will run first)
+    if (this._handlingTrigger?.has(actor.id)) return;
+
+    // Trigger summon flow
+    (this._handlingTrigger ??= new Set()).add(actor.id);
+    try {
+      await this.trigger(actor);
+    } finally {
+      this._handlingTrigger.delete(actor.id);
+    }
+  },
+
+  /**
+   * Drain 1 mana per combat round from any PC currently focused on Beast.
+   * If the PC is out of mana, dismiss all their active Beast summons.
+   * GM-only listener (multi-client double-drain guard).
+   */
+  _registerManaDrain() {
+    Hooks.on("updateCombat", async (combat, changes) => {
+      if (!("round" in changes)) return;
+      if (!game.user.isGM && game.users.find(u => u.isGM && u.active)) return;
+
+      for (const combatant of combat.combatants) {
+        const actor = combatant.actor;
+        if (!actor || actor.type !== "character") continue;
+
+        const featureFocus = actor.getFlag(MODULE_ID, "featureFocus") || [];
+        const hasFocus = featureFocus.some(f => f.key === FOCUS_KEY);
+        if (!hasFocus) continue;
+
+        const mana = Number(actor.system?.mana?.current ?? 0) || 0;
+        if (mana < 1) {
+          // Insufficient mana — banish every active Beast summon
+          const active = CompanionSpawner.getCompanionsFor(actor)
+            .filter(c => c.sourceId === SOURCE_ID);
+          for (const c of active) {
+            await CompanionSpawner.dismiss(c.actor, { reason: "out-of-mana" });
+          }
+          ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+              <div class="card-body"><section class="content-body">
+                <div class="card-description" style="text-align:center;">
+                  <strong>${actor.name}</strong>'s Beast summons depart — insufficient Mana to maintain Focus.
+                </div>
+              </section></div>
+            </div>`,
+          });
+          continue;
+        }
+        await actor.update({ "system.mana.current": mana - 1 });
+        log("BeastSpell", `${actor.name}: 1 Mana drained for Beast focus (${mana} → ${mana - 1})`);
+      }
+    });
   },
 
   _registerDismissHandler() {

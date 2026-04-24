@@ -200,11 +200,13 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     });
     if (search) setTimeout(() => search.focus(), 60);
 
-    // Row click — single or multi select
+    // Row click — single or multi select. In multi mode, shift-click
+    // decrements the count (removes one copy); plain click adds a copy.
     root.querySelectorAll(".vce-cp-row").forEach(row => {
-      row.addEventListener("click", () => {
+      row.addEventListener("click", (ev) => {
         if (this._opts.multi) {
-          this._togglePick(row);
+          if (ev.shiftKey) this._decrementPick(row);
+          else this._togglePick(row);
         } else {
           const uuid = row.dataset.uuid;
           const name = row.dataset.name;
@@ -242,28 +244,53 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   _togglePick(row) {
+    // Each click ADDS another copy (up to HD budget). Use the row's "−" button
+    // to decrement. Multiple copies of the same creature are legal per rulebook
+    // ("One or more Beasts"); this lets a caster summon 2 wolves in one cast.
     const uuid = row.dataset.uuid;
     const name = row.dataset.name;
     const hd = parseInt(row.dataset.hd) || 0;
-    const idx = this._picks.findIndex(p => p.uuid === uuid);
-    if (idx >= 0) {
-      // Deselect
-      this._picks.splice(idx, 1);
-      row.classList.remove("vce-cp-selected");
-    } else {
-      // Check HD budget
-      const maxHD = this._opts.filter?.maxHD;
-      if (typeof maxHD === "number") {
-        const used = this._picks.reduce((s, p) => s + p.hd, 0);
-        if (used + hd > maxHD) {
-          ui.notifications.warn(`HD budget exceeded (${used + hd} / ${maxHD}).`);
-          return;
-        }
+
+    const maxHD = this._opts.filter?.maxHD;
+    if (typeof maxHD === "number") {
+      const used = this._picks.reduce((s, p) => s + p.hd, 0);
+      if (used + hd > maxHD) {
+        ui.notifications.warn(`HD budget exceeded (${used + hd} / ${maxHD}).`);
+        return;
       }
-      this._picks.push({ uuid, name, hd });
-      row.classList.add("vce-cp-selected");
     }
+    this._picks.push({ uuid, name, hd });
+    row.classList.add("vce-cp-selected");
+    this._updateRowCount(row);
     this._updateBudget();
+  }
+
+  _decrementPick(row) {
+    const uuid = row.dataset.uuid;
+    const idx = this._picks.findIndex(p => p.uuid === uuid);
+    if (idx < 0) return;
+    this._picks.splice(idx, 1);
+    if (!this._picks.some(p => p.uuid === uuid)) {
+      row.classList.remove("vce-cp-selected");
+    }
+    this._updateRowCount(row);
+    this._updateBudget();
+  }
+
+  _updateRowCount(row) {
+    const uuid = row.dataset.uuid;
+    const count = this._picks.filter(p => p.uuid === uuid).length;
+    let badge = row.querySelector(".vce-cp-count");
+    if (count > 1) {
+      if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "vce-cp-count";
+        row.querySelector(".vce-cp-info, td:nth-child(3), td:first-of-type")?.appendChild(badge);
+      }
+      badge.textContent = `×${count}`;
+    } else if (badge) {
+      badge.remove();
+    }
   }
 
   _updateBudget() {

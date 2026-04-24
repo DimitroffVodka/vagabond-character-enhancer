@@ -1902,6 +1902,18 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 .vce-cp-row.vce-cp-selected strong {
   color: var(--vce-accent, #d4a843);
 }
+/* Count badge for multi-count picks (Beast: "×2", "×3" etc.) */
+.vce-cp-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  background: var(--vce-accent, #d4a843);
+  color: #000;
+  font-weight: bold;
+  font-size: 11px;
+  border-radius: 3px;
+  vertical-align: middle;
+}
 .vce-cp-confirm {
   background: rgba(212, 168, 67, 0.18);
   border: 1px solid var(--vce-accent, #d4a843);

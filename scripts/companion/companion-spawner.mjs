@@ -148,27 +148,37 @@ export const CompanionSpawner = {
     const sightConfig = _deriveSightFromSenses(creatureActor);
     const movementAction = _deriveDefaultMovementAction(creatureActor);
 
-    // Pull defaults from the creature's prototypeToken so the spawned token
-    // has the correct portrait, size, and FRIENDLY disposition unless the
-    // caller overrides via tokenData.
-    const proto = creatureActor?.prototypeToken;
-    const protoTexture = proto?.texture?.src
-      ? { src: proto.texture.src, scaleX: proto.texture.scaleX ?? 1, scaleY: proto.texture.scaleY ?? 1 }
-      : { src: creatureActor?.img || "icons/svg/mystery-man.svg" };
-
-    const defaultTokenData = {
-      actorId,
+    // Build the full tokenData. actor.getTokenDocument() inherits all prototype
+    // token fields AND resolves wildcard texture paths (e.g.
+    // "modules/too-many-tokens-dnd/Wolf/*" → picks a random Wolf image) so the
+    // spawned token actually shows the creature's art instead of a broken-image
+    // placeholder.
+    const overrides = {
       x: casterPos.x + gridSize,
       y: casterPos.y,
-      name: creatureActor?.name ?? "Companion",
-      texture: protoTexture,
-      width: proto?.width ?? 1,
-      height: proto?.height ?? 1,
       disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY,
       sight: sightConfig,
       movementAction,
-      ...tokenData, // caller overrides win (e.g. custom x/y, size, name)
+      ...tokenData, // caller overrides win
     };
+    let defaultTokenData;
+    try {
+      const tokenDoc = await creatureActor.getTokenDocument(overrides);
+      defaultTokenData = tokenDoc.toObject();
+    } catch (e) {
+      log("CompanionSpawner", `getTokenDocument failed, falling back: ${e.message}`);
+      // Fallback: manual construction with actor.img
+      defaultTokenData = {
+        actorId,
+        name: creatureActor?.name ?? "Companion",
+        texture: { src: creatureActor?.img || "icons/svg/mystery-man.svg" },
+        width: creatureActor?.prototypeToken?.width ?? 1,
+        height: creatureActor?.prototypeToken?.height ?? 1,
+        ...overrides,
+      };
+    }
+    // Ensure actorId is set (getTokenDocument should set it, but be defensive)
+    defaultTokenData.actorId = actorId;
 
     // grantOwnershipFrom tells the GM proxy to grant OWNER on the world actor
     // to every user who owns the caster — not just the requester. Handles the
