@@ -75,7 +75,11 @@ const ACTION_BAR_ENTRIES = [
   },
   {
     id: "conjurer", label: "Conjurer", icon: "fas fa-eye",
-    available: (pc, features, spells) => !!features?.perk_conjurer,
+    // Hide the perk button if the PC already has the Summoner class's Conjurer
+    // ability (class feature supersedes — same core action, slightly different
+    // pool). Prevents two "Conjurer" buttons appearing side-by-side.
+    available: (pc, features, spells) =>
+      !!features?.perk_conjurer && !features?.summoner_creatureCodex,
     onClick: (pc) => ConjurerPerk.trigger(pc),
   },
   {
