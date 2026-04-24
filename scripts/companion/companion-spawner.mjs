@@ -119,9 +119,14 @@ export const CompanionSpawner = {
     const doc = await fromUuid(creatureUuid);
     if (!doc) return { success: false, error: `Could not resolve ${creatureUuid}` };
 
-    // Import into world if from compendium
+    // Import into world. Always fresh-import when:
+    //   - Source is a compendium entry (needs copying into world)
+    //   - allowMultiple is set (Beast/Raise stacking) — each companion MUST
+    //     have its own world actor so their companionMeta + HP + controller
+    //     flags don't collide. Without this, 3 Wolves picking the same world
+    //     Wolf would share flags and die together on any single HP-zero event.
     let actorId;
-    if (doc.pack) {
+    if (doc.pack || allowMultiple) {
       const imported = await gmRequest("importActor", { uuid: creatureUuid });
       if (imported.error) return { success: false, error: imported.error };
       actorId = imported.actorId;
@@ -195,6 +200,7 @@ export const CompanionSpawner = {
 
     // Stamp flags atomically — writes controllerActorId, controllerType, and
     // the full companionMeta in a single actor.update() call.
+    const freshImport = doc.pack || allowMultiple;
     const companionMeta = {
       sourceId,
       skill: sourceMeta.skill,
@@ -204,7 +210,7 @@ export const CompanionSpawner = {
       terminateOn: [...sourceMeta.terminateOn],
       cost: { ...cost },
       duration,
-      meta: { ...meta },
+      meta: { ...meta, freshImport },
     };
 
     const flagResult = await gmRequest("updateActorFlags", {

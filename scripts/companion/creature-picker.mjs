@@ -69,16 +69,24 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     const { types = [], sizes = [], maxHD, customFilter } = this._opts.filter ?? {};
     const packs = this._opts.filter?.packs
       ?? (this._opts.filter?.pack ? [this._opts.filter.pack] : ["vagabond.bestiary"]);
+    // Default: compendium only. World-actor NPCs often pollute the list
+    // (e.g. a GM-created Bat in the world sidebar becomes a shared world
+    // actor across all Beast summons, which breaks flag isolation). Callers
+    // can opt back in with includeWorldActors: true — we'll revisit this when
+    // the "custom creatures" feature is scoped.
+    const includeWorldActors = this._opts.filter?.includeWorldActors === true;
 
     const out = [];
     const seen = new Set();
 
-    // 1) World NPC actors
-    for (const actor of game.actors.filter(a => a.type === "npc")) {
-      if (!this._matchesActor(actor, { types, sizes, maxHD, customFilter })) continue;
-      if (seen.has(actor.name)) continue;
-      seen.add(actor.name);
-      out.push(this._rowFromActor(actor, "World"));
+    // 1) World NPC actors (opt-in only)
+    if (includeWorldActors) {
+      for (const actor of game.actors.filter(a => a.type === "npc")) {
+        if (!this._matchesActor(actor, { types, sizes, maxHD, customFilter })) continue;
+        if (seen.has(actor.name)) continue;
+        seen.add(actor.name);
+        out.push(this._rowFromActor(actor, "World"));
+      }
     }
 
     // 2) Compendium packs

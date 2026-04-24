@@ -19,6 +19,7 @@
  */
 
 import { MODULE_ID, log, getFeatures } from "../utils.mjs";
+import { gmRequest } from "../socket-relay.mjs";
 import { CompanionSpawner } from "../companion/companion-spawner.mjs";
 import { CreaturePicker } from "../companion/creature-picker.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
@@ -186,16 +187,33 @@ export const BeastSpell = {
   },
 
   _registerDismissHandler() {
-    CompanionSpawner.registerDismissHandler(SOURCE_ID, async (companionActor, { controller }) => {
+    CompanionSpawner.registerDismissHandler(SOURCE_ID, async (companionActor, { controller, meta }) => {
       if (!controller) return;
+
       // Release focus only when the LAST beast is dismissed — other beasts of the
       // same source keep it acquired. getCompanionsFor runs BEFORE the flag clear
-      // happens in generic dismiss, so we check "2 or fewer means this is the last."
+      // in generic dismiss, so we exclude the one we're dismissing right now.
       const remaining = CompanionSpawner.getCompanionsFor(controller)
         .filter(c => c.sourceId === SOURCE_ID && c.actor.id !== companionActor.id);
       if (!remaining.length) {
         try { await FocusManager.releaseFeatureFocus(controller, FOCUS_KEY); }
         catch (e) { log("BeastSpell", `Could not release focus: ${e.message}`); }
+        // Also remove Beast from the system focus list if present
+        const beastSpell = controller.items.find(i => i.type === "spell" && i.name.toLowerCase() === "beast");
+        if (beastSpell) {
+          const ids = controller.system?.focus?.spellIds ?? [];
+          if (ids.includes(beastSpell.id)) {
+            await controller.update({ "system.focus.spellIds": ids.filter(id => id !== beastSpell.id) });
+          }
+        }
+      }
+
+      // Clean up the freshly-imported world actor (Beast always fresh-imports
+      // due to allowMultiple) so defeated summons don't pile up as orphaned
+      // world actors in game.actors.
+      if (meta?.meta?.freshImport && companionActor?.id) {
+        try { await gmRequest("deleteActor", { actorId: companionActor.id }); }
+        catch (e) { log("BeastSpell", `Could not delete imported actor on dismiss: ${e.message}`); }
       }
     });
   },
