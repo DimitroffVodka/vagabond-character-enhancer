@@ -222,8 +222,9 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
         } else {
           const uuid = row.dataset.uuid;
           const name = row.dataset.name;
+          const hd = parseInt(row.dataset.hd) || 0;
           this._closedWithoutSelect = false;
-          this._resolve([{ uuid, name }]);
+          this._resolve([{ uuid, name, hd }]);
           this.close();
         }
       });
@@ -247,7 +248,8 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
         return;
       }
       this._closedWithoutSelect = false;
-      this._resolve(this._picks.map(p => ({ uuid: p.uuid, name: p.name })));
+      // Include hd so callers (Infesting Burst) can do budget substitution math
+      this._resolve(this._picks.map(p => ({ uuid: p.uuid, name: p.name, hd: p.hd })));
       this.close();
     });
 

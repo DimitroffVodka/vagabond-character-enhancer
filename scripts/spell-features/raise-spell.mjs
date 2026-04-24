@@ -157,6 +157,83 @@ export const RaiseSpell = {
     }
   },
 
+  /**
+   * Infesting Burst post-picker checklist. Returns a NEW picks array with
+   * marked entries swapped to the Boomer UUID (HD 3), or null if the user
+   * cancels. Validates total HD against remainingBudget after substitution.
+   *
+   * @param {Array<{uuid, name, hd}>} picks - original picks from CreaturePicker
+   * @param {number} remainingBudget - caster's remaining HD budget for this cast
+   * @returns {Promise<Array<{uuid, name, hd, isBoomer}> | null>}
+   */
+  async _promptInfestingBurst(picks, remainingBudget) {
+    const BOOMER_HD = 3;
+    const rows = picks.map((p, i) => `
+      <label class="vce-ib-row" style="display:flex; align-items:center; gap:10px; padding:6px 4px; border-bottom:1px dotted rgba(255,255,255,0.15);">
+        <input type="checkbox" name="pick-${i}" data-idx="${i}" data-orig-hd="${p.hd ?? 0}" />
+        <span style="flex:1;"><strong>${p.name}</strong> <span style="opacity:0.6;font-size:11px;">(original HD ${p.hd ?? 0})</span></span>
+        <span class="vce-ib-hd-note" style="font-size:11px; opacity:0.7;">→ HD ${p.hd ?? 0}</span>
+      </label>
+    `).join("");
+
+    const content = `
+      <form class="vce-infesting-burst">
+        <p><strong>Infesting Burst</strong> — Mark any raises to become <strong>Zombie Boomers</strong> (HD ${BOOMER_HD}, explodes for 2d6 in Near aura then dies).</p>
+        <div class="vce-ib-list">${rows}</div>
+        <p class="vce-ib-budget" style="margin-top:8px; font-size:12px;">
+          Budget remaining: <strong>${remainingBudget}</strong> HD &nbsp;·&nbsp;
+          Current pick HD: <strong><span class="vce-ib-used">${picks.reduce((s, p) => s + (p.hd ?? 0), 0)}</span></strong>
+        </p>
+      </form>
+    `;
+
+    const result = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Infesting Burst" },
+      content,
+      ok: {
+        label: "Confirm",
+        callback: (ev, button, dialog) => {
+          const form = dialog.element.querySelector("form");
+          const marks = picks.map((_, i) => !!form.querySelector(`[name="pick-${i}"]`)?.checked);
+          return marks;
+        },
+      },
+      rejectClose: false,
+      render: (ev, dialog) => {
+        const form = dialog.element.querySelector("form");
+        const used = form.querySelector(".vce-ib-used");
+        const update = () => {
+          let total = 0;
+          for (let i = 0; i < picks.length; i++) {
+            const cb = form.querySelector(`[name="pick-${i}"]`);
+            const origHD = picks[i].hd ?? 0;
+            const hd = cb.checked ? BOOMER_HD : origHD;
+            total += hd;
+            const note = cb.closest(".vce-ib-row")?.querySelector(".vce-ib-hd-note");
+            if (note) note.textContent = cb.checked ? `→ HD ${BOOMER_HD} (Boomer)` : `→ HD ${origHD}`;
+          }
+          if (used) used.textContent = String(total);
+          used.style.color = total > remainingBudget ? "#ff6060" : "";
+        };
+        form.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener("change", update));
+      },
+    });
+
+    if (result === null || result === undefined) return null;
+
+    // result is array of booleans — apply Boomer substitution, validate budget
+    const updated = picks.map((p, i) => result[i]
+      ? { uuid: BOOMER_UUID, name: "Zombie, Boomer", hd: BOOMER_HD, isBoomer: true }
+      : { ...p, isBoomer: false }
+    );
+    const totalHD = updated.reduce((s, p) => s + (p.hd ?? 0), 0);
+    if (totalHD > remainingBudget) {
+      ui.notifications.warn(`Boomer substitution busts HD budget (${totalHD} / ${remainingBudget}). Unmark some to continue.`);
+      return null;
+    }
+    return updated;
+  },
+
   _registerDismissHandler() {
     CompanionSpawner.registerDismissHandler(SOURCE_ID, async (companionActor, { controller, meta }) => {
       if (!controller) return;
@@ -226,49 +303,33 @@ export const RaiseSpell = {
       return;
     }
 
-    // Infesting Burst perk (Raise-adjacent): offer the Zombie, Boomer as an
-    // alternative spawn. Rulebook: "you can choose to raise them up as a
-    // Boomer." If the caster chooses Yes, skip the corpse picker entirely and
-    // spawn a single Zombie, Boomer consuming HD 3 of the budget. If they
-    // pick No, the normal multi-select picker opens.
-    //
-    // Known limitation: you can't mix a Boomer with regular corpses in one
-    // cast today — two casts required. Revisit when/if that comes up.
-    const features = getFeatures(caster);
-    let picks;
-    if (features?.perk_infestingBurst) {
-      const boomerHD = 3;
-      const useBoomer = await foundry.applications.api.DialogV2.confirm({
-        window: { title: "Infesting Burst" },
-        content: `<p>Raise a <strong>Zombie Boomer</strong> (HD ${boomerHD})?</p>
-                  <p><em>The Boomer explodes for 2d6 in Near aura then dies. No = open the normal corpse picker for regular undead.</em></p>`,
-        rejectClose: false,
-      });
-      if (useBoomer) {
-        if (boomerHD > remainingHD) {
-          ui.notifications.warn(`Boomer HD (${boomerHD}) exceeds remaining budget (${remainingHD}).`);
-          return;
-        }
-        picks = [{ uuid: BOOMER_UUID, name: "Zombie, Boomer" }];
-      }
-    }
+    // Rich-table multi-select picker, excluding Artificial/Undead/Construct/Object
+    // per rulebook ("non-Artificial/Undead corpse"). Multi-pick so L4 caster
+    // can raise e.g. 2×HD2 in a single cast within their HD budget.
+    let picks = await CreaturePicker.pick({
+      title: `Raise — ${remainingHD} HD remaining of ${maxHD}`,
+      caster,
+      favoritesFlag: "raiseSpellCodex",
+      multi: true,
+      filter: {
+        excludeTypes: ["artificial", "undead", "construct", "object"],
+        maxHD: remainingHD,
+        packs: ["vagabond.bestiary"],
+      },
+    });
+    if (!picks || !picks.length) return;
 
-    if (!picks) {
-      // Rich-table multi-select picker, excluding Artificial/Undead/Construct/Object
-      // per rulebook ("non-Artificial/Undead corpse"). Multi-pick so L4 caster
-      // can raise e.g. 2×HD2 in a single cast within their HD budget.
-      picks = await CreaturePicker.pick({
-        title: `Raise — ${remainingHD} HD remaining of ${maxHD}`,
-        caster,
-        favoritesFlag: "raiseSpellCodex",
-        multi: true,
-        filter: {
-          excludeTypes: ["artificial", "undead", "construct", "object"],
-          maxHD: remainingHD,
-          packs: ["vagabond.bestiary"],
-        },
-      });
-      if (!picks || !picks.length) return;
+    // Infesting Burst perk: post-picker checklist. For each selected corpse
+    // the caster can choose to raise it as a Zombie Boomer instead (HD 3,
+    // explodes 2d6 in Near aura then dies). Marked picks have their uuid
+    // swapped to BOOMER_UUID before spawning, and their HD is recomputed as 3
+    // for budget purposes. Rulebook: "you can choose to raise them up as a
+    // Boomer" — per-raise decision.
+    const features = getFeatures(caster);
+    if (features?.perk_infestingBurst) {
+      const updated = await this._promptInfestingBurst(picks, remainingHD);
+      if (updated === null) return; // user cancelled
+      picks = updated;
     }
 
     // Spawn each pick, apply the Undead template, track successes for summary
