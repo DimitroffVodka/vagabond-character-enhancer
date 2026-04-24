@@ -4,69 +4,69 @@
     {
       "id": 0,
       "subject": "Task 0: Preparation — audit current v0.3.4 state",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Confirm v0.3.4 save routing is functional before we touch anything.\n\n**Files:** None (read-only audit).\n\n**Verify:** Summon a beast with Summoner, conjure a Familiar, trigger save routing from a chat card — all work as v0.3.4.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"manual: confirm v0.3.4 working via Summoner + Familiar smoke tests\", \"acceptanceCriteria\": [\"Save routing functional\", \"Summon tab renders\", \"Familiar ritual works\", \"git clean on main\"]}\n```"
     },
     {
       "id": 1,
       "subject": "Task 1: Companion source registry",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** Create pure-data constant defining all companion sources (badge color, controller type, skill, termination rules).\n\n**Files:** Create `scripts/companion/companion-sources.mjs`.\n\n**Verify:** Import in Foundry console, check `Object.keys(COMPANION_SOURCES)` and `getSourceMeta('summoner').label`.\n\n```json:metadata\n{\"files\": [\"scripts/companion/companion-sources.mjs\"], \"verifyCommand\": \"manual: import module, check Object.keys(COMPANION_SOURCES) and getSourceMeta('summoner').label\", \"acceptanceCriteria\": [\"9 sources + legacy fallback\", \"getSourceMeta works\", \"No external imports\"]}\n```"
     },
     {
       "id": 2,
       "subject": "Task 2: Shared CreaturePicker dialog",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** Extract inline picker code (summoner/familiar) into a reusable ApplicationV2 dialog.\n\n**Files:** Create `scripts/companion/creature-picker.mjs`, `templates/creature-picker.hbs`.\n\n**Verify:** Call `CreaturePicker.pick({filter: {types: ['beast'], maxHD: 2}})` from console.\n\n```json:metadata\n{\"files\": [\"scripts/companion/creature-picker.mjs\", \"templates/creature-picker.hbs\"], \"verifyCommand\": \"manual: call CreaturePicker.pick({...}) from console, confirm dialog + resolution\", \"acceptanceCriteria\": [\"Returns uuid or null\", \"Filter config works\", \"Search filters rows live\", \"ApplicationV2 pattern\"]}\n```"
     },
     {
       "id": 3,
       "subject": "Task 3: CompanionSpawner engine",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** Unified spawn/dismiss/query engine consolidating placeToken + updateActorFlags + combat-add.\n\n**Files:** Create `scripts/companion/companion-spawner.mjs`.\n\n**Verify:** Spawn → query → dismiss cycle via console on a real beast UUID.\n\n```json:metadata\n{\"files\": [\"scripts/companion/companion-spawner.mjs\"], \"verifyCommand\": \"manual: spawn+query+dismiss cycle via console\", \"acceptanceCriteria\": [\"spawn returns tokenId + actorId\", \"flags written atomically\", \"getCompanionsFor scans tokens + world\", \"dismiss removes token + clears flags\", \"multi-companion replace prompt\"]}\n```"
     },
     {
       "id": 4,
       "subject": "Task 4: Companion termination manager",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** Auto-dismiss on zeroHP trigger. Stub duration/manaLapse/shift for Phase 2.\n\n**Files:** Create `scripts/companion/companion-termination.mjs`.\n\n**Verify:** Spawn companion, set HP to 0 via update — auto-dismiss fires.\n\n```json:metadata\n{\"files\": [\"scripts/companion/companion-termination.mjs\"], \"verifyCommand\": \"manual: set companion HP to 0, confirm auto-dismiss fires\", \"acceptanceCriteria\": [\"zeroHP triggers dismiss\", \"GM-only listener\", \"Other triggers stubbed\"]}\n```"
     },
     {
       "id": 5,
       "subject": "Task 5: CompanionManager tab renderer",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1, 3],
       "description": "**Goal:** Inline-HTML tab renderer that lists all flagged companions per PC. NPC vs character action list branches.\n\n**Files:** Create `scripts/companion/companion-manager-tab.mjs`.\n\n**Verify:** Open PC sheet with active companion → Companions tab → card renders → dismiss works.\n\n```json:metadata\n{\"files\": [\"scripts/companion/companion-manager-tab.mjs\"], \"verifyCommand\": \"manual: open PC sheet with companion, click Companions tab, confirm card renders + dismiss works\", \"acceptanceCriteria\": [\"Tab injected into sheet\", \"NPC vs character action list branches correctly\", \"Save buttons route through controller\", \"Dismiss removes card\"]}\n```"
     },
     {
       "id": 6,
       "subject": "Task 6: CSS styling for companion cards",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** CSS for `.vce-companion-card`, type badges, save buttons, HP gradient, empty state.\n\n**Files:** Modify `styles/vagabond-character-enhancer.css`.\n\n**Verify:** Open Companions tab — visual inspection matches spec section 3.3.\n\n```json:metadata\n{\"files\": [\"styles/vagabond-character-enhancer.css\"], \"verifyCommand\": \"manual: open Companions tab and visually compare to spec mockup\", \"acceptanceCriteria\": [\"Card layout matches spec\", \"HP gradient works\", \"Type badges visible\", \"Reuses existing tokens\"]}\n```"
     },
     {
       "id": 7,
       "subject": "Task 7: Register tab + termination + remove old Summon injection",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4, 5, 6],
       "description": "**Goal:** Wire up tab renderer + termination manager; disable `_injectSummonTab` in summoner.mjs.\n\n**Files:** Modify `scripts/vagabond-character-enhancer.mjs`, `scripts/class-features/summoner.mjs`.\n\n**Verify:** Reload world, PC sheet shows 'Companions' tab (not 'Summon').\n\n```json:metadata\n{\"files\": [\"scripts/vagabond-character-enhancer.mjs\", \"scripts/class-features/summoner.mjs\"], \"verifyCommand\": \"manual: reload world, confirm Companions tab replaces Summon tab\", \"acceptanceCriteria\": [\"Tab renamed\", \"No double injection\", \"No console errors\"]}\n```"
     },
     {
       "id": 8,
       "subject": "Task 8: Refactor Summoner to use CompanionSpawner",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3, 7],
       "description": "**Goal:** Replace inline placeToken + flag block with `CompanionSpawner.spawn({sourceId: 'summoner', ...})`. Keep activeConjure write. Guard legacy auto-banish hook.\n\n**Files:** Modify `scripts/class-features/summoner.mjs`.\n\n**Verify:** Summon a beast → Companions tab card with SUMMON badge → click action rolls via Mysticism.\n\n```json:metadata\n{\"files\": [\"scripts/class-features/summoner.mjs\"], \"verifyCommand\": \"manual: summon a beast → Companions tab card with SUMMON badge → click action rolls via Mysticism\", \"acceptanceCriteria\": [\"Uses CompanionSpawner.spawn\", \"activeConjure flag preserved\", \"Focus + Second Nature unchanged\", \"Legacy auto-banish hook guarded\", \"Smoke test passes\"]}\n```"
     },
     {
       "id": 9,
       "subject": "Task 9: Refactor Familiar to use CompanionSpawner",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3, 7],
       "description": "**Goal:** Replace inline placeToken + flag block with `CompanionSpawner.spawn({sourceId: 'familiar', ...})`. Keep activeFamiliar write. Guard existing 0-HP hook.\n\n**Files:** Modify `scripts/perk-features/familiar.mjs`.\n\n**Verify:** Conjure familiar → Companions tab FAMILIAR card → dismiss works → ritual recast replaces.\n\n```json:metadata\n{\"files\": [\"scripts/perk-features/familiar.mjs\"], \"verifyCommand\": \"manual: conjure familiar → Companions tab FAMILIAR card → dismiss works → ritual recast replaces\", \"acceptanceCriteria\": [\"Uses CompanionSpawner.spawn\", \"activeFamiliar flag preserved\", \"Ritual check enforced\", \"No double-dismiss\"]}\n```"
     },
@@ -85,5 +85,5 @@
       "description": "**Goal:** Document v0.4.0, bump version 0.3.4→0.4.0, tag and release.\n\n**Files:** Modify `CHANGELOG.md`, `module.json`.\n\n**Verify:** `git diff HEAD~1 module.json CHANGELOG.md` shows expected changes; `v0.4.0` tag applied.\n\n```json:metadata\n{\"files\": [\"CHANGELOG.md\", \"module.json\"], \"verifyCommand\": \"git diff module.json CHANGELOG.md && git tag --list | grep v0.4.0\", \"acceptanceCriteria\": [\"Changelog entry\", \"Version bumped\", \"Tag applied\", \"Pushed to remote\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-23T00:00:00Z"
+  "lastUpdated": "2026-04-23T15:00:00Z"
 }
