@@ -164,16 +164,21 @@ export const RaisePerks = {
   /* -------------------------------------------- */
 
   /**
-   * Necromancer now fires AUTOMATICALLY at the end of each combat round.
-   * For every PC with the perk who is currently focusing Raise, the most-
-   * wounded raised undead they control is healed by ceil(level/2).
+   * Necromancer fires AUTOMATICALLY at the end of each combat round.
+   * For every PC with the perk who is currently focusing Raise, ALL of
+   * their Raise-sourced undead (not Reanimator, not Hex-bypass) regain
+   * ceil(level/2) HP.
    *
    * Rulebook: "When you Focus on Raise, you can choose an Undead you
    * control. The Target regains HP equal to half your Level."
    *
-   * Silent on frequency — we're implementing as once-per-round (end of
-   * round tick) and auto-select the undead with the lowest HP ratio so
-   * the player doesn't have to click.
+   * Interpretation: rulebook is silent on frequency and doesn't say
+   * "each". Healing all is defensible given the built-in cost gate
+   * (1 Mana/round for Focus upkeep) and modest heal (ceil(4/2) = 2 HP
+   * at L4). The natural guards rule out abusive setups:
+   *   - Hex-continuous Raise skips _isFocusingRaise (no focus state)
+   *   - Reanimator undead have sourceId "perk-reanimator", excluded
+   *     by the filter below
    */
   _registerNecromancer() {
     Hooks.on("updateCombat", async (combat, changes) => {
@@ -186,27 +191,22 @@ export const RaisePerks = {
         if (!features?.perk_necromancer) continue;
         if (!RaiseSpell._isFocusingRaise(pc)) continue;
 
-        // Gather this PC's controlled raised undead
+        // Only Raise-sourced undead (Reanimator perk undead are "perk-reanimator")
         const raised = CompanionSpawner.getCompanionsFor(pc)
           .filter(c => c.sourceId === "spell-raise")
           .map(c => c.actor);
         if (!raised.length) continue;
 
-        // Pick the most-wounded (lowest current/max ratio; ties broken by
-        // raw HP lost; skip if all at full)
-        let best = null;
-        let bestScore = Infinity;
+        // Heal every wounded raised undead
+        let healedAny = false;
         for (const r of raised) {
           const cur = r.system?.health?.value ?? 0;
           const max = r.system?.health?.max ?? cur;
-          if (max <= 0) continue;
-          if (cur >= max) continue;
-          const ratio = cur / max;
-          if (ratio < bestScore) { best = r; bestScore = ratio; }
+          if (max <= 0 || cur >= max) continue;
+          await this._necromancerHeal(pc, r);
+          healedAny = true;
         }
-        if (!best) continue; // everyone at full HP
-
-        await this._necromancerHeal(pc, best);
+        if (!healedAny) continue;
       }
     });
   },
