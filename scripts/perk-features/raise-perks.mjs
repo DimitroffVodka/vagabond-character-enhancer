@@ -108,18 +108,34 @@ export const RaisePerks = {
         return;
       }
 
-      // Direct-apply buttons: actorId is the CASTER, targets array carries victims.
+      // Direct-apply buttons: actorId is the CASTER, data-targets carries
+      // victims (or, for AoE damage cards, comes through empty — the system
+      // falls back to the user's CURRENTLY-targeted tokens in that case, so
+      // we must too). Parse data-targets first; if empty, read the live
+      // targeting set from the user who clicked.
       const casterId = btn.dataset.actorId;
       const itemId = btn.dataset.itemId;
       const targetsRaw = btn.dataset.targets;
-      if (!casterId || !itemId || !targetsRaw) return;
-      let targets;
-      try {
-        targets = JSON.parse(targetsRaw.replace(/&quot;/g, '"'));
-      } catch {
-        return;
+      if (!casterId || !itemId) return;
+      let targets = [];
+      if (targetsRaw) {
+        try {
+          targets = JSON.parse(targetsRaw.replace(/&quot;/g, '"')) || [];
+        } catch {
+          targets = [];
+        }
       }
-      for (const t of targets || []) {
+      // Fallback: read current user targets. Vagabond's handleApplyDirect
+      // does the same thing — it warns "No tokens targeted" if both the
+      // button's data-targets AND user.targets are empty.
+      if (!targets.length && game.user?.targets?.size) {
+        targets = Array.from(game.user.targets).map(t => ({
+          tokenId: t.id,
+          actorId: t.actor?.id,
+          actorName: t.actor?.name,
+        }));
+      }
+      for (const t of targets) {
         if (t?.actorId) this._tagTarget(t.actorId, casterId, itemId);
       }
     } catch (e) {
@@ -164,12 +180,13 @@ export const RaisePerks = {
     if (!item || item.type !== "spell") return;
 
     // Only track spells that could actually deal damage (effects-only spells
-    // shouldn't mark targets). Check either the rolled damage card content
-    // (a data-damage-amount button) OR the spell's base damageDice value so
-    // we don't rely solely on chat-card regex matching.
+    // like Bless shouldn't mark targets). Vagabond spells don't store a dice
+    // count on the item — damage dice are a per-cast choice (mana invested).
+    // The only static "can this spell hurt" signal on the item is damageType:
+    // "-" = no damage, anything else = damage-capable. We also accept a
+    // rolled damage button as a positive signal (belt + suspenders).
     const hasDamageButton = /data-damage-amount=["'](\d+)["']/.test(msg.content ?? "");
-    const spellHasDamage = Number(item.system?.damageDice ?? 0) > 0
-      || Number(item.system?.damage?.dice ?? 0) > 0;
+    const spellHasDamage = item.system?.damageType && item.system.damageType !== "-";
     if (!hasDamageButton && !spellHasDamage) return;
 
     // Extract target actor IDs from the card flag (targetsAtRollTime is the
