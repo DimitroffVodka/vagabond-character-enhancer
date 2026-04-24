@@ -24,7 +24,7 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     super({
       id: `vce-creature-picker-${foundry.utils.randomID()}`,
       window: { title: opts.title ?? "Select a Creature" },
-      position: { width: 720, height: 560 },
+      position: { width: 900, height: 580 },
       classes: ["vce-creature-picker-app"],
     });
     this._opts = opts;
@@ -96,7 +96,7 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       try {
         const index = await pack.getIndex({ fields: [
           "system.beingType", "system.hd", "system.size", "system.armor",
-          "system.speed", "system.speedValues",
+          "system.health", "system.speed", "system.speedValues",
           "system.actions", "system.abilities", "system.senses",
           "system.immunities", "system.weaknesses",
         ]});
@@ -150,6 +150,7 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       hd: actor.system?.hd ?? 0,
       beingType: actor.system?.beingType ?? "—",
       size: actor.system?.size ?? "medium",
+      hp: actor.system?.health?.max ?? actor.system?.health?.value ?? 0,
       armor: actor.system?.armor ?? 0,
       speed: actor.system?.speed ?? 30,
       speedValues: actor.system?.speedValues ?? {},
@@ -166,6 +167,7 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       hd: entry.system?.hd ?? 0,
       beingType: entry.system?.beingType ?? "—",
       size: entry.system?.size ?? "medium",
+      hp: entry.system?.health?.max ?? entry.system?.health?.value ?? 0,
       armor: entry.system?.armor ?? 0,
       speed: entry.system?.speed ?? 30,
       speedValues: entry.system?.speedValues ?? {},
@@ -188,11 +190,17 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     if (sv.climb) extras.push(`Climb ${sv.climb}'`);
     if (sv.cling) extras.push(`Cling ${sv.cling}'`);
     const speedStr = `${r.speed}'` + (extras.length ? ` (${extras.join(", ")})` : "");
+    // Numeric size rank so column sort goes tiny→huge (not alphabetical,
+    // which would put "large" before "small")
+    const sizeOrder = { tiny: 0, small: 1, medium: 2, large: 3, huge: 4, giant: 5, colossal: 6 }[
+      (r.size ?? "medium").toLowerCase()
+    ] ?? 2;
     return {
       ...r,
       img: r.img || "icons/svg/mystery-man.svg",
       actionsStr: actionsStr || "—",
       speedStr,
+      sizeOrder,
     };
   }
 
@@ -380,7 +388,7 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     const dir = this._sortDir === "desc" ? -1 : 1;
     const rows = Array.from(tbody.querySelectorAll(".vce-cp-row"));
 
-    const numericKeys = new Set(["hd", "armor", "speed"]);
+    const numericKeys = new Set(["hd", "armor", "speed", "hp", "size"]);
 
     rows.sort((a, b) => {
       // Favorites first regardless of sort
