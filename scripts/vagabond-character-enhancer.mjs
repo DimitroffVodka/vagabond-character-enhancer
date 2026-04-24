@@ -6,6 +6,10 @@
 import { MODULE_ID, log, getFeatures, combineFavor } from "./utils.mjs";
 export { MODULE_ID };
 
+// Psychic system — Talent item type
+import { TalentData, TALENT_TYPE } from "./talent/talent-data-model.mjs";
+import { TalentSheet } from "./talent/talent-sheet.mjs";
+
 // Module-global context for passing actor through wrapped call chains.
 // Set before calling a wrapped method, cleared after. Used by Climax
 // to pass the actor to buildAndEvaluateD20WithRollData (which only
@@ -263,6 +267,19 @@ Hooks.once("init", () => {
     range: { min: 0, max: 100, step: 5 },
     default: 100
   });
+
+  // ---- Psychic / Talent item type ----------------------------------------
+  // The Vagabond system registers CONFIG.Item.dataModels in its own init hook.
+  // We extend (not replace) that object so existing item types are unaffected.
+  CONFIG.Item.dataModels[TALENT_TYPE] = TalentData;
+
+  // Register the Talent item sheet so it opens by default for talent-type items.
+  foundry.documents.collections.Items.registerSheet(MODULE_ID, TalentSheet, {
+    types: [TALENT_TYPE],
+    makeDefault: true,
+    label: "VCE.SheetLabels.Talent"
+  });
+  // -------------------------------------------------------------------------
 
   console.log(`${MODULE_ID} | Initialized.`);
 });

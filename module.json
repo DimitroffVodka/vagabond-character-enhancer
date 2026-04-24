@@ -89,6 +89,11 @@
       "path": "languages/en.json"
     }
   ],
+  "documentTypes": {
+    "Item": {
+      "talent": {}
+    }
+  },
   "socket": true,
   "url": "https://github.com/DimitroffVodka/vagabond-character-enhancer",
   "manifest": "https://github.com/DimitroffVodka/vagabond-character-enhancer/releases/latest/download/module.json",

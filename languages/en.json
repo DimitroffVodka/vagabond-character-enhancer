@@ -1,4 +1,9 @@
 {
+  "TYPES": {
+    "Item": {
+      "vagabond-character-enhancer.talent": "Talent"
+    }
+  },
   "VCE": {
     "Settings": {
       "EnableClassFeatures": "Enable Class Feature Automation",
@@ -34,6 +39,9 @@
       "Potency": "Potency",
       "BigBang": "Big Bang",
       "Eureka": "Eureka"
+    },
+    "SheetLabels": {
+      "Talent": "VCE Talent"
     },
     "Chat": {
       "RageActive": "RAGE",

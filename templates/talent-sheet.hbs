@@ -1,0 +1,88 @@
+{{!-- Talent item sheet template --}}
+{{!-- Context provided by TalentSheet._prepareContext --}}
+<form class="vce-talent-sheet-form">
+  <header class="vce-talent-sheet-header sheet-header">
+    <img class="profile-img" src="{{item.img}}" data-edit="img" title="{{item.name}}" />
+    <div class="header-fields">
+      <h1 class="charname">
+        <input name="name" type="text" value="{{item.name}}" placeholder="Talent Name" />
+      </h1>
+    </div>
+  </header>
+
+  <section class="sheet-body">
+
+    {{!-- Description --}}
+    <div class="form-group stacked">
+      <label>Description</label>
+      <div class="form-fields">
+        <div class="editor">
+          <textarea name="system.description" rows="5" placeholder="Talent description (HTML supported)">{{system.description}}</textarea>
+        </div>
+      </div>
+    </div>
+
+    {{!-- Damage & Type --}}
+    <div class="form-group vce-talent-grid">
+      <div class="form-group">
+        <label>Damage Formula</label>
+        <div class="form-fields">
+          <input type="text" name="system.damage" value="{{system.damage}}" placeholder="e.g. 1d6" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Damage Type</label>
+        <div class="form-fields">
+          <input type="text" name="system.damageType" value="{{system.damageType}}" placeholder="e.g. fire" />
+        </div>
+      </div>
+    </div>
+
+    {{!-- Effect & Duration --}}
+    <div class="form-group vce-talent-grid">
+      <div class="form-group">
+        <label>Effect (status)</label>
+        <div class="form-fields">
+          <input type="text" name="system.effect" value="{{system.effect}}" placeholder="e.g. confused" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Duration</label>
+        <div class="form-fields">
+          <select name="system.duration">
+            {{#each durationOptions}}
+              <option value="{{this}}" {{#if (eq this ../system.duration)}}selected{{/if}}>{{this}}</option>
+            {{/each}}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    {{!-- Delivery --}}
+    <div class="form-group">
+      <label>Delivery Options <span class="hint">(comma-separated)</span></label>
+      <div class="form-fields">
+        <input type="text" name="system.delivery" value="{{deliveryString}}"
+               placeholder="e.g. touch, remote, cone, sphere" />
+      </div>
+    </div>
+
+    {{!-- Alias Of --}}
+    <div class="form-group">
+      <label>Alias Of <span class="hint">(system spell name, flavor only)</span></label>
+      <div class="form-fields">
+        <input type="text" name="system.aliasOf" value="{{system.aliasOf}}" placeholder="e.g. burn" />
+      </div>
+    </div>
+
+    {{!-- Focus Buff AE --}}
+    <div class="form-group stacked">
+      <label>Focus Buff AE <span class="hint">(JSON — null if not a buff Talent)</span></label>
+      <div class="form-fields">
+        <textarea name="system.focusBuffAE" rows="5"
+                  placeholder='{"changes":[{"key":"...","mode":2,"value":"..."}],...}'>{{focusBuffAEJson}}</textarea>
+      </div>
+    </div>
+
+  </section>
+</form>
