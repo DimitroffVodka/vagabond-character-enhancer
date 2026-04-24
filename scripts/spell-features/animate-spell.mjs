@@ -276,6 +276,12 @@ export const AnimateSpell = {
     }
 
     return new Promise((resolve) => {
+      // Track picked item separately so the `close` callback (which fires
+      // synchronously inside d.close()) doesn't race ahead and resolve(null)
+      // before we've had a chance to pass the user's pick. Whatever `picked`
+      // is at close time wins — undefined/null = cancel, item = selection.
+      let picked = null;
+
       const rows = items.map((it) => `
         <tr class="vce-animate-row" data-item-id="${it.id}" role="button" tabindex="0">
           <td class="vce-bd-cell vce-bd-cell-img">
@@ -306,22 +312,27 @@ export const AnimateSpell = {
         title: `${caster.name} — Animate Object`,
         content,
         buttons: {
-          cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => resolve(null) }
+          cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => { picked = null; } }
         },
         default: "cancel",
         render: (html) => {
-          html.find(".vce-animate-row").on("click", (ev) => {
-            const itemId = ev.currentTarget.dataset.itemId;
-            const item = caster.items.get(itemId);
-            if (!item) return;
-            d.close();
-            resolve(item);
-          });
-          html.find(".vce-animate-row").on("keydown", (ev) => {
-            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.currentTarget.click(); }
-          });
+          // Dialog V1 in v13 may pass html as either jQuery or HTMLElement
+          // depending on core version. Normalize to a DOM element we can
+          // query natively so listeners reliably bind.
+          const root = html?.[0] ?? html;
+          const bind = (row) => {
+            row.addEventListener("click", (ev) => {
+              const itemId = ev.currentTarget.dataset.itemId;
+              picked = caster.items.get(itemId) || null;
+              d.close(); // close callback resolves with whatever `picked` holds
+            });
+            row.addEventListener("keydown", (ev) => {
+              if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.currentTarget.click(); }
+            });
+          };
+          root.querySelectorAll?.(".vce-animate-row").forEach(bind);
         },
-        close: () => resolve(null),
+        close: () => resolve(picked),
       }, { width: 600, height: 450 });
       d.render(true);
     });
