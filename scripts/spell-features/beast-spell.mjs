@@ -362,7 +362,7 @@ export const BeastSpell = {
       }
       try {
         await FocusManager.acquireFeatureFocus(
-          caster, FOCUS_KEY, `Beast Summons`, "icons/creatures/abilities/bear-roar-brown.webp"
+          caster, FOCUS_KEY, `Beast Summons`, "icons/svg/pawprint.svg"
         );
       } catch (e) {
         log("BeastSpell", `Could not acquire focus: ${e.message}`);

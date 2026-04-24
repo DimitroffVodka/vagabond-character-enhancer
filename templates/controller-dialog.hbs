@@ -1,9 +1,11 @@
-<div class="vce-controller-dialog" style="display:flex;flex-direction:column;gap:0.75rem;padding:0.5rem;">
-  <p>Configure save routing for <strong>{{npcName}}</strong>.</p>
+<div class="vce-controller-dialog">
+  <p class="vce-cd-intro">
+    Configure save routing for <strong>{{npcName}}</strong>.
+  </p>
 
-  <div class="form-group">
-    <label for="vce-controller-pc">Controller PC</label>
-    <select id="vce-controller-pc" name="controllerId">
+  <div class="vce-cd-field">
+    <label for="vce-controller-pc" class="vce-cd-label">Controller PC</label>
+    <select id="vce-controller-pc" name="controllerId" class="vce-cd-select">
       <option value="">— Select —</option>
       {{#each pcChoices}}
         <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
@@ -11,18 +13,25 @@
     </select>
   </div>
 
-  <fieldset class="form-group">
-    <legend>Type</legend>
+  <fieldset class="vce-cd-field vce-cd-fieldset">
+    <legend class="vce-cd-label">Type</legend>
     {{#each types}}
-      <label>
+      <label class="vce-cd-radio">
         <input type="radio" name="controllerType" value="{{value}}" {{#if checked}}checked{{/if}}>
-        {{label}}
+        <span class="vce-cd-radio-text">
+          <span class="vce-cd-radio-title">{{label}}</span>
+          {{#if hint}}<span class="vce-cd-radio-hint">{{hint}}</span>{{/if}}
+        </span>
       </label>
     {{/each}}
   </fieldset>
 
-  <footer style="display:flex;justify-content:space-between;gap:0.5rem;margin-top:0.5rem;">
-    <button type="button" data-action="clear"><i class="fas fa-trash"></i> Clear</button>
-    <button type="submit"><i class="fas fa-save"></i> Save</button>
+  <footer class="vce-cd-footer">
+    <button type="button" class="vce-cd-clear" data-action="clear">
+      <i class="fas fa-trash"></i> Clear
+    </button>
+    <button type="submit" class="vce-cd-save">
+      <i class="fas fa-save"></i> Save
+    </button>
   </footer>
 </div>

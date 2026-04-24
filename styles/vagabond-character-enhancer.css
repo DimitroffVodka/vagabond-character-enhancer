@@ -1894,6 +1894,82 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   color: var(--vce-accent);
 }
 
+/* Set Save Controller dialog */
+.vce-controller-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 8px 4px;
+}
+.vce-controller-dialog .vce-cd-intro {
+  margin: 0 0 4px 0;
+  color: var(--vagabond-c-text-primary, #2c3e50);
+}
+.vce-controller-dialog .vce-cd-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.vce-controller-dialog .vce-cd-label {
+  font-family: "Germania", serif;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--vagabond-c-text-primary, #2c3e50);
+  padding: 0 2px;
+}
+.vce-controller-dialog .vce-cd-select {
+  width: 100%;
+  padding: 4px 6px;
+  font-family: "Paradigm", serif;
+  font-size: 13px;
+}
+.vce-controller-dialog .vce-cd-fieldset {
+  border: 1px solid var(--vagabond-c-tan, #a2a2a2);
+  border-radius: 4px;
+  padding: 6px 10px;
+}
+.vce-controller-dialog .vce-cd-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  font-family: "Paradigm", serif;
+}
+.vce-controller-dialog .vce-cd-radio + .vce-cd-radio {
+  border-top: 1px dotted var(--vagabond-c-faint, #c5beb8);
+  margin-top: 2px;
+}
+.vce-controller-dialog .vce-cd-radio input[type="radio"] {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.vce-controller-dialog .vce-cd-radio-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.vce-controller-dialog .vce-cd-radio-title {
+  font-weight: 700;
+  font-size: 13px;
+}
+.vce-controller-dialog .vce-cd-radio-hint {
+  font-size: 11px;
+  color: var(--vagabond-c-muted, #666);
+  font-style: italic;
+}
+.vce-controller-dialog .vce-cd-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+}
+.vce-controller-dialog .vce-cd-footer button {
+  flex: 1;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
 /* CreaturePicker multi-select row highlight */
 .vce-cp-row.vce-cp-selected {
   background: rgba(212, 168, 67, 0.18) !important;

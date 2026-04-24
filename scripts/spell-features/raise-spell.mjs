@@ -17,6 +17,7 @@
  */
 
 import { MODULE_ID, log, getFeatures } from "../utils.mjs";
+import { gmRequest } from "../socket-relay.mjs";
 import { CompanionSpawner } from "../companion/companion-spawner.mjs";
 import { CreaturePicker } from "../companion/creature-picker.mjs";
 import { applyUndeadTemplate } from "../companion/undead-template.mjs";
@@ -32,19 +33,151 @@ const BOOMER_UUID = "Compendium.vagabond.bestiary.Actor.hLO69Zjvz7WaJAmO";
 export const RaiseSpell = {
   init() {
     Hooks.on("createChatMessage", (msg) => this._onChatMessage(msg));
+    // Snapshot old focus.spellIds before update so we can detect add/remove
+    Hooks.on("preUpdateActor", (actor, changes, options) => {
+      if (actor.type !== "character") return;
+      if (foundry.utils.getProperty(changes, "system.focus.spellIds") === undefined) return;
+      options._vceRaiseOldFocusIds = [...(actor.system?.focus?.spellIds ?? [])];
+    });
+    Hooks.on("updateActor", (actor, changes, options) => this._onFocusToggle(actor, changes, options));
     this._registerDismissHandler();
+    this._registerManaDrain();
     log("RaiseSpell", "Raise spell adapter registered.");
   },
 
+  /**
+   * Unified focus check — either the system focus list has Raise OR the VCE
+   * featureFocus slot is held. Matches the Beast pattern.
+   */
+  _isFocusingRaise(actor) {
+    const raiseSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "raise");
+    if (raiseSpell) {
+      const spellIds = actor.system?.focus?.spellIds ?? [];
+      if (spellIds.includes(raiseSpell.id)) return true;
+    }
+    const ff = actor.getFlag(MODULE_ID, "featureFocus") ?? [];
+    if (ff.some(f => f.key === FOCUS_KEY)) return true;
+    return false;
+  },
+
+  async _onFocusToggle(actor, changes, options) {
+    if (actor.type !== "character") return;
+    if (!actor.isOwner) return;
+    const newSpellIds = foundry.utils.getProperty(changes, "system.focus.spellIds");
+    if (!Array.isArray(newSpellIds)) return;
+
+    const raiseSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "raise");
+    if (!raiseSpell) return;
+
+    const oldSpellIds = options?._vceRaiseOldFocusIds ?? [];
+    const wasActive = oldSpellIds.includes(raiseSpell.id);
+    const nowActive = newSpellIds.includes(raiseSpell.id);
+
+    if (!wasActive && nowActive) {
+      if (this._handlingTrigger?.has(actor.id)) return;
+      (this._handlingTrigger ??= new Set()).add(actor.id);
+      try {
+        await this.trigger(actor);
+      } finally {
+        this._handlingTrigger.delete(actor.id);
+      }
+      return;
+    }
+
+    if (wasActive && !nowActive) {
+      if (this._handlingTrigger?.has(actor.id)) return;
+      const active = CompanionSpawner.getCompanionsFor(actor).filter(c => c.sourceId === SOURCE_ID);
+      if (!active.length) return;
+      for (const c of active) {
+        await CompanionSpawner.dismiss(c.actor, { reason: "focus-dropped" });
+      }
+      try { await FocusManager.releaseFeatureFocus(actor, FOCUS_KEY); }
+      catch (e) { log("RaiseSpell", `Could not release focus slot: ${e.message}`); }
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+          <div class="card-body"><section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <strong>${actor.name}</strong> drops Focus on <strong>Raise</strong>;
+              the raised undead fall permanently.
+            </div>
+          </section></div>
+        </div>`,
+      });
+    }
+  },
+
+  _registerManaDrain() {
+    Hooks.on("updateCombat", async (combat, changes) => {
+      if (!("round" in changes)) return;
+      if (!game.user.isGM && game.users.find(u => u.isGM && u.active)) return;
+
+      const casters = game.actors.filter(a => a.type === "character" && this._isFocusingRaise(a));
+      for (const actor of casters) {
+        const mana = Number(actor.system?.mana?.current ?? 0) || 0;
+        if (mana < 1) {
+          await this._dropFocusAndDismiss(actor, "out-of-mana");
+          continue;
+        }
+        await actor.update({ "system.mana.current": mana - 1 });
+        log("RaiseSpell", `${actor.name}: 1 Mana drained for Raise focus (${mana} → ${mana - 1})`);
+      }
+    });
+  },
+
+  async _dropFocusAndDismiss(actor, reason) {
+    (this._handlingTrigger ??= new Set()).add(actor.id);
+    try {
+      const raiseSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "raise");
+      const ids = actor.system?.focus?.spellIds ?? [];
+      if (raiseSpell && ids.includes(raiseSpell.id)) {
+        await actor.update({ "system.focus.spellIds": ids.filter(id => id !== raiseSpell.id) });
+      }
+      try { await FocusManager.releaseFeatureFocus(actor, FOCUS_KEY); }
+      catch (e) { log("RaiseSpell", `Could not release focus slot: ${e.message}`); }
+      const active = CompanionSpawner.getCompanionsFor(actor).filter(c => c.sourceId === SOURCE_ID);
+      for (const c of active) {
+        await CompanionSpawner.dismiss(c.actor, { reason });
+      }
+      if (active.length) {
+        ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor }),
+          content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+            <div class="card-body"><section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                <strong>${actor.name}</strong>'s raised undead fall permanently —
+                ${reason === "out-of-mana" ? "insufficient Mana to maintain Focus" : "Focus dropped"}.
+              </div>
+            </section></div>
+          </div>`,
+        });
+      }
+    } finally {
+      this._handlingTrigger.delete(actor.id);
+    }
+  },
+
   _registerDismissHandler() {
-    CompanionSpawner.registerDismissHandler(SOURCE_ID, async (companionActor, { controller }) => {
+    CompanionSpawner.registerDismissHandler(SOURCE_ID, async (companionActor, { controller, meta }) => {
       if (!controller) return;
-      // Release focus only when the last raised undead is dismissed
+      // Release focus + clean up system spell list only when LAST raised dies
       const remaining = CompanionSpawner.getCompanionsFor(controller)
         .filter(c => c.sourceId === SOURCE_ID && c.actor.id !== companionActor.id);
       if (!remaining.length) {
         try { await FocusManager.releaseFeatureFocus(controller, FOCUS_KEY); }
         catch (e) { log("RaiseSpell", `Could not release focus: ${e.message}`); }
+        const raiseSpell = controller.items.find(i => i.type === "spell" && i.name.toLowerCase() === "raise");
+        if (raiseSpell) {
+          const ids = controller.system?.focus?.spellIds ?? [];
+          if (ids.includes(raiseSpell.id)) {
+            await controller.update({ "system.focus.spellIds": ids.filter(id => id !== raiseSpell.id) });
+          }
+        }
+      }
+      // Clean up fresh-imported world actor to avoid orphans
+      if (meta?.meta?.freshImport && companionActor?.id) {
+        try { await gmRequest("deleteActor", { actorId: companionActor.id }); }
+        catch (e) { log("RaiseSpell", `Could not delete imported actor on dismiss: ${e.message}`); }
       }
     });
   },
@@ -170,13 +303,42 @@ export const RaiseSpell = {
       content: `<div class="vce-companion-spawned"><strong>${caster.name}</strong> casts <strong>Raise</strong> — the dead rise: <em>${names}</em>.</div>`,
     });
 
-    // Acquire focus on first raise; shared across all subsequent raises
-    const hasFocus = (caster.getFlag(MODULE_ID, "featureFocus") || [])
-      .some(f => f.key === FOCUS_KEY);
-    if (!hasFocus) {
+    // Focus acquisition — sync BOTH trackers if not already focusing.
+    // If the caster clicked the system's "Focus this spell" button first,
+    // we're already here via _onFocusToggle; _isFocusingRaise returns true
+    // and we skip the dialog.
+    if (!this._isFocusingRaise(caster)) {
+      const acquire = await foundry.applications.api.DialogV2.confirm({
+        window: { title: "Raise — Focus" },
+        content: `<p>Focus on Raise to maintain <strong>${raised} undead</strong>?</p>
+                  <p><em>Costs 1 Mana per Turn of upkeep. Cancelling dismisses the raised — dead rise permanently if Focus drops.</em></p>`,
+        rejectClose: false,
+      });
+      if (!acquire) {
+        // User declined — dismiss the raised undead
+        const active = CompanionSpawner.getCompanionsFor(caster).filter(c => c.sourceId === SOURCE_ID);
+        for (const c of active) {
+          await CompanionSpawner.dismiss(c.actor, { reason: "focus-declined" });
+        }
+        return;
+      }
+      // Sync system focus list
+      const raiseSpell = caster.items.find(i => i.type === "spell" && i.name.toLowerCase() === "raise");
+      if (raiseSpell) {
+        const ids = caster.system?.focus?.spellIds ?? [];
+        if (!ids.includes(raiseSpell.id)) {
+          (this._handlingTrigger ??= new Set()).add(caster.id);
+          try {
+            await caster.update({ "system.focus.spellIds": [...ids, raiseSpell.id] });
+          } finally {
+            this._handlingTrigger.delete(caster.id);
+          }
+        }
+      }
+      // Acquire VCE focus slot
       try {
         await FocusManager.acquireFeatureFocus(
-          caster, FOCUS_KEY, `Raised Undead`, "icons/magic/death/skull-horned-goat-pale.webp"
+          caster, FOCUS_KEY, `Raised Undead`, "icons/svg/skull.svg"
         );
       } catch (e) {
         log("RaiseSpell", `Could not acquire focus: ${e.message}`);

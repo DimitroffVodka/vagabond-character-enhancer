@@ -23,22 +23,33 @@ export const UNDEAD_AE_ORIGIN = `module.${MODULE_ID}.undead-template`;
 
 /**
  * AE data applied to a creature raised as Undead.
- * Uses status effect "poison-immune" and "silver-weakness" semantics from
- * the Vagabond system if present; otherwise falls back to plain changes.
+ *
+ * Matches Vagabond bestiary field shapes verified against Zombie, Boomer:
+ *   - system.statusImmunities — ARRAY of strings; each value must be its
+ *     own ADD change (passing "sickened,poisoned" adds the literal comma
+ *     string as a single item, not two items)
+ *   - system.immunities       — ARRAY of damage-type strings
+ *   - system.weaknesses       — ARRAY of damage-type strings
+ *   - system.senses           — STRING (OVERRIDE to avoid ugly concatenation
+ *     like "Keen HearingDarksight")
+ *
+ * Per rulebook Raise: gains Darksight, Poison immunity, Silvered weakness,
+ * cannot be Sickened.
  */
 export function makeUndeadAEData(sourceName = "Raised") {
+  const ADD = CONST.ACTIVE_EFFECT_MODES.ADD;
+  const OVERRIDE = CONST.ACTIVE_EFFECT_MODES.OVERRIDE;
   return {
     name:  `Undead (${sourceName})`,
-    img:   "icons/magic/death/skull-horned-goat-pale.webp",
+    img:   "icons/svg/skull.svg",
     origin: UNDEAD_AE_ORIGIN,
-    description: "Undead: Darksight, immune to Poison, Weak to Silvered, cannot be Sickened.",
+    description: "Undead: Darksight, Poison immunity, Silvered weakness, cannot be Sickened.",
     changes: [
-      // Being type override — so code that checks beingType sees Undead
-      { key: "system.beingType", mode: CONST.ACTIVE_EFFECT_MODES.OVERRIDE, value: "Undead" },
-      // Senses — ensure Darksight string present
-      { key: "system.senses", mode: CONST.ACTIVE_EFFECT_MODES.ADD, value: "Darksight" },
-      // Status immunities — add "sickened" and "poisoned" (poison immunity)
-      { key: "system.statusImmunities", mode: CONST.ACTIVE_EFFECT_MODES.ADD, value: "sickened,poisoned" },
+      { key: "system.beingType",       mode: OVERRIDE, value: "Undead" },
+      { key: "system.senses",          mode: OVERRIDE, value: "Darksight" },
+      { key: "system.statusImmunities", mode: ADD,      value: "sickened" },
+      { key: "system.immunities",       mode: ADD,      value: "poison" },
+      { key: "system.weaknesses",       mode: ADD,      value: "silver" },
     ],
     statuses: [],
     flags: {
@@ -75,6 +86,31 @@ export async function applyUndeadTemplate(actor, { sourceName = "Raised" } = {})
       await gmRequest("createActorAE", { actorId: actor.id, aeData });
     }
     log("UndeadTemplate", `Applied Undead template to ${actor.name}`);
+
+    // Update scene tokens for this actor to Darkvision — the AE adds
+    // system.senses="Darksight" but the token's own sight config isn't
+    // auto-derived from senses, so we update the TokenDocument too.
+    for (const scene of game.scenes) {
+      const tokens = scene.tokens.filter(t => t.actorId === actor.id);
+      for (const tok of tokens) {
+        try {
+          await tok.update({
+            sight: { enabled: true, range: null, visionMode: "darkvision" },
+          });
+        } catch (e) {
+          // Player client without scene permission — fall back to GM proxy
+          try {
+            await gmRequest("updateToken", {
+              sceneId: scene.id,
+              tokenId: tok.id,
+              update: { sight: { enabled: true, range: null, visionMode: "darkvision" } },
+            });
+          } catch (e2) {
+            log("UndeadTemplate", `Could not update token sight for ${tok.name}: ${e2.message}`);
+          }
+        }
+      }
+    }
   } catch (e) {
     log("UndeadTemplate", `Could not apply Undead template to ${actor.name}: ${e.message}`);
   }

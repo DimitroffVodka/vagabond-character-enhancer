@@ -55,12 +55,14 @@ export class ControllerDialog extends HandlebarsApplicationMixin(ApplicationV2) 
       types: [
         {
           value: CONTROLLER_TYPES.COMPANION,
-          label: "Companion (Mana Skill)",
+          label: "Companion",
+          hint: "Rolls via Mana Skill (Mysticism / Arcana)",
           checked: current.type === CONTROLLER_TYPES.COMPANION
         },
         {
           value: CONTROLLER_TYPES.HIRELING,
-          label: "Hireling (Leadership)",
+          label: "Hireling",
+          hint: "Rolls via Leadership",
           checked: current.type === CONTROLLER_TYPES.HIRELING
         }
       ]

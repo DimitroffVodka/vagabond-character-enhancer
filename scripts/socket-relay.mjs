@@ -101,6 +101,17 @@ async function _handleRequest(data) {
       return { tokenId: tokenDoc.id };
     }
 
+    case "updateToken": {
+      // Player-triggered token update — e.g. UndeadTemplate updating sight to
+      // Darkvision on a token the player doesn't own.
+      const scene = game.scenes.get(data.sceneId);
+      if (!scene) return { error: "Scene not found" };
+      const tokenDoc = scene.tokens.get(data.tokenId);
+      if (!tokenDoc) return { error: `Token ${data.tokenId} not found on scene` };
+      await tokenDoc.update(data.update ?? {});
+      return { ok: true };
+    }
+
     case "removeToken": {
       const scene = game.scenes.get(data.sceneId);
       if (!scene) return { error: "Scene not found" };
