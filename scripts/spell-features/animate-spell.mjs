@@ -30,16 +30,104 @@ const SOURCE_ID = "spell-animate";
 export const AnimateSpell = {
   init() {
     Hooks.on("createChatMessage", (msg) => this._onChatMessage(msg));
+    // Snapshot old focus.spellIds BEFORE the update lands so we can reliably
+    // detect add vs remove. Mirrors the Beast/Raise pattern.
+    Hooks.on("preUpdateActor", (actor, changes, options) => {
+      if (actor.type !== "character") return;
+      if (foundry.utils.getProperty(changes, "system.focus.spellIds") === undefined) return;
+      options._vceAnimateOldFocusIds = [...(actor.system?.focus?.spellIds ?? [])];
+    });
+    Hooks.on("updateActor", (actor, changes, options) => this._onFocusToggle(actor, changes, options));
     this._registerDismissHandler();
     log("AnimateSpell", "Animate spell adapter registered.");
+  },
+
+  /**
+   * Unified focus check — either the system focus list has Animate OR the
+   * VCE featureFocus slot is held. Mirrors Beast/Raise patterns. Animate
+   * has no per-round mana drain (rulebook: free cost), so this check is
+   * only used for triggering and drop-focus detection.
+   */
+  _isFocusingAnimate(actor) {
+    const animateSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "animate");
+    if (animateSpell) {
+      const spellIds = actor.system?.focus?.spellIds ?? [];
+      if (spellIds.includes(animateSpell.id)) return true;
+    }
+    const ff = actor.getFlag(MODULE_ID, "featureFocus") ?? [];
+    if (ff.some(f => f.key === FOCUS_KEY)) return true;
+    return false;
+  },
+
+  async _onFocusToggle(actor, changes, options) {
+    if (actor.type !== "character") return;
+    if (!actor.isOwner) return;
+    const newSpellIds = foundry.utils.getProperty(changes, "system.focus.spellIds");
+    if (!Array.isArray(newSpellIds)) return;
+
+    const animateSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "animate");
+    if (!animateSpell) return;
+
+    const oldSpellIds = options?._vceAnimateOldFocusIds ?? [];
+    const wasActive = oldSpellIds.includes(animateSpell.id);
+    const nowActive = newSpellIds.includes(animateSpell.id);
+
+    // ADD — click "Focus this spell" → open picker, animate object
+    if (!wasActive && nowActive) {
+      if (this._handlingTrigger?.has(actor.id)) return;
+      (this._handlingTrigger ??= new Set()).add(actor.id);
+      try {
+        await this.trigger(actor);
+      } finally {
+        this._handlingTrigger.delete(actor.id);
+      }
+      return;
+    }
+
+    // REMOVE — player dropped focus on the spell card → dismiss the object
+    if (wasActive && !nowActive) {
+      if (this._handlingTrigger?.has(actor.id)) return;
+      const active = CompanionSpawner.getCompanionsFor(actor).filter(c => c.sourceId === SOURCE_ID);
+      if (!active.length) return;
+      for (const c of active) {
+        await CompanionSpawner.dismiss(c.actor, { reason: "focus-dropped" });
+      }
+      // Dismiss handler releases the VCE focus slot; nothing else to do
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+          <div class="card-body"><section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <strong>${actor.name}</strong> drops Focus on <strong>Animate</strong>;
+              the animated object falls inert.
+            </div>
+          </section></div>
+        </div>`,
+      });
+    }
   },
 
   _registerDismissHandler() {
     CompanionSpawner.registerDismissHandler(SOURCE_ID, async (companionActor, { controller, meta }) => {
       if (!controller) return;
-      // Release focus when this animated object is dismissed
+      // Release the VCE focus slot
       try { await FocusManager.releaseFeatureFocus(controller, FOCUS_KEY); }
       catch (e) { log("AnimateSpell", `Could not release focus: ${e.message}`); }
+      // Also remove Animate from the system's focus list so the spell card
+      // reflects the drop state. Re-entry guarded so our own drop-focus-
+      // detection hook doesn't recurse.
+      const animateSpell = controller.items.find(i => i.type === "spell" && i.name.toLowerCase() === "animate");
+      if (animateSpell) {
+        const ids = controller.system?.focus?.spellIds ?? [];
+        if (ids.includes(animateSpell.id)) {
+          (this._handlingTrigger ??= new Set()).add(controller.id);
+          try {
+            await controller.update({ "system.focus.spellIds": ids.filter(id => id !== animateSpell.id) });
+          } finally {
+            this._handlingTrigger.delete(controller.id);
+          }
+        }
+      }
       // Delete the synthetic NPC actor we created for this spawn
       if (meta?.meta?.synthetic && companionActor?.id) {
         try { await gmRequest("deleteActor", { actorId: companionActor.id }); }
