@@ -75,12 +75,15 @@ export const BeastSpell = {
       return;
     }
 
-    // REMOVED — Focus just clicked OFF
+    // REMOVED — Focus just clicked OFF.
+    // Skip if _dropFocusAndDismiss is the one that flipped the flag (re-entry
+    // guard via _handlingTrigger); otherwise we'd double-dismiss + double-post.
     if (wasActive && !nowActive) {
+      if (this._handlingTrigger?.has(actor.id)) return;
       const active = CompanionSpawner.getCompanionsFor(actor).filter(c => c.sourceId === SOURCE_ID);
       if (!active.length) return;
-      // Dismiss all active beasts. _dropFocusAndDismiss also unsets spellIds
-      // defensively, but here the player already did that via the UI.
+      // Dismiss all active beasts. The player initiated this via the UI; we
+      // reflect the intent by removing tokens + releasing focus slot.
       for (const c of active) {
         await CompanionSpawner.dismiss(c.actor, { reason: "focus-dropped" });
       }
@@ -154,35 +157,44 @@ export const BeastSpell = {
    * Drop system focus on Beast (remove from spellIds), release the VCE focus
    * slot, and dismiss all active Beast summons. Called when the caster runs
    * out of mana or the player manually un-focuses.
+   *
+   * Uses `_handlingTrigger` as a re-entry guard: the spellIds update fires
+   * the focus-toggle hook which would otherwise also try to dismiss beasts
+   * and post a duplicate chat message. The guard makes the hook bail.
    */
   async _dropFocusAndDismiss(actor, reason) {
-    // Remove Beast from system focus list
-    const beastSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "beast");
-    const ids = actor.system?.focus?.spellIds ?? [];
-    if (beastSpell && ids.includes(beastSpell.id)) {
-      const next = ids.filter(id => id !== beastSpell.id);
-      await actor.update({ "system.focus.spellIds": next });
-    }
-    // Release VCE focus slot (if held)
-    try { await FocusManager.releaseFeatureFocus(actor, FOCUS_KEY); }
-    catch (e) { log("BeastSpell", `Could not release focus slot: ${e.message}`); }
-    // Dismiss every active beast summon
-    const active = CompanionSpawner.getCompanionsFor(actor).filter(c => c.sourceId === SOURCE_ID);
-    for (const c of active) {
-      await CompanionSpawner.dismiss(c.actor, { reason });
-    }
-    if (active.length) {
-      ChatMessage.create({
-        speaker: ChatMessage.getSpeaker({ actor }),
-        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
-          <div class="card-body"><section class="content-body">
-            <div class="card-description" style="text-align:center;">
-              <strong>${actor.name}</strong>'s Beast summons depart —
-              ${reason === "out-of-mana" ? "insufficient Mana to maintain Focus" : "Focus dropped"}.
-            </div>
-          </section></div>
-        </div>`,
-      });
+    (this._handlingTrigger ??= new Set()).add(actor.id);
+    try {
+      // Remove Beast from system focus list
+      const beastSpell = actor.items.find(i => i.type === "spell" && i.name.toLowerCase() === "beast");
+      const ids = actor.system?.focus?.spellIds ?? [];
+      if (beastSpell && ids.includes(beastSpell.id)) {
+        const next = ids.filter(id => id !== beastSpell.id);
+        await actor.update({ "system.focus.spellIds": next });
+      }
+      // Release VCE focus slot (if held)
+      try { await FocusManager.releaseFeatureFocus(actor, FOCUS_KEY); }
+      catch (e) { log("BeastSpell", `Could not release focus slot: ${e.message}`); }
+      // Dismiss every active beast summon
+      const active = CompanionSpawner.getCompanionsFor(actor).filter(c => c.sourceId === SOURCE_ID);
+      for (const c of active) {
+        await CompanionSpawner.dismiss(c.actor, { reason });
+      }
+      if (active.length) {
+        ChatMessage.create({
+          speaker: ChatMessage.getSpeaker({ actor }),
+          content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+            <div class="card-body"><section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                <strong>${actor.name}</strong>'s Beast summons depart —
+                ${reason === "out-of-mana" ? "insufficient Mana to maintain Focus" : "Focus dropped"}.
+              </div>
+            </section></div>
+          </div>`,
+        });
+      }
+    } finally {
+      this._handlingTrigger.delete(actor.id);
     }
   },
 
