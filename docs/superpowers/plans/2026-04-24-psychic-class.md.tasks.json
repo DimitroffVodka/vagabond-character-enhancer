@@ -1,0 +1,117 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-24-psychic-class.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Talent data model + sheet registration",
+      "status": "pending",
+      "description": "**Goal:** Register a `talent` item type with a data model.\n\n**Files:**\n- Create: `scripts/talent/talent-data-model.mjs`\n- Create: `scripts/talent/talent-sheet.mjs`\n- Create: `templates/talent-sheet.hbs`\n- Modify: `scripts/vagabond-character-enhancer.mjs`\n\n**Verify:** Item.create({type:\"talent\"}) succeeds, sheet renders.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-data-model.mjs\", \"scripts/talent/talent-sheet.mjs\", \"templates/talent-sheet.hbs\", \"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"manual: Item.create({name:'X',type:'talent'},{temporary:true}) in Foundry console\", \"acceptanceCriteria\": [\"CONFIG.Item.dataModels.talent exists\", \"Talent item creation works\", \"Talent sheet renders\", \"Other item types unaffected\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Create vce-talents pack and register it",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Empty LevelDB pack registered in module.json.\n\n**Files:**\n- Create: `packs/vce-talents/`\n- Modify: `module.json`\n\n**Verify:** game.packs.get('vagabond-character-enhancer.vce-talents') returns CompendiumCollection, count=0.\n\n```json:metadata\n{\"files\": [\"packs/vce-talents/\", \"module.json\"], \"verifyCommand\": \"manual: game.packs.get('vagabond-character-enhancer.vce-talents')\", \"acceptanceCriteria\": [\"Pack registered in module.json\", \"Pack appears in compendium browser\", \"Pack count = 0\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Author 14 Talent items in vce-talents",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** All 14 Talents per spec table, with full data model fields populated.\n\n**Files:**\n- Modify: `packs/vce-talents/*` (LevelDB write-through)\n\n**Verify:** Pack contains 14 talent-type items; buff Talents have non-null focusBuffAE; spell-aliased Talents have aliasOf set.\n\n```json:metadata\n{\"files\": [\"packs/vce-talents/\"], \"verifyCommand\": \"manual: const docs = await game.packs.get('vagabond-character-enhancer.vce-talents').getDocuments(); console.log(docs.length)\", \"acceptanceCriteria\": [\"14 talent items total\", \"4 buff Talents have focusBuffAE\", \"10 aliased Talents have aliasOf set\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Inject Talents tab on Psychic character sheets",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** Talents tab visible on Psychic actors only, rendering known Talents as cards (Cast/Focus stubs).\n\n**Files:**\n- Create: `scripts/talent/talents-tab.mjs`\n- Create: `templates/talents-tab.hbs`\n- Modify: `scripts/vagabond-character-enhancer.mjs`\n- Modify: `styles/vagabond-character-enhancer.css`\n\n**Verify:** Open Psychic sheet → Talents tab present. Open Wizard sheet → no Talents tab.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talents-tab.mjs\", \"templates/talents-tab.hbs\", \"styles/vagabond-character-enhancer.css\", \"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"manual: open Psychic actor sheet, verify Talents tab visible\", \"acceptanceCriteria\": [\"Tab visible on Psychic actors only\", \"Cards render with name/icon/description\", \"Cast/Focus stub buttons render\", \"Buff Talents show Buff badge\", \"Header shows Mana Cap and Focus counter\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Build Talent pick dialog",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** DialogV2 picker for selecting Talents. Standalone — fired manually.\n\n**Files:**\n- Create: `scripts/talent/talent-pick-dialog.mjs`\n- Create: `templates/talent-pick-dialog.hbs`\n\n**Verify:** TalentPickDialog.show(actor, 3) returns array of picked talents on confirm, null on cancel.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-pick-dialog.mjs\", \"templates/talent-pick-dialog.hbs\"], \"verifyCommand\": \"manual: await game.vagabondCharacterEnhancer.talentPicker.show(actor, 3)\", \"acceptanceCriteria\": [\"Dialog shows all Talents not already known\", \"Live counter updates on check/uncheck\", \"Cap enforcement at exact count\", \"Confirm returns picked array\", \"Cancel returns null\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Auto-fire pick dialog on class detection / level-up",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** Picker fires automatically when a Psychic actor needs to pick (class detect → 3 picks; L3/5/7/9 level-ups → 1 pick each).\n\n**Files:**\n- Modify: `scripts/feature-detector.mjs`\n\n**Verify:** Drop Psychic class on fresh actor → picker fires for 3. Level to 3 → picker fires for 1.\n\n```json:metadata\n{\"files\": [\"scripts/feature-detector.mjs\"], \"verifyCommand\": \"manual: create actor, add Psychic class, verify picker fires\", \"acceptanceCriteria\": [\"Picker fires on Psychic class create (3 picks)\", \"Picker fires on level to 3/5/7/9 (1 pick)\", \"flags.psychicTalentsPicked tracks completed tiers\", \"Cancel does not mark tier complete\", \"Picked Talents added to actor as items\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Build Talent cast dialog (full RAW)",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** Cast dialog with damage slider + delivery dropdown + effect toggle + duration radio, bounded by Mana cap.\n\n**Files:**\n- Create: `scripts/talent/talent-cast.mjs`\n- Create: `templates/talent-cast-dialog.hbs`\n\n**Verify:** TalentCast.openDialog(actor, talent) returns config object on cast, null on cancel.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-cast.mjs\", \"templates/talent-cast-dialog.hbs\"], \"verifyCommand\": \"manual: await game.vagabondCharacterEnhancer.talentCast.openDialog(actor, talent)\", \"acceptanceCriteria\": [\"Damage slider 0 to cap\", \"Delivery dropdown filtered to allowed and affordable\", \"Effect toggle gated by remaining cap\", \"Live spent/cap counter\", \"Returns config object on cast\", \"Returns null on cancel\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Resolve cast → roll damage → render chat card",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** Confirmed cast actually rolls damage and renders chat card with working save buttons.\n\n**Files:**\n- Modify: `scripts/talent/talent-cast.mjs`\n- Modify: `scripts/talent/talents-tab.mjs`\n\n**Verify:** Cast Pyrokinesis at L1 Touch → 1d6 damage card → save button works.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-cast.mjs\", \"scripts/talent/talents-tab.mjs\"], \"verifyCommand\": \"manual: cast Pyrokinesis from Talents tab, verify chat card and save\", \"acceptanceCriteria\": [\"Damage rolls correctly with cap-bounded scaling\", \"Chat card renders\", \"Save button routes through VCE save handling\", \"Effect-only Talents work without damage\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Verify die-bonus AE field shape",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** Lock open decision #3 — confirm bonusDie field exists or document alternative.\n\n**Files:** None (research-only, may update spec).\n\n**Verify:** Open spec doc updated with confirmed field shape.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"manual: grep system data + test AE in Foundry\", \"acceptanceCriteria\": [\"bonusDie field shape confirmed or alternative documented\", \"Spec Open Decisions updated\", \"Buff Talent definitions in T3 use confirmed shape\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: Multi-focus capacity (Duality)",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** Set flags.psychicTalents.maxFocus based on Psychic class level. Updates on level-up.\n\n**Files:**\n- Create: `scripts/class-features/psychic.mjs`\n- Modify: `scripts/vagabond-character-enhancer.mjs`\n\n**Verify:** Level Psychic 1 → 4 → 8, inspect flag.\n\n```json:metadata\n{\"files\": [\"scripts/class-features/psychic.mjs\", \"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"manual: actor.getFlag('vagabond-character-enhancer', 'psychicTalents')\", \"acceptanceCriteria\": [\"L1-3 maxFocus=1\", \"L4-7 maxFocus=2\", \"L8+ maxFocus=3\", \"Auto-updates on level change\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: Focus toggle + buff AE manager",
+      "status": "pending",
+      "blockedBy": [9, 10],
+      "description": "**Goal:** Click Focus on a Talent toggles in focusedIds and applies/removes focusBuffAE for buff Talents. Capacity enforced.\n\n**Files:**\n- Create: `scripts/talent/talent-buffs.mjs`\n- Modify: `scripts/talent/talents-tab.mjs`\n\n**Verify:** Focus Shield → AE applied. Unfocus → removed. Try focus 2nd at L1-3 → rejected.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-buffs.mjs\", \"scripts/talent/talents-tab.mjs\"], \"verifyCommand\": \"manual: focus Shield via UI, check actor.effects + flag\", \"acceptanceCriteria\": [\"focusedIds tracks talent ids\", \"focusBuffAE applied with origin and flag\", \"AE removed on unfocus\", \"Capacity rejected over maxFocus\", \"Tab re-renders with focus state\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: Mental Fortress (L6) status immunities",
+      "status": "pending",
+      "blockedBy": [10],
+      "description": "**Goal:** Passive AE granting immunity to Berserk/Charmed/Confused/Frightened at L6+.\n\n**Files:**\n- Modify: `scripts/class-features/psychic.mjs`\n\n**Verify:** L6+ Psychic actor has the AE applied; statusImmunities updated.\n\n```json:metadata\n{\"files\": [\"scripts/class-features/psychic.mjs\", \"scripts/feature-detector.mjs\"], \"verifyCommand\": \"manual: level Psychic to 6, check actor.effects and system.statusImmunities\", \"acceptanceCriteria\": [\"L6+ has Mental Fortress AE\", \"statusImmunities contains all 4 conditions\", \"AE removed if level drops below 6\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: Awakening — psychicMindTrinket flag",
+      "status": "pending",
+      "blockedBy": [10],
+      "description": "**Goal:** Set psychicMindTrinket flag on Psychic class detection. Telepath grant remains player-driven.\n\n**Files:**\n- Modify: `scripts/class-features/psychic.mjs`\n\n**Verify:** Drop Psychic on actor → flag = true.\n\n```json:metadata\n{\"files\": [\"scripts/class-features/psychic.mjs\"], \"verifyCommand\": \"manual: actor.getFlag('vagabond-character-enhancer', 'psychicMindTrinket')\", \"acceptanceCriteria\": [\"Flag set true on Psychic class create\", \"Flag persists across reloads\"]}\n```"
+    },
+    {
+      "id": 14,
+      "subject": "Task 14: Precognition (L2) — first-save Favor while Focusing",
+      "status": "pending",
+      "blockedBy": [11],
+      "description": "**Goal:** L2+ Psychic with focused Talent gets Favor on first save each combat round.\n\n**Files:**\n- Modify: `scripts/class-features/psychic.mjs`\n\n**Verify:** L2 Psychic with Shield focused → first save Favor, second none. Round changes → resets.\n\n```json:metadata\n{\"files\": [\"scripts/class-features/psychic.mjs\"], \"verifyCommand\": \"manual: trigger save in combat, check d6 added\", \"acceptanceCriteria\": [\"L2+ with focused talent first save gets Favor\", \"Subsequent saves same round no auto-Favor\", \"Round transition resets per-round flag\", \"No Favor if no Talent focused\"]}\n```"
+    },
+    {
+      "id": 15,
+      "subject": "Task 15: Transcendence (L10) — Talent swap dialog",
+      "status": "pending",
+      "blockedBy": [11],
+      "description": "**Goal:** L10 button opens swap dialog (remove + add). Honor-system action cost.\n\n**Files:**\n- Create: `scripts/talent/talent-transcendence.mjs`\n- Modify: `scripts/talent/talents-tab.mjs`\n\n**Verify:** L10 Psychic clicks Transcendence → swap → known Talents updated.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-transcendence.mjs\", \"scripts/talent/talents-tab.mjs\"], \"verifyCommand\": \"manual: L10 Psychic, click Transcendence, swap, verify items\", \"acceptanceCriteria\": [\"L10+ shows Transcendence button\", \"Pre-L10 hides button\", \"Swap dialog has Remove and Add dropdowns\", \"Confirm deletes/creates correctly\", \"Toast notification on confirm\"]}\n```"
+    },
+    {
+      "id": 16,
+      "subject": "Task 16: Update CLAUDE.md and CHANGELOG",
+      "status": "pending",
+      "blockedBy": [15],
+      "description": "**Goal:** Document the Psychic / Talents system.\n\n**Files:**\n- Modify: `CLAUDE.md`\n- Modify: `CHANGELOG.md`\n\n**Verify:** Both docs reflect the new system.\n\n```json:metadata\n{\"files\": [\"CLAUDE.md\", \"CHANGELOG.md\"], \"verifyCommand\": \"manual: read both docs\", \"acceptanceCriteria\": [\"CLAUDE.md has Psychic/Talents architecture section\", \"CHANGELOG Unreleased section captures user-facing additions\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-24"
+}
