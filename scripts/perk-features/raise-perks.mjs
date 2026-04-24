@@ -187,7 +187,7 @@ export const RaisePerks = {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.classList.add("vce-necromancer-btn");
-      const level = Number(pc.system?.level ?? 1) || 1;
+      const level = Number(pc.system?.attributes?.level?.value ?? 1) || 1;
       const heal = Math.ceil(level / 2);
       btn.innerHTML = `<i class="fas fa-heart" style="margin-right:4px;"></i> Necromancer Heal (+${heal})`;
       btn.title = `Heal this Undead for ceil(Level/2) = ${heal} HP`;
@@ -201,7 +201,7 @@ export const RaisePerks = {
   },
 
   async _necromancerHeal(caster, raised) {
-    const level = Number(caster.system?.level ?? 1) || 1;
+    const level = Number(caster.system?.attributes?.level?.value ?? 1) || 1;
     const heal = Math.ceil(level / 2);
     const curHP = raised.system?.health?.value ?? 0;
     const maxHP = raised.system?.health?.max ?? curHP;

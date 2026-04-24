@@ -36,10 +36,12 @@ import { ConjurerPerk } from "../perk-features/conjurer.mjs";
  * Source-agnostic: this is the single place to wire new adapters into the UI.
  */
 const ACTION_BAR_ENTRIES = [
-  // Class feature
+  // Summoner class core ability — Vagabond names this "Conjurer" as the action
+  // (the class itself is "Summoner"). The separate Conjurer perk is entry
+  // below with a different icon to distinguish.
   {
-    id: "summon",
-    label: "Summon",
+    id: "summoner-conjurer",
+    label: "Conjurer",
     icon: "fas fa-paw",
     available: (pc, features, spells) => !!features?.summoner_creatureCodex,
     onClick: (pc) => SummonerFeatures.showConjureDialog(pc),

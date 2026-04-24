@@ -79,7 +79,7 @@ export const RaiseSpell = {
   },
 
   async _raiseUndead(caster) {
-    const level = Number(caster.system?.level ?? 1) || 1;
+    const level = Number(caster.system?.attributes?.level?.value ?? 1) || 1;
     const maxHD = level;
 
     // Subtract HD already committed to active raised undead
@@ -121,7 +121,10 @@ export const RaiseSpell = {
         title: `Raise — ${remainingHD} HD remaining of ${maxHD}`,
         maxHD: remainingHD,
         multi: false,
-        fallbackPack: "vagabond-character-enhancer.vce-beasts",
+        fallbackPacks: [
+          "vagabond-character-enhancer.vce-beasts",
+          "vagabond.bestiary",
+        ],
       });
       if (!picked || !picked.length) return;
       uuid = picked[0].uuid;

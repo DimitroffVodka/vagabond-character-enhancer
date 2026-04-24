@@ -130,14 +130,17 @@ export const ReanimatorPerk = {
   },
 
   async performRitual(actor) {
-    const level = Number(actor.system?.level ?? 1) || 1;
+    const level = Number(actor.system?.attributes?.level?.value ?? 1) || 1;
     const maxHD = level;
 
     const picked = await CorpsePicker.pick({
       title: `${actor.name} — Reanimate (HD ≤ ${maxHD})`,
       maxHD,
       multi: false,
-      fallbackPack: "vagabond-character-enhancer.vce-beasts",
+      fallbackPacks: [
+        "vagabond-character-enhancer.vce-beasts",
+        "vagabond.bestiary",
+      ],
     });
     if (!picked || !picked.length) return;
 

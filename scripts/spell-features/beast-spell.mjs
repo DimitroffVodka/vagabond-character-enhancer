@@ -82,7 +82,7 @@ export const BeastSpell = {
   },
 
   async _spawnBeast(caster) {
-    const level = Number(caster.system?.level ?? 1) || 1;
+    const level = Number(caster.system?.attributes?.level?.value ?? 1) || 1;
     const maxHD = Math.max(1, Math.floor(level / 2));
 
     // Subtract HD already committed to active beast summons
@@ -142,10 +142,27 @@ export const BeastSpell = {
       content: `<div class="vce-companion-spawned"><strong>${caster.name}</strong> casts <strong>Beast</strong> and summons: <em>${names}</em>.</div>`,
     });
 
-    // Acquire focus on first summon; subsequent casts inherit the same focus slot
+    // Focus acquisition. Beast requires 1 Mana/Turn upkeep. Confirm with the
+    // caster before taking the slot — if they decline, banish the summoned
+    // beasts (spell can't function without Focus per rulebook).
     const hasFocus = (caster.getFlag(MODULE_ID, "featureFocus") || [])
       .some(f => f.key === FOCUS_KEY);
     if (!hasFocus) {
+      const acquire = await foundry.applications.api.DialogV2.confirm({
+        window: { title: "Beast — Focus" },
+        content: `<p>Acquire a Focus slot to maintain <strong>${summoned} beast${summoned === 1 ? "" : "s"}</strong>?</p>
+                  <p><em>Costs 1 Mana per Turn of upkeep. Cancelling dismisses the summoned beasts.</em></p>`,
+        rejectClose: false,
+      });
+      if (!acquire) {
+        // User declined — banish the beasts we just spawned
+        const active = CompanionSpawner.getCompanionsFor(caster)
+          .filter(c => c.sourceId === SOURCE_ID);
+        for (const c of active) {
+          await CompanionSpawner.dismiss(c.actor, { reason: "focus-declined" });
+        }
+        return;
+      }
       try {
         await FocusManager.acquireFeatureFocus(
           caster, FOCUS_KEY, `Beast Summons`, "icons/creatures/abilities/bear-roar-brown.webp"

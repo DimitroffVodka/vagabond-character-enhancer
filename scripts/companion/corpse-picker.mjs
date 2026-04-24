@@ -99,17 +99,21 @@ class CorpsePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       }
     }
 
-    // Fallback pool: if caller specified a compendium pack and gave permission,
-    // include eligible creatures so the picker isn't empty in a fresh session.
-    if (this._opts.fallbackPack) {
-      const pack = game.packs.get(this._opts.fallbackPack);
-      if (pack) {
+    // Fallback pool(s): include eligible creatures so the picker isn't empty
+    // in a fresh session. Accepts `fallbackPacks: []` array OR legacy
+    // `fallbackPack: string` single pack for backward compat.
+    const packs = this._opts.fallbackPacks
+      ?? (this._opts.fallbackPack ? [this._opts.fallbackPack] : []);
+    for (const packId of packs) {
+      const pack = game.packs.get(packId);
+      if (!pack) continue;
+      try {
         const idx = await pack.getIndex({ fields: ["system.beingType", "system.hd", "system.size"] });
         for (const entry of idx.values()) {
           if (entry.type !== "npc") continue;
-          if (seen.has(entry._id)) continue;
+          if (seen.has(entry.name)) continue;
           if (!this._matchesEntry(entry)) continue;
-          seen.add(entry._id);
+          seen.add(entry.name);
           out.push({
             uuid: entry.uuid,
             actorId: null,
@@ -119,9 +123,11 @@ class CorpsePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
             hd: entry.system?.hd ?? 0,
             size: entry.system?.size ?? "medium",
             beingType: entry.system?.beingType ?? "—",
-            sourceLabel: pack.metadata.label ?? "Compendium",
+            sourceLabel: pack.metadata.label ?? packId,
           });
         }
+      } catch (e) {
+        log("CorpsePicker", `Could not load pack ${packId}: ${e.message}`);
       }
     }
 

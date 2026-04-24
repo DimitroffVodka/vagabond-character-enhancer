@@ -191,7 +191,7 @@ export const ConjurerPerk = {
    * and we spawn via CompanionSpawner.
    */
   async showConjureDialog(actor) {
-    const level = Number(actor.system?.level ?? 1) || 1;
+    const level = Number(actor.system?.attributes?.level?.value ?? 1) || 1;
     const maxHD = level;
     const registry = actor.getFlag(MODULE_ID, FLAG_REGISTRY) ?? [];
 

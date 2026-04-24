@@ -134,7 +134,7 @@ export const AnimalCompanion = {
    * companion (rulebook: "taming another beast" replaces previous).
    */
   async tameCompanion(actor) {
-    const level = Number(actor.system?.level ?? 1) || 1;
+    const level = Number(actor.system?.attributes?.level?.value ?? 1) || 1;
     const maxHD = Math.max(1, Math.floor(level / 2));
 
     const picks = await CreaturePicker.pick({
