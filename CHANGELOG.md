@@ -2,6 +2,10 @@
 
 ## Unreleased — Post-v0.4.0 Polish & Animate Picker Fixes
 
+### Class Data — Psychic
+
+- **Psionics feature: added missing `Focus:` clause** ("You don't spend Mana to Focus on Talents.") to the level-1 Psionics feature description in `vce-classes`. The previous compendium entry had only the *3 Talents* and *As Spells* clauses; the third (free Focus on Talents) was a documented gameplay rule that wasn't carried over. Compared against the latest rulebook page; everything else (feature names, levels, talent list, casting stat, skill grant, level progression) already matched.
+
 ### Animate Picker
 
 - **Picker no longer hangs on close.** Row-click and Cancel now resolve the promise via an idempotent `finish()` helper; X-button / Escape / click-outside dismissal is caught via the `closeDialogV2` hook. The previous implementation passed `close: () => resolve(...)` as a constructor option to DialogV2, which doesn't honour it (that was Dialog V1's API), so the await hung indefinitely and the Companions-tab `_triggerLocks` map kept the Conjure button disabled until reload.
