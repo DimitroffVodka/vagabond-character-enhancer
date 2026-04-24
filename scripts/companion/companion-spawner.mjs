@@ -319,12 +319,25 @@ export const CompanionSpawner = {
   getCompanionsFor(pcActor) {
     if (!pcActor) return [];
     const out = [];
-    const seen = new Set();
+    // Two-tier dedup:
+    //   seenTokens: token ids already emitted (one token → one card;
+    //     multiple tokens of the same world actor each get their own card,
+    //     which matters for Beast spell's multi-pick stacking)
+    //   seenActors: world-actor ids emitted as tokenless entries (hirelings
+    //     never placed, etc.) — separate from the token set
+    const seenTokens = new Set();
+    const seenActors = new Set();
 
     const collect = (actor, tokenId) => {
-      if (!actor || seen.has(actor.id)) return;
+      if (!actor) return;
       if (actor.getFlag(MODULE_ID, "controllerActorId") !== pcActor.id) return;
-      seen.add(actor.id);
+      if (tokenId) {
+        if (seenTokens.has(tokenId)) return;
+        seenTokens.add(tokenId);
+      } else {
+        if (seenActors.has(actor.id)) return;
+        seenActors.add(actor.id);
+      }
 
       const meta = actor.getFlag(MODULE_ID, "companionMeta");
       const controllerType = actor.getFlag(MODULE_ID, "controllerType");
@@ -348,15 +361,23 @@ export const CompanionSpawner = {
       });
     };
 
-    // Scene tokens (linked + unlinked) — covers companions actively on canvas
+    // Scene tokens (linked + unlinked). For unlinked tokens, tok.actor returns
+    // a synthetic ActorDelta-applied actor with per-token HP/statuses — so 2
+    // unlinked Wolf tokens yield 2 distinct cards with independent health.
     for (const scene of game.scenes) {
       for (const tok of scene.tokens) {
         collect(tok.actor, tok.id);
       }
     }
-    // World actors not tied to any scene token (e.g. hirelings not placed)
+    // World actors with NO placed token anywhere (e.g. hirelings assigned via
+    // the Save Controller dialog but never placed on a scene).
     for (const actor of game.actors) {
-      collect(actor, null);
+      if (seenActors.has(actor.id)) continue;
+      let hasAnyToken = false;
+      for (const scene of game.scenes) {
+        if (scene.tokens.some(t => t.actorId === actor.id)) { hasAnyToken = true; break; }
+      }
+      if (!hasAnyToken) collect(actor, null);
     }
 
     return out;
