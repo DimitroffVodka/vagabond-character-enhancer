@@ -1,6 +1,8 @@
 # Changelog
 
-## v0.4.0 — In Progress
+## v0.4.0 — CompanionManager + Phase 2 Feature Adapters
+
+Major release. The old per-companion Summon tab is replaced by a unified **Companions** tab on every character sheet, driven by a source-agnostic engine. Six new feature adapters (Beast, Raise, Animate, Animal Companion, Reanimator, Conjurer) plus three Raise-adjacent perks (Grim Harvest, Infesting Burst, Necromancer) build on that engine. The creature picker got a substantial UX overhaul.
 
 ### New Feature — CompanionManager (Phase 1)
 
@@ -76,7 +78,35 @@ Six new companion-summoning adapters, each built on the Phase 1 `CompanionSpawne
 
 - **Grim Harvest** (`perk_grimHarvest`) — when a PC's spell-cast damage card is followed within 5 s by an NPC's HP dropping to 0 (and the NPC isn't Artificial/Undead/Construct/Object), the PC is healed by the spell's damage. Posts a dedicated chat card. GM-only tracker to avoid multi-client double-heal.
 - **Infesting Burst** (`perk_infestingBurst`) — inline in the Raise spell adapter. When the perk is active and the caster casts Raise, a `DialogV2.confirm` offers to spawn the Zombie, Boomer (`Compendium.vagabond.bestiary.Actor.hLO69Zjvz7WaJAmO`) directly instead of opening the corpse picker. Boomer's HD 3 is checked against the remaining budget.
-- **Necromancer** (`perk_necromancer`) — injects a "Necromancer Heal (+N)" button on every raised-undead companion card (where N = ceil(caster level / 2)). Click to heal the undead. Posts a chat card. Button only appears for the perk's owner.
+- **Necromancer** (`perk_necromancer`) — while Focusing on Raise, automatically heals every raised undead by ceil(caster level / 2) HP at the end of each combat round. Hex-bypass Raise (no focus) and Reanimator-sourced undead are naturally excluded. Rulebook interpretation: Focus upkeep (1 Mana/round) is the cost gate, so heal-all-per-round is balanced against single-undead-per-click. Posts a chat card per heal.
+
+### Creature Picker — UX Overhaul
+
+Full rework of the picker used by Beast / Raise / Summoner / Familiar / Conjurer.
+
+- **Sticky header row** on scrollable lists (required overriding the system's `.vce-bd-table { border-collapse: collapse; overflow: hidden; }` which breaks `position: sticky`).
+- **Click-to-sort columns** (name, HD, type, size, HP, armor, speed). Active column shows gold ▲/▼. Favorites always pin to the top regardless of sort direction. Size sorts by canonical rank (tiny→colossal), not alphabetically.
+- **New HP and Size columns** between Type and Armor for at-a-glance stat comparison.
+- **Resizable dialog** — drag the bottom-right corner to expand. Table scroll area flex-fills.
+- **Rich hover preview panel** (custom floating div, NOT Foundry's v13 TooltipManager which strips HTML unpredictably). Positions to the LEFT of the row with right-flip on viewport overflow. Shows full creature brief: HD/size/type, HP, armor, speed modes, senses, immunities, weaknesses, actions with damage + type, abilities.
+- **Summoner (Conjurer class action)** and **Familiar perk** dialogs ported from legacy Dialog V1 to the shared `CreaturePicker` with their existing filters (`excludeTypes: ["humanlike"]`, Familiar adds `sizes: ["small"], maxHD: 1`). Favorite flags preserved (`summonCodex` / `familiarCodex`).
+
+### Testing-Phase Fixes
+
+Bug fixes and polish landing after Phase 2 went live:
+
+- **Grim Harvest tagging complete rewrite.** Target-keyed pending map replaces the earlier time-windowed caster-keyed tracker. Tags trigger from three sources (cast card for pre-targeted spells, apply-button click for AoE/template spells via a capture-phase DOM listener, fallback to `game.user.targets` when `data-targets=""` is empty). Heal amount is now computed from the HP delta on kill (`oldHP − newHP`) so a 2-HP / 4-Armor enemy taking 6 damage correctly heals for 2 (not 6). Damage-capability check now reads `item.system.damageType !== "-"` instead of the non-existent `damageDice` field, so damaging spells like Terraform are actually tracked.
+- **Animate spell rewrite.** Now rules-accurate per the Object Armor & HP table (p. 12). HP fixed at 1 (Small per ≤1-Slot constraint). Armor derives from `item.system.metal` — metal weapons default to Heavy (3), Mythral (4), Orichalcum (5), Adamantine (6); non-weapon gear Fragile (0). Speed 30' Fly explicit (`speedTypes: ["fly"]`). `beingType` mapped to "Artificials" since Vagabond's NPC schema doesn't expose "Object" as a choice. Added focus-toggle parity with Beast/Raise (clicking Focus on the Animate spell card now opens the picker; dropping Focus dismisses the animated object). Fixed a promise-ordering race in the picker where clicking a row resolved null via the close callback before resolve(item) fired — now a shared `picked` variable + single `close: () => resolve(picked)`. Picker Damage column reads real weapon damage (`damageOneHand` / `damageTwoHands` / `damageAmount`) instead of the non-existent `damageFormula`.
+- **Raise focus parity with Beast.** Ported the `preUpdateActor` snapshot pattern + `_isFocusingRaise` helper + drop-focus cleanup. Mana drain 1/round while focused. Clicking "Focus this spell" on the Raise card now opens the picker (was cast-card-only before). Dropping focus dismisses all raised undead with re-entry guard.
+- **Undead template AE schema.** `statusImmunities` adds "sickened" (was appending the whole comma-string as a single array item). Added `immunities` ADD "poison" and `weaknesses` ADD "silver" per rulebook. `senses` now OVERRIDE "Darksight" (previously didn't persist through re-prepares). Token sight updated to Darkvision post-apply via the new `updateToken` socket-relay op.
+- **Companion card polish.** HP row re-ordered to `[HP label][9/9][bar][Armor N]` with full word "Armor" (was "ARM"). NPC armor read as plain number on `system.armor` (was treating it as `{value}` like characters — always showed 0). `getCompanionsFor` deduplicates by tokenId instead of actor.id (fixes the case where multiple tokens sharing one world actor collapsed into a single card).
+- **Init-time sheet scan.** Character sheets already open before the `ready` hook now get the Companions tab injected on-init instead of requiring a close-and-reopen.
+- **Feature Focus icons** use `icons/svg/pawprint.svg` and `icons/svg/skull.svg` (core Foundry SVGs that always exist) instead of paths that resolved to the generic file icon.
+- **Spawn token configuration.** `CompanionSpawner.spawn` now uses `actor.getTokenDocument(overrides)` to resolve wildcard texture paths (was leaving Wolf / Bat tokens with broken `*.webp` URLs). Vision derived from senses ("Darksight" → Darkvision). Movement action picks the fastest mode from walk/fly/swim/climb/burrow (Bee, Giant now defaults to Fly).
+- **Set Save Controller dialog.** Rewrote the layout to field-label-above-input with per-radio hint text and a fieldset separator. Was previously cramped and misaligned.
+- **Infesting Burst HD budget.** Post-picker Boomer substitution is pure stat replacement — no re-check of the HD budget. Rulebook: the budget is spent at the picker; Infesting Burst just lets you swap a pick to the Zombie Boomer after the fact.
+- **Fresh-import per spawn** when `allowMultiple: true` prevents multi-stacked companions (3 bats of the same kind) from sharing a single world actor — killing one previously killed all three. Orphan world actors are cleaned up in the dismiss handler.
+- **NPC action routing** now handles `spell-beast`, `spell-raise`, `spell-animate`, and `perk-conjurer` sourceIds on top of the existing `summoner` / `familiar` / hireling paths.
 
 ## v0.3.4
 
