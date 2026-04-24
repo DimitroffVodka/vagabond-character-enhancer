@@ -19,12 +19,16 @@ import { RaiseSpell } from "../spell-features/raise-spell.mjs";
  * Replaces the earlier time-windowed caster-keyed tracker. Now we key by
  * the damage TARGET so:
  *   - back-to-back casts at different targets are tracked independently
- *   - the heal amount is tied to the specific kill, not the most-recent spell
  *   - entries stay valid until the target actually dies (no time pressure)
  *   - entries are overwritten when the same target is hit again — latest
- *     spell damage wins if the target dies
+ *     spell wins if the target dies
  *
- *  Map shape: targetActorId → { casterId, damage, spellName, targetName }
+ * The heal amount is NOT stored here — it's computed at kill-time from
+ * the HP delta (pre-update HP − post-update HP), so we correctly cap at
+ * HP actually lost (rulebook: a 6-dmg spell killing a 2-HP target heals
+ * 2, not 6 — you regain HP equal to the damage *done*, not rolled).
+ *
+ *  Map shape: targetActorId → { casterId, spellName, targetName }
  */
 const _pendingGrimHarvest = new Map();
 
@@ -42,11 +46,21 @@ export const RaisePerks = {
   /* -------------------------------------------- */
 
   _registerGrimHarvest() {
-    // Track spell damage as it's posted to chat
+    // Track spell casts against potential targets (only the fact that the
+    // caster's spell touched this target — heal amount is derived later).
     Hooks.on("createChatMessage", (msg) => this._onDamageChatCard(msg));
 
-    // On NPC death, consume the tracked damage and heal the caster
-    Hooks.on("updateActor", (actor, changes) => this._onPossibleKill(actor, changes));
+    // Snapshot pre-update HP so _onPossibleKill can compute HP actually lost.
+    // Without this, we'd have no way to know a 2-HP target took 6 damage but
+    // only "lost" 2 HP — rulebook caps heal at HP actually lost.
+    Hooks.on("preUpdateActor", (actor, changes, options) => {
+      if (actor.type !== "npc") return;
+      if (foundry.utils.getProperty(changes, "system.health.value") === undefined) return;
+      options._vceGrimHarvestOldHP = actor.system?.health?.value ?? 0;
+    });
+
+    // On NPC death, consume the pending entry and heal the caster by HP lost.
+    Hooks.on("updateActor", (actor, changes, options) => this._onPossibleKill(actor, changes, options));
   },
 
   _onDamageChatCard(msg) {
@@ -63,13 +77,17 @@ export const RaisePerks = {
     const item = caster.items.get(itemId);
     if (!item || item.type !== "spell") return;
 
-    // Extract damage amount from the card content
-    const damage = this._extractDamageFromContent(msg.content) ?? msg.flags?.vagabond?.damage;
-    if (!Number.isFinite(damage) || damage <= 0) return;
+    // Only track spells that could actually deal damage (effects-only spells
+    // shouldn't mark targets). Check either the rolled damage card content
+    // (a data-damage-amount button) OR the spell's base damageDice value so
+    // we don't rely solely on chat-card regex matching.
+    const hasDamageButton = /data-damage-amount=["'](\d+)["']/.test(msg.content ?? "");
+    const spellHasDamage = Number(item.system?.damageDice ?? 0) > 0
+      || Number(item.system?.damage?.dice ?? 0) > 0;
+    if (!hasDamageButton && !spellHasDamage) return;
 
     // Extract target actor IDs from the card flag (targetsAtRollTime is the
-    // canonical targets list — damage-helper populates it when the damage
-    // card is posted). If absent, we can't track per-target — skip.
+    // canonical targets list). If absent, we can't track per-target — skip.
     const targets = msg.flags?.vagabond?.targetsAtRollTime ?? [];
     if (!targets.length) return;
 
@@ -77,29 +95,19 @@ export const RaisePerks = {
       if (!t.actorId) continue;
       _pendingGrimHarvest.set(t.actorId, {
         casterId: caster.id,
-        damage,
         spellName: item.name,
         targetName: t.actorName ?? "target",
       });
     }
+    log("RaisePerks/GrimHarvest",
+      `Tagged ${targets.length} target(s) with ${caster.name}'s ${item.name}.`);
   },
 
-  _extractDamageFromContent(content) {
-    if (typeof content !== "string") return null;
-    // Match `data-damage-amount="N"` or `data-damage="N"`
-    const m = content.match(/data-damage(?:-amount)?=["'](\d+)["']/);
-    if (m) return parseInt(m[1]);
-    // Fallback: first big number in a strong tag in the damage section
-    const m2 = content.match(/<strong[^>]*>\s*(\d+)\s*<\/strong>/);
-    if (m2) return parseInt(m2[1]);
-    return null;
-  },
-
-  _onPossibleKill(actor, changes) {
+  _onPossibleKill(actor, changes, options) {
     if (!game.user.isGM) return;
     if (actor.type !== "npc") return;
 
-    const newHP = changes.system?.health?.value ?? changes["system.health.value"];
+    const newHP = foundry.utils.getProperty(changes, "system.health.value");
     if (newHP === undefined || newHP > 0) return;
 
     // Rulebook exclusion: non-Artificial/Undead. Also skip construct/object
@@ -111,10 +119,6 @@ export const RaisePerks = {
     // tokens (not friendlies that happen to die). We check the most
     // recent placed token for this actor's disposition — if the actor
     // has any non-hostile token on scene, bail.
-    //
-    // For unlinked tokens, the token document carries the disposition.
-    // For the actor being killed we look at whatever scene token is
-    // tied to it (usually just one).
     let tokenDisposition = null;
     for (const scene of game.scenes) {
       const tok = scene.tokens.find(t => t.actorId === actor.id);
@@ -134,7 +138,19 @@ export const RaisePerks = {
     // Double-check the caster still has the perk (might have been removed)
     if (!getFeatures(caster)?.perk_grimHarvest) return;
 
-    this._healFromGrimHarvest(caster, actor, entry).catch(e =>
+    // Rulebook: "regain HP equal to the damage of the Spell". We interpret
+    // that as HP actually removed from the enemy (armor-reduced, capped at
+    // pre-kill HP). Example: 2 HP / 4 Armor enemy + 6 fire dmg → lost 2 HP
+    // (armor absorbed 4), so heal = 2, not 6.
+    const oldHP = options?._vceGrimHarvestOldHP ?? 0;
+    const hpLost = Math.max(0, oldHP - (newHP ?? 0));
+    if (hpLost <= 0) {
+      log("RaisePerks/GrimHarvest",
+        `${actor.name} died but HP delta was 0 — no heal (old=${oldHP}, new=${newHP}).`);
+      return;
+    }
+
+    this._healFromGrimHarvest(caster, actor, { ...entry, damage: hpLost }).catch(e =>
       log("RaisePerks/GrimHarvest", `Heal failed: ${e.message}`));
   },
 
@@ -142,7 +158,11 @@ export const RaisePerks = {
     const curHP = caster.system?.health?.value ?? 0;
     const maxHP = caster.system?.health?.max ?? curHP;
     const newHP = Math.min(maxHP, curHP + entry.damage);
-    if (newHP <= curHP) return;
+    if (newHP <= curHP) {
+      log("RaisePerks/GrimHarvest",
+        `${caster.name} already at max HP (${curHP}/${maxHP}) — no heal needed.`);
+      return;
+    }
     await caster.update({ "system.health.value": newHP });
     ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor: caster }),
@@ -156,7 +176,8 @@ export const RaisePerks = {
         </section></div>
       </div>`,
     });
-    log("RaisePerks/GrimHarvest", `${caster.name} healed ${entry.damage} from ${victim.name}'s death.`);
+    log("RaisePerks/GrimHarvest",
+      `${caster.name} healed ${entry.damage} (${curHP}→${newHP}) from ${victim.name}'s death.`);
   },
 
   /* -------------------------------------------- */
