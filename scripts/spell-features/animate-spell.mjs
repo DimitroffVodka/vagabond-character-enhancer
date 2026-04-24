@@ -178,35 +178,48 @@ export const AnimateSpell = {
 
     // Build a synthetic "Animated {item.name}" NPC on the world actor list.
     // HP: 3 per HD by Object rules approximation (HD defaults to 1 for ≤1-slot).
-    // Armor: 0 per rules.
-    // One attack action derived from the item (if weapon) or a basic slam.
+    // Armor: 0 per rules (rulebook: "Armor 0").
+    // beingType: Vagabond's data model doesn't expose "Object" as a choice
+    //   (allowed set is Humanlike/Fae/Cryptid/Artificials/Beasts/Outers/
+    //   Primordials/Undead). "Artificials" is the closest mechanical fit
+    //   — a constructed, non-living entity — so we map Object→Artificials.
     const hd = 1;
     const hp = hd * 3;
+    const { formula: rollDamage, type: damageType } = this._getItemDamage(item);
     const isWeapon = item.type === "equipment" && item.system?.equipmentType === "weapon";
-    const rollDamage = isWeapon
-      ? (item.system?.damageFormula || "1d4")
-      : "1d4";
     const attackName = isWeapon ? item.name : "Slam";
+    const attackType = isWeapon && item.system?.range && item.system.range !== "close"
+      ? "ranged"
+      : "melee";
+    const img = item.img || "icons/svg/mystery-man.svg";
 
     const npcData = {
       name: `Animated ${item.name}`,
       type: "npc",
-      img: item.img || "icons/svg/mystery-man.svg",
+      img,
       system: {
         hd,
         health: { value: hp, max: hp },
-        armor: { value: 0 },
+        armor: 0,              // NPC schema: plain integer, not {value}
         speed: 30,
         size: "small",
-        beingType: "Object",
+        beingType: "Artificials",
         senses: "",
         actions: [{
           name: attackName,
-          attackType: "melee",
+          attackType,
           rollDamage,
-          damageType: "-",
+          damageType,
           note: "Uses caster's Cast Skill (routed via VCE)",
         }],
+      },
+      prototypeToken: {
+        name: `Animated ${item.name}`,
+        texture: { src: img },
+        width: 1,
+        height: 1,
+        disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY,
+        actorLink: false,
       },
     };
 
@@ -260,6 +273,51 @@ export const AnimateSpell = {
   },
 
   /**
+   * Resolve the damage formula + type for an inventory item.
+   *
+   * Vagabond item schema:
+   *   - Weapons: `equipmentType === "weapon"`, damage lives in
+   *     `damageOneHand` / `damageTwoHands` (e.g. "d6", "d8", "1d6+1"),
+   *     damage type in `damageTypeOneHand` / `damageTypeTwoHands`.
+   *     Which grip is "active" depends on `equipmentState`
+   *     ("oneHand" | "twoHands" | "unequipped"); unequipped weapons
+   *     default to 1H stats.
+   *   - Non-weapon equipment: generic `damageAmount` + `damageType`.
+   *   - Formulas may be written as bare "d6" — we normalize to "1d6"
+   *     so Foundry's Roll parser accepts them.
+   *   - Unarmed/"Slam" default: 1d4 typeless.
+   *
+   * @param {Item} item
+   * @returns {{formula: string, type: string}}
+   */
+  _getItemDamage(item) {
+    const sys = item?.system ?? {};
+    const normalize = (f) => {
+      if (!f || typeof f !== "string") return null;
+      const trimmed = f.trim();
+      if (!trimmed) return null;
+      return /^d\d+/i.test(trimmed) ? `1${trimmed}` : trimmed;
+    };
+    const isWeapon = item.type === "equipment" && sys.equipmentType === "weapon";
+    if (isWeapon) {
+      const preferTwoHands = sys.equipmentState === "twoHands";
+      const formula =
+        normalize(preferTwoHands ? sys.damageTwoHands : sys.damageOneHand) ||
+        normalize(sys.damageOneHand) ||
+        normalize(sys.damageTwoHands) ||
+        "1d4";
+      const type =
+        (preferTwoHands ? sys.damageTypeTwoHands : sys.damageTypeOneHand) ||
+        sys.damageTypeOneHand ||
+        sys.damageType ||
+        "-";
+      return { formula, type };
+    }
+    const formula = normalize(sys.damageAmount) || "1d4";
+    return { formula, type: sys.damageType || "-" };
+  },
+
+  /**
    * Open a picker showing the caster's inventory items that fit in ≤1 slot.
    */
   async _pickInventoryItem(caster) {
@@ -282,18 +340,25 @@ export const AnimateSpell = {
       // is at close time wins — undefined/null = cancel, item = selection.
       let picked = null;
 
-      const rows = items.map((it) => `
+      const rows = items.map((it) => {
+        const { formula, type } = this._getItemDamage(it);
+        const dmgText = formula === "1d4" && (type === "-" || !type)
+          ? "—" // no listed damage — picker shows em-dash
+          : (type && type !== "-" ? `${formula} ${type}` : formula);
+        return `
         <tr class="vce-animate-row" data-item-id="${it.id}" role="button" tabindex="0">
           <td class="vce-bd-cell vce-bd-cell-img">
             <img src="${it.img || "icons/svg/mystery-man.svg"}" class="vce-bd-beast-img" alt="" />
           </td>
           <td class="vce-bd-cell"><strong>${it.name}</strong></td>
           <td class="vce-bd-cell vce-bd-cell-center">${it.system?.slots ?? it.system?.slot ?? 1}</td>
-          <td class="vce-bd-cell">${it.system?.damageFormula ?? "—"}</td>
-        </tr>`).join("");
+          <td class="vce-bd-cell">${dmgText}</td>
+        </tr>`;
+      }).join("");
 
       const content = `
-        <p>Pick an item from your inventory to animate. Must fit in ≤1 Slot.</p>
+        <p>Pick an item from your inventory to animate. Must fit in ≤1 Slot.
+        Non-weapons default to a 1d4 Slam.</p>
         <div class="vce-bd-scroll" style="max-height:400px; overflow-y:auto;">
           <table class="vce-bd-table" role="grid">
             <thead>
@@ -301,7 +366,7 @@ export const AnimateSpell = {
                 <th class="vce-bd-th vce-bd-th-img" scope="col"></th>
                 <th class="vce-bd-th" scope="col">Item</th>
                 <th class="vce-bd-th vce-bd-th-center" scope="col">Slots</th>
-                <th class="vce-bd-th" scope="col">Damage (if weapon)</th>
+                <th class="vce-bd-th" scope="col">Damage</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
