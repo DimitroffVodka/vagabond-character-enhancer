@@ -46,9 +46,19 @@ export const RaisePerks = {
   /* -------------------------------------------- */
 
   _registerGrimHarvest() {
-    // Track spell casts against potential targets (only the fact that the
-    // caster's spell touched this target — heal amount is derived later).
+    // --- Two tagging paths, belt + suspenders ---
+    //
+    // (A) Cast-card tagging — handles directly-targeted spells where the
+    //     player locked a target before casting (ctrl+T on enemy, then cast).
+    //     `msg.flags.vagabond.targetsAtRollTime` carries those targets.
+    //
+    // (B) Apply-button click tagging — covers AoE/template/untargeted spells
+    //     (Terraform, Fireball, Sphere-delivery) where no one is pre-targeted
+    //     at cast time. The apply-save-damage / apply-direct buttons carry
+    //     data-source-actor-id (caster) and data-source-item-id (spell), so
+    //     we can tag at the moment the player clicks "Apply to Target".
     Hooks.on("createChatMessage", (msg) => this._onDamageChatCard(msg));
+    document.addEventListener("click", (ev) => this._onApplyButtonClick(ev), true);
 
     // Snapshot pre-update HP so _onPossibleKill can compute HP actually lost.
     // Without this, we'd have no way to know a 2-HP target took 6 damage but
@@ -61,6 +71,82 @@ export const RaisePerks = {
 
     // On NPC death, consume the pending entry and heal the caster by HP lost.
     Hooks.on("updateActor", (actor, changes, options) => this._onPossibleKill(actor, changes, options));
+  },
+
+  /**
+   * DOM click listener on `document` (capture phase) — fires BEFORE the
+   * Vagabond system's own button handlers. We read the button's data-*
+   * attributes to identify {caster, spell, target} and tag the pending
+   * map so the upcoming HP update on the target gets credited correctly.
+   *
+   * Button flavors handled:
+   *   .vagabond-apply-save-damage-button
+   *     data-actor-id        = TARGET (actor who failed the save)
+   *     data-source-actor-id = CASTER
+   *     data-source-item-id  = SPELL
+   *
+   *   .vagabond-apply-direct-button / .vagabond-apply-damage-button
+   *     data-actor-id        = CASTER
+   *     data-item-id         = SPELL
+   *     data-targets         = JSON-encoded array of {actorId, actorName, ...}
+   *                            (we tag every target listed)
+   */
+  _onApplyButtonClick(ev) {
+    if (!game.user.isGM) return;
+    const btn = ev.target?.closest?.(
+      ".vagabond-apply-save-damage-button, .vagabond-apply-direct-button, .vagabond-apply-damage-button"
+    );
+    if (!btn) return;
+
+    try {
+      if (btn.classList.contains("vagabond-apply-save-damage-button")) {
+        this._tagTarget(
+          btn.dataset.actorId,
+          btn.dataset.sourceActorId,
+          btn.dataset.sourceItemId
+        );
+        return;
+      }
+
+      // Direct-apply buttons: actorId is the CASTER, targets array carries victims.
+      const casterId = btn.dataset.actorId;
+      const itemId = btn.dataset.itemId;
+      const targetsRaw = btn.dataset.targets;
+      if (!casterId || !itemId || !targetsRaw) return;
+      let targets;
+      try {
+        targets = JSON.parse(targetsRaw.replace(/&quot;/g, '"'));
+      } catch {
+        return;
+      }
+      for (const t of targets || []) {
+        if (t?.actorId) this._tagTarget(t.actorId, casterId, itemId);
+      }
+    } catch (e) {
+      log("RaisePerks/GrimHarvest", `Button-click tag failed: ${e.message}`);
+    }
+  },
+
+  /**
+   * Tag a target as pending-credit for a Grim Harvest caster's spell.
+   * Gated on the caster actually having the perk and the item being a spell
+   * so we don't populate the map with irrelevant entries.
+   */
+  _tagTarget(targetActorId, casterId, itemId) {
+    if (!targetActorId || !casterId || !itemId) return;
+    const caster = game.actors.get(casterId);
+    if (!caster) return;
+    if (!getFeatures(caster)?.perk_grimHarvest) return;
+    const item = caster.items.get(itemId);
+    if (!item || item.type !== "spell") return;
+    const target = game.actors.get(targetActorId);
+    _pendingGrimHarvest.set(targetActorId, {
+      casterId,
+      spellName: item.name,
+      targetName: target?.name ?? "target",
+    });
+    log("RaisePerks/GrimHarvest",
+      `Tagged ${target?.name ?? targetActorId} with ${caster.name}'s ${item.name}.`);
   },
 
   _onDamageChatCard(msg) {
