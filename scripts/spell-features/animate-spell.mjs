@@ -176,15 +176,38 @@ export const AnimateSpell = {
     const item = await this._pickInventoryItem(caster);
     if (!item) return; // user cancelled
 
-    // Build a synthetic "Animated {item.name}" NPC on the world actor list.
-    // HP: 3 per HD by Object rules approximation (HD defaults to 1 for ≤1-slot).
-    // Armor: 0 per rules (rulebook: "Armor 0").
-    // beingType: Vagabond's data model doesn't expose "Object" as a choice
-    //   (allowed set is Humanlike/Fae/Cryptid/Artificials/Beasts/Outers/
+    // Build a synthetic "Animated {item.name}" NPC from Object rulebook stats.
+    //
+    // Per Core Rulebook 05_Magic/02 "Animate":
+    //   - Item gains Speed 30' (Fly)
+    //   - Uses Object Armor & HP rules (p. 12)
+    //
+    // Per 02_Adventuring/01_Adventuring_Overview #object-stats:
+    //
+    //   HP by Size:   Small=1 / Medium=4 / Large=16 / Huge=50 / Giant=200
+    //   Armor by Material:
+    //     Fragile (cloth, paper, crystal, glass) = 0
+    //     Light (hide, leather, wood)            = 1
+    //     Medium (bone, chain, stone)            = 2
+    //     Heavy (metal)                          = 3
+    //     Dense metal                            = 4
+    //     Titanic metal                          = 5
+    //     Near-Indestructible metal              = 6
+    //
+    // Animate only works on items occupying ≤1 Slot — those are always
+    // Small by the rulebook's size table, so HP is always 1. Armor is
+    // derived from the item's `metal` field and equipmentType:
+    //   - non-'none' metal → Heavy (3) or higher for dense metals
+    //   - weapon with metal 'none' → wood haft → Light (1)
+    //   - everything else → Fragile (0)
+    //
+    // beingType: Vagabond's NPC schema doesn't expose "Object" as a choice
+    //   (allowed: Humanlike/Fae/Cryptid/Artificials/Beasts/Outers/
     //   Primordials/Undead). "Artificials" is the closest mechanical fit
-    //   — a constructed, non-living entity — so we map Object→Artificials.
-    const hd = 1;
-    const hp = hd * 3;
+    //   for a constructed, non-living entity — maps Object → Artificials.
+
+    const hp = 1; // Small size per Animate ≤1 Slot constraint
+    const armor = this._deriveObjectArmor(item);
     const { formula: rollDamage, type: damageType } = this._getItemDamage(item);
     const isWeapon = item.type === "equipment" && item.system?.equipmentType === "weapon";
     const attackName = isWeapon ? item.name : "Slam";
@@ -198,10 +221,12 @@ export const AnimateSpell = {
       type: "npc",
       img,
       system: {
-        hd,
+        hd: 1,                 // schema requires ≥0; doesn't affect Object rules
         health: { value: hp, max: hp },
-        armor: 0,              // NPC schema: plain integer, not {value}
-        speed: 30,
+        armor,                 // NPC schema: plain integer, not {value}
+        speed: 30,             // rulebook: 30' Fly — speed is the primary number
+        speedTypes: ["fly"],   // flag the movement as Fly so the crawler/picker show it correctly
+        speedValues: { fly: 30, climb: 0, cling: 0, phase: 0, swim: 0 },
         size: "small",
         beingType: "Artificials",
         senses: "",
@@ -270,6 +295,43 @@ export const AnimateSpell = {
     } catch (e) {
       log("AnimateSpell", `Could not acquire focus: ${e.message}`);
     }
+  },
+
+  /**
+   * Derive Object Armor from an inventory item per Core Rulebook p. 12.
+   *
+   * Mapping from Vagabond's item schema:
+   *   - `metal` ∈ {none, common, coldIron, silver, adamant, mythral, orichalcum}
+   *   - `equipmentType` ∈ {weapon, armor, gear, ...}
+   *
+   * Rules (rulebook → our interpretation):
+   *   Heavy (metal)              → 3   common / coldIron / silver
+   *   Dense (+1 metal)           → 4   adamant, mythral (hardened metals)
+   *   Titanic (+2 metal)         → 5   (unused — no item schema match)
+   *   Near-Indestructible (+3)   → 6   orichalcum (mythic tier)
+   *   Light (hide/leather/wood)  → 1   weapon with metal=none (wood haft)
+   *                                    or armor items with armorType=light
+   *   Fragile (cloth/paper/gls)  → 0   default for non-weapon gear
+   *
+   * We don't have a canonical material→armor table in the item data, so
+   * we use `metal` as the primary signal and fall back to equipmentType
+   * heuristics. Medium (2) is hard to detect automatically (no "stone"
+   * flag) so it's left unused — good-enough coverage for common cases.
+   *
+   * @param {Item} item
+   * @returns {number} Armor 0-6
+   */
+  _deriveObjectArmor(item) {
+    const sys = item?.system ?? {};
+    const metal = sys.metal ?? "none";
+    if (metal === "orichalcum") return 6;      // Near-Indestructible
+    if (metal === "adamant" || metal === "mythral") return 4; // Dense
+    if (metal !== "none") return 3;             // Heavy — common/coldIron/silver
+    const isWeapon = item.type === "equipment" && sys.equipmentType === "weapon";
+    const isArmor = item.type === "equipment" && sys.equipmentType === "armor";
+    if (isWeapon) return 1;                     // wooden haft / leather grip → Light
+    if (isArmor) return Math.max(1, ({ light: 1, medium: 2, heavy: 3 })[sys.armorType] ?? 1);
+    return 0;                                    // Fragile default for misc gear
   },
 
   /**
