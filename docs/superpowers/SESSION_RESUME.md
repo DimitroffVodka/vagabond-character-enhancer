@@ -1,8 +1,8 @@
 # Session Resume — v0.4.0 (In Progress)
 
-**Last updated:** 2026-04-23 (end of session)
+**Last updated:** 2026-04-24 (day-2 session checkpoint)
 **Branch:** `main`
-**Last commit:** `54f39aa fix(infesting-burst): restore up-front Boomer prompt (Raise multi-pick compat)`
+**Latest commit:** `a77fd33 fix(picker): normalize sticky header cell alignment`
 **Pending version bump:** `module.json` still at `0.3.4`; CHANGELOG has `v0.4.0 — In Progress` section being built up.
 
 ---
@@ -38,16 +38,48 @@ Replaced the old single-summon tab with a unified Companions tab driven by a sou
 
 ---
 
-## Where we left off (mid-session)
+## Where we left off (end of day-2 checkpoint)
 
-Beast testing wrapped up — all confirmed working as intended:
-- Budget enforced correctly at correct level path (`system.attributes.level.value`)
-- Fresh-import per spawn prevents shared-world-actor bugs
-- Focus unification: `_isFocusingBeast(actor)` checks both `system.focus.spellIds` AND VCE `featureFocus`
-- Mana drain + drop-focus-dismiss-all works
-- "Favor on reflex" investigation: NOT a bug — the Archmage had Blinded on its world actor (pre-existing data from some prior action); the system's `damage-helper.mjs:1519` reads `game.actors.get(actorId).system.outgoingSavesModifier` which is correct Vagabond rulebook behavior (Vulnerable attacker → defender saves favored). Fix = delete errant world-actor AE. User chose to ignore for now.
+Beast, Raise, and perk-polish all wrapped up today. Picker UX overhauled.
 
-**Paused during Raise testing** — haven't tested the Raise flow yet this session.
+### Confirmed working (all tested in-session)
+- Beast spell multi-pick with HD budget, focus trigger via "Focus this spell" button OR Cast, mana drain per round, drop-focus-dismisses-all, fresh-import per spawn prevents shared-world-actor bugs
+- Infesting Burst: post-picker checklist marks picks as Boomers (stat substitution only, no HD budget re-check — rulebook: budget was spent at the picker)
+- Necromancer: automatic end-of-round heal for ALL raised undead at ceil(level/2), only fires while focusing Raise (Hex bypass and Reanimator-sourced undead naturally excluded)
+- Grim Harvest: target-keyed pending map (not time-windowed caster-keyed), HOSTILE disposition check, consumed on kill
+
+### Fixed today
+- Undead template: correct Vagabond field shapes — `statusImmunities` ADD "sickened" (was adding comma-string as single item), `immunities` ADD "poison", `weaknesses` ADD "silver", `senses` OVERRIDE "Darksight"; token sight updated to Darkvision post-apply
+- Raise focus parity with Beast: `_isFocusingRaise`, preUpdateActor snapshot, mana drain, drop-focus cleanup
+- Feature Focus icons: use `icons/svg/pawprint.svg` / `icons/svg/skull.svg` (core Foundry SVGs that always exist)
+- Set Save Controller dialog: proper field-label-above-input layout, per-radio hint text, fieldset with dotted separator
+- CompanionSpawner.spawn: `actor.getTokenDocument()` resolves wildcard texture paths (fixed broken Wolf/Bat tokens); prototypeToken defaults merged in; vision derived from senses (Darksight → Darkvision); movementAction picks fastest mode (Bee Giant → Fly)
+- Ownership flows to caster's owners (`grantOwnershipFrom: caster.id`), GM-triggered summons still reach the player
+- NPC action routing patch now handles spell-beast/raise/animate/perk-conjurer sourceIds
+- `getCompanionsFor` deduped by tokenId instead of actor.id (fixes multi-bat scenario where 2 tokens of same world actor collapsed into one card)
+- Companion card: HP row reads [HP label][9/9][bar][Armor N] with "Armor" full word (was "ARM")
+- NPC armor shape: `system.armor` is a plain number on NPCs, object with `.value` on characters — handle both
+- Tab injects on init for sheets that were already open before the ready hook (no more "close/reopen to see Companions tab")
+
+### Picker UX overhauled
+- Sticky header row on `.vce-bd-scroll` (required overriding system `.vce-bd-table` styles that had `border-collapse:collapse` + `overflow:hidden`, both of which break position:sticky children)
+- Click-to-sort on column headers (name/HD/type/size/hp/armor/speed). Active column shows gold ▲/▼. Favorites always float to top regardless of sort direction.
+- Added HP and Size columns between Type and Armor; Size sorts by numeric `sizeOrder` rank (tiny→colossal) not alphabetically
+- Resizable dialog (`window.resizable:true`) with `.vce-cp-scroll` flex-fill so the table grows with the window
+- Rich hover preview panel (custom floating `.vce-cp-preview` div, NOT Foundry's TooltipManager — v13's `game.tooltip.activate` shape varies and strips raw HTML). Positions to LEFT of row with right-flip on viewport overflow. Shows full creature brief: HD/size/type, HP, armor, speed with extras, senses, immunities, weaknesses, actions with damage+type, abilities.
+- Conjurer (Summoner class) and Familiar perk ported from legacy Dialog V1 to `CreaturePicker` — same filter shape, same UX as Beast/Raise. Summoner's favorites flag is `summonCodex`; Familiar's is `familiarCodex`. Legacy `_legacyShowConjureDialog` methods retained for reference; unreachable.
+
+### Investigations (not bugs)
+- "Favor on reflex" on beasts: NOT a VCE bug. The Archmage had Blinded applied to its WORLD actor (unlinked token, empty delta). System's `damage-helper.mjs:1519` reads `game.actors.get(actorId).system.outgoingSavesModifier`, which picks up the Blinded AE's `outgoingSavesModifier=favor` per Vulnerable rulebook. Behavior is correct; underlying data is the anomaly. User chose to ignore rather than delete the errant AE.
+- **Hex perk**: Witch class feature that makes a spell's effects continual without Focus. If Witch uses Hex on Raise, `_isFocusingRaise` returns false → Necromancer heal won't fire (correct — trade Focus for Hex means you lose the heal).
+- "Could not establish connection / Actor does not exist" errors: foundry-mcp-bridge extension messaging errors, NOT VCE code.
+
+### Deferred items (known and accepted)
+- Reanimator (should use Craft) and Animal Companion (should use Survival) still use `skill: "mana"` in the source registry. NPC action routing goes through mana path. Surface when needed.
+- CorpsePicker module (`scripts/companion/corpse-picker.mjs`) is unused after Raise/Reanimator swap to CreaturePicker. Keep in tree for future "pick a specific defeated scene token" workflow.
+- End-of-Shift auto-banish for Reanimator not implemented (no formal Shift tracker in Vagabond yet).
+- Per-adapter dismiss handlers use different flag names (`importedFromCompendium` for Summoner/Familiar/AC/Reanimator/Conjurer, `freshImport` for Beast, `synthetic` for Animate). All work independently; inconsistency noted, no action.
+- Foundry CLI install is paused (LevelDB lock). Will pick up when cleaning the pack churn. `installPath: E:\FoundryVTTv13\code`, `dataPath: E:\FoundryVTTv13\data` already configured.
 
 ---
 
