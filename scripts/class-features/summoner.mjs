@@ -763,11 +763,73 @@ export const SummonerFeatures = {
   /* -------------------------------------------- */
 
   /**
-   * Show the NPC selection dialog for conjuring a summon.
-   * Sources from world NPCs + system bestiary compendium.
+   * Show the creature picker for conjuring a summon.
+   *
+   * Uses the shared CreaturePicker for UI consistency with Beast/Raise
+   * (sticky header, sortable columns, rich hover tooltip, favorites).
+   * Favorites are stored on the caster via the "summonCodex" flag —
+   * right-click any row in the picker to toggle.
+   *
    * @param {Actor} actor - The summoner actor
    */
   async showConjureDialog(actor) {
+    const features = getFeatures(actor);
+    const maxHD = this._getMaxHD(actor, features);
+    const currentMana = actor.system?.mana?.current ?? 0;
+
+    // Delegate to CreaturePicker — single-select, exclude Humanlike
+    // (matches the legacy _gatherCandidates filter)
+    const { CreaturePicker } = await import("../companion/creature-picker.mjs");
+    const picks = await CreaturePicker.pick({
+      title: `${actor.name} — Conjure Summon (Max HD ${maxHD}, Mana ${currentMana})`,
+      caster: actor,
+      favoritesFlag: "summonCodex",
+      filter: {
+        excludeTypes: ["humanlike"],
+        maxHD,
+        packs: ["vagabond.bestiary"],
+      },
+    });
+    if (!picks || !picks.length) return;
+    const { uuid, hd, name } = picks[0];
+
+    // Mana cost check AFTER pick — avoids forcing the picker closed for
+    // a mana-shortage the player may already know about from the budget
+    // display in the title bar
+    if (currentMana < hd) {
+      ui.notifications.warn(`Not enough mana to summon ${name}! Need ${hd}, have ${currentMana}.`);
+      return;
+    }
+
+    // Build the npcData shape conjureSummon expects (name, hd, img, size,
+    // armor, immunities, beingType, worldActorId, compendiumUuid) from
+    // the resolved doc.
+    const doc = await fromUuid(uuid);
+    if (!doc) {
+      ui.notifications.error(`Could not resolve ${name}.`);
+      return;
+    }
+    const fromCompendium = !!doc.pack;
+    const npcData = {
+      name,
+      hd,
+      img: doc.img,
+      size: doc.system?.size ?? "medium",
+      armor: doc.system?.armor ?? 0,
+      immunities: doc.system?.immunities ?? [],
+      beingType: doc.system?.beingType ?? "",
+      worldActorId: fromCompendium ? null : doc.id,
+      compendiumUuid: fromCompendium ? doc.uuid : null,
+    };
+
+    return await this.conjureSummon(actor, npcData);
+  },
+
+  /**
+   * (Legacy helper retained for reference — no longer invoked now that
+   * showConjureDialog uses CreaturePicker.)
+   */
+  async _legacyShowConjureDialog(actor) {
     const features = getFeatures(actor);
     const maxHD = this._getMaxHD(actor, features);
     const currentMana = actor.system?.mana?.current ?? 0;

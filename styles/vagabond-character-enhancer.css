@@ -1971,6 +1971,17 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 }
 
 /* CreaturePicker sticky header + sortable columns */
+.vce-creature-picker-app .window-content .vce-creature-picker {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 8px;
+}
+.vce-creature-picker-app .vce-cp-scroll {
+  flex: 1;
+  max-height: none !important;
+  min-height: 150px;
+}
 .vce-cp-scroll {
   position: relative;
 }

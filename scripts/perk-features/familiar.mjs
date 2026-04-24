@@ -223,11 +223,60 @@ export const FamiliarFeatures = {
   /* -------------------------------------------- */
 
   /**
-   * Show the creature selection dialog for conjuring a familiar.
-   * Filters: HD 1, Small size, non-Humanlike.
-   * @param {Actor} actor - The caster actor
+   * Show the creature picker for conjuring a familiar.
+   *
+   * Uses the shared CreaturePicker for UI consistency with Beast/Raise/
+   * Conjurer (sticky header, sortable columns, rich hover tooltip,
+   * favorites). Favorites are stored on the caster via the
+   * "familiarCodex" flag — right-click any row to toggle.
+   *
+   * Filter: HD 1, Small size, non-Humanlike.
+   * @param {Actor} actor
    */
   async showConjureDialog(actor) {
+    const features = getFeatures(actor);
+    if (!features?.perk_familiar) {
+      ui.notifications.warn("This character doesn't have the Familiar perk.");
+      return;
+    }
+
+    const { CreaturePicker } = await import("../companion/creature-picker.mjs");
+    const picks = await CreaturePicker.pick({
+      title: `${actor.name} — Conjure Familiar (HD 1, Small)`,
+      caster: actor,
+      favoritesFlag: "familiarCodex",
+      filter: {
+        excludeTypes: ["humanlike"],
+        sizes: ["small"],
+        maxHD: 1,
+        packs: ["vagabond.bestiary"],
+      },
+    });
+    if (!picks || !picks.length) return;
+    const { uuid, name } = picks[0];
+
+    const doc = await fromUuid(uuid);
+    if (!doc) {
+      ui.notifications.error(`Could not resolve ${name}.`);
+      return;
+    }
+    const fromCompendium = !!doc.pack;
+    const npcData = {
+      name,
+      hd: 1,
+      img: doc.img,
+      size: doc.system?.size ?? "small",
+      armor: doc.system?.armor ?? 0,
+      beingType: doc.system?.beingType ?? "",
+      worldActorId: fromCompendium ? null : doc.id,
+      compendiumUuid: fromCompendium ? doc.uuid : null,
+    };
+
+    return await this.conjureFamiliar(actor, npcData);
+  },
+
+  /** Legacy helper retained for reference. */
+  async _legacyShowConjureDialog(actor) {
     const features = getFeatures(actor);
     if (!features?.perk_familiar) {
       ui.notifications.warn("This character doesn't have the Familiar perk.");

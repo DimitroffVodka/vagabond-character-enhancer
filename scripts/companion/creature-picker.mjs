@@ -23,7 +23,7 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
   constructor(opts, resolve) {
     super({
       id: `vce-creature-picker-${foundry.utils.randomID()}`,
-      window: { title: opts.title ?? "Select a Creature" },
+      window: { title: opts.title ?? "Select a Creature", resizable: true },
       position: { width: 900, height: 580 },
       classes: ["vce-creature-picker-app"],
     });
@@ -49,6 +49,9 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       return (a.hd - b.hd) || a.name.localeCompare(b.name);
     });
     for (const c of creatures) c.isFavorite = favorites.includes(c.name);
+
+    // Cache tooltip HTML by uuid so _onRender can bind it to rows
+    this._tooltips = new Map(creatures.map(c => [c.uuid, c.tooltip]));
 
     return {
       creatures,
@@ -201,7 +204,44 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       actionsStr: actionsStr || "—",
       speedStr,
       sizeOrder,
+      tooltip: this._buildTooltipHTML(r, speedStr),
     };
+  }
+
+  /**
+   * Build the rich HTML tooltip shown on row hover. Delivers NPC-sheet-level
+   * detail without actually opening the sheet — stats, actions with full damage
+   * breakdown, abilities, immunities, weaknesses, senses.
+   */
+  _buildTooltipHTML(r, speedStr) {
+    const esc = (s) => String(s ?? "").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+    const maxHP = r.hp ?? r.health?.max ?? r.health?.value ?? 0;
+    const senses = r.senses ?? "";
+    const immunities = (r.immunities ?? []).join(", ");
+    const weaknesses = (r.weaknesses ?? []).join(", ");
+    const actions = (r.actions ?? []).map(a => {
+      const dmg = a.rollDamage || a.flatDamage || "";
+      const dtype = a.damageType && a.damageType !== "-" ? ` ${a.damageType}` : "";
+      const dmgPart = dmg ? ` <span style='color:#d4a843'>${esc(dmg)}${esc(dtype)}</span>` : "";
+      const note = a.note ? ` <span style='opacity:0.7'>(${esc(a.note)})</span>` : "";
+      return `<div><strong>${esc(a.name)}</strong>${dmgPart}${note}</div>`;
+    }).join("");
+    const abilities = (r.abilities ?? []).map(a =>
+      `<div><strong>${esc(a.name)}:</strong> <span style='opacity:0.85'>${esc(a.description)}</span></div>`
+    ).join("");
+
+    return `
+      <div style="max-width:340px;font-size:12px;line-height:1.4;text-align:left;">
+        <div style="font-size:14px;font-weight:bold;color:#d4a843;margin-bottom:4px;">${esc(r.name)}</div>
+        <div style="opacity:0.85;margin-bottom:6px;">HD ${r.hd ?? 0} · ${esc(r.size ?? "medium")} · ${esc(r.beingType ?? "—")}</div>
+        <div><strong>HP:</strong> ${maxHP} &nbsp; <strong>Armor:</strong> ${r.armor ?? 0}</div>
+        <div><strong>Speed:</strong> ${esc(speedStr)}</div>
+        ${senses ? `<div><strong>Senses:</strong> ${esc(senses)}</div>` : ""}
+        ${immunities ? `<div><strong>Immune:</strong> ${esc(immunities)}</div>` : ""}
+        ${weaknesses ? `<div><strong>Weak:</strong> ${esc(weaknesses)}</div>` : ""}
+        ${actions ? `<div style="margin-top:6px;border-top:1px solid rgba(255,255,255,0.15);padding-top:4px;"><strong style='color:#d4a843'>Actions</strong>${actions}</div>` : ""}
+        ${abilities ? `<div style="margin-top:4px;"><strong style='color:#d4a843'>Abilities</strong>${abilities}</div>` : ""}
+      </div>`;
   }
 
   _onRender(context, options) {
@@ -236,6 +276,26 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       });
     });
     if (search) setTimeout(() => search.focus(), 60);
+
+    // Hover → rich tooltip with full creature details (HP, armor, speed,
+    // senses, immunities, weaknesses, actions, abilities). Uses Foundry's
+    // TooltipManager so it inherits the system's tooltip styling + placement.
+    const tooltipMap = this._tooltips ?? new Map();
+    root.querySelectorAll(".vce-cp-row").forEach(row => {
+      const tooltipHTML = tooltipMap.get(row.dataset.uuid);
+      if (!tooltipHTML) return;
+      row.addEventListener("mouseenter", () => {
+        try {
+          game.tooltip.activate(row, { html: true, content: tooltipHTML, direction: "RIGHT" });
+        } catch (e) {
+          // Some Foundry builds require just { text }; silent fallback
+          try { game.tooltip.activate(row, { text: row.dataset.name }); } catch {}
+        }
+      });
+      row.addEventListener("mouseleave", () => {
+        try { game.tooltip.deactivate(); } catch {}
+      });
+    });
 
     // Row click — single or multi select. In multi mode, shift-click
     // decrements the count (removes one copy); plain click adds a copy.
