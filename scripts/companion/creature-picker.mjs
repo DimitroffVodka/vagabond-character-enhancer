@@ -115,26 +115,30 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     return out;
   }
 
-  _matchesActor(actor, { types, sizes, maxHD, customFilter }) {
-    const beingType = (actor.system?.beingType ?? "").toLowerCase();
-    if (types.length && !types.some(t => beingType.includes(t.toLowerCase()))) return false;
-    if (sizes.length) {
-      const sz = (actor.system?.size ?? "").toLowerCase();
-      if (!sizes.some(s => s.toLowerCase() === sz)) return false;
-    }
-    if (typeof maxHD === "number" && (actor.system?.hd ?? 0) > maxHD) return false;
-    if (typeof customFilter === "function" && !customFilter(actor)) return false;
-    return true;
+  _matchesActor(actor, filter) {
+    return this._matchesBeingType(actor.system?.beingType, actor.system?.size, actor.system?.hd, filter)
+      && (typeof filter.customFilter !== "function" || filter.customFilter(actor));
   }
 
-  _matchesEntry(entry, { types, sizes, maxHD }) {
-    const beingType = (entry.system?.beingType ?? "").toLowerCase();
+  _matchesEntry(entry, filter) {
+    return this._matchesBeingType(entry.system?.beingType, entry.system?.size, entry.system?.hd, filter);
+  }
+
+  /**
+   * Shared type/size/HD predicate. Supports both INCLUDE and EXCLUDE type
+   * filters. Use `types: ["beast"]` for a beast-only pool (Beast spell),
+   * `excludeTypes: ["artificial", "undead"]` for corpse-eligibility (Raise,
+   * Reanimator — rulebook: no Artificial/Undead corpses).
+   */
+  _matchesBeingType(beingTypeRaw, sizeRaw, hdRaw, { types = [], excludeTypes = [], sizes = [], maxHD }) {
+    const beingType = (beingTypeRaw ?? "").toLowerCase();
     if (types.length && !types.some(t => beingType.includes(t.toLowerCase()))) return false;
+    if (excludeTypes.length && excludeTypes.some(t => beingType.includes(t.toLowerCase()))) return false;
     if (sizes.length) {
-      const sz = (entry.system?.size ?? "").toLowerCase();
+      const sz = (sizeRaw ?? "").toLowerCase();
       if (!sizes.some(s => s.toLowerCase() === sz)) return false;
     }
-    if (typeof maxHD === "number" && (entry.system?.hd ?? 0) > maxHD) return false;
+    if (typeof maxHD === "number" && (hdRaw ?? 0) > maxHD) return false;
     return true;
   }
 

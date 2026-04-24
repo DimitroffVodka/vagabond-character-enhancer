@@ -18,7 +18,7 @@
 
 import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { CompanionSpawner } from "../companion/companion-spawner.mjs";
-import { CorpsePicker } from "../companion/corpse-picker.mjs";
+import { CreaturePicker } from "../companion/creature-picker.mjs";
 import { applyUndeadTemplate } from "../companion/undead-template.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
@@ -115,41 +115,61 @@ export const RaiseSpell = {
       }
     }
 
-    if (!uuid) {
-      // Open corpse picker single-select (one raise per cast; player re-casts for more)
-      const picked = await CorpsePicker.pick({
+    let picks;
+    if (uuid) {
+      // Infesting Burst shortcut — caller already resolved a specific UUID
+      picks = [{ uuid, name: "Boomer" }];
+    } else {
+      // Rich-table multi-select picker, excluding Artificial/Undead/Construct/Object
+      // per rulebook ("non-Artificial/Undead corpse"). Multi-pick so L4 caster
+      // can raise e.g. 2×HD2 in a single cast within their HD budget.
+      picks = await CreaturePicker.pick({
         title: `Raise — ${remainingHD} HD remaining of ${maxHD}`,
-        maxHD: remainingHD,
-        multi: false,
-        fallbackPacks: [
-          "vagabond-character-enhancer.vce-beasts",
-          "vagabond.bestiary",
-        ],
+        caster,
+        favoritesFlag: "raiseSpellCodex",
+        multi: true,
+        filter: {
+          excludeTypes: ["artificial", "undead", "construct", "object"],
+          maxHD: remainingHD,
+          packs: ["vagabond.bestiary"],
+        },
       });
-      if (!picked || !picked.length) return;
-      uuid = picked[0].uuid;
+      if (!picks || !picks.length) return;
     }
 
-    const result = await CompanionSpawner.spawn({
-      caster,
-      sourceId: SOURCE_ID,
-      creatureUuid: uuid,
-      meta: { spellCast: true, raised: true },
-      allowMultiple: true,
-      suppressChat: false,
-    });
-    if (!result.success) {
-      ui.notifications.error(`Could not raise undead: ${result.error ?? "unknown error"}`);
+    // Spawn each pick, apply the Undead template, track successes for summary
+    let raised = 0;
+    for (const pick of picks) {
+      const result = await CompanionSpawner.spawn({
+        caster,
+        sourceId: SOURCE_ID,
+        creatureUuid: pick.uuid,
+        meta: { spellCast: true, raised: true },
+        allowMultiple: true,
+        suppressChat: true,
+      });
+      if (!result.success) {
+        log("RaiseSpell", `Could not raise ${pick.name}: ${result.error}`);
+        continue;
+      }
+      const raisedActor = game.actors.get(result.actorId);
+      if (raisedActor) await applyUndeadTemplate(raisedActor, { sourceName: "Raised" });
+      raised++;
+    }
+
+    if (!raised) {
+      ui.notifications.error("Could not raise any undead from the selection.");
       return;
     }
 
-    // Apply Undead template to the spawned actor
-    const raisedActor = game.actors.get(result.actorId);
-    if (raisedActor) {
-      await applyUndeadTemplate(raisedActor, { sourceName: "Raised" });
-    }
+    // Batch chat summary
+    const names = picks.map(p => p.name).join(", ");
+    ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: caster }),
+      content: `<div class="vce-companion-spawned"><strong>${caster.name}</strong> casts <strong>Raise</strong> — the dead rise: <em>${names}</em>.</div>`,
+    });
 
-    // Acquire focus on first raise; shared across subsequent raises
+    // Acquire focus on first raise; shared across all subsequent raises
     const hasFocus = (caster.getFlag(MODULE_ID, "featureFocus") || [])
       .some(f => f.key === FOCUS_KEY);
     if (!hasFocus) {

@@ -17,7 +17,7 @@
 import { MODULE_ID, log, getFeatures } from "../utils.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 import { CompanionSpawner } from "../companion/companion-spawner.mjs";
-import { CorpsePicker } from "../companion/corpse-picker.mjs";
+import { CreaturePicker } from "../companion/creature-picker.mjs";
 import { applyUndeadTemplate } from "../companion/undead-template.mjs";
 
 const SOURCE_ID = "perk-reanimator";
@@ -133,18 +133,19 @@ export const ReanimatorPerk = {
     const level = Number(actor.system?.attributes?.level?.value ?? 1) || 1;
     const maxHD = level;
 
-    const picked = await CorpsePicker.pick({
+    const picks = await CreaturePicker.pick({
       title: `${actor.name} — Reanimate (HD ≤ ${maxHD})`,
-      maxHD,
-      multi: false,
-      fallbackPacks: [
-        "vagabond-character-enhancer.vce-beasts",
-        "vagabond.bestiary",
-      ],
+      caster: actor,
+      favoritesFlag: "reanimatorCodex",
+      // Single-select — Reanimator raises one undead per Shift
+      filter: {
+        excludeTypes: ["artificial", "undead", "construct", "object"],
+        maxHD,
+        packs: ["vagabond.bestiary"],
+      },
     });
-    if (!picked || !picked.length) return;
-
-    const { uuid } = picked[0];
+    if (!picks || !picks.length) return;
+    const { uuid } = picks[0];
 
     const result = await CompanionSpawner.spawn({
       caster: actor,
