@@ -1974,11 +1974,20 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 .vce-cp-scroll {
   position: relative;
 }
+/* System styles on .vce-bd-table apply border-collapse:collapse and
+ * overflow:hidden — both BREAK position:sticky on <th> children. Override. */
+.vce-cp-table {
+  border-collapse: separate !important;
+  border-spacing: 0;
+  overflow: visible !important;
+}
 .vce-cp-table thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--vagabond-c-inset-2, #2a2a2a);
+  /* Solid background — translucent would let scrolled rows show through */
+  background: #2a2a2a;
+  color: var(--vce-accent, #d4a843);
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 0 0 var(--vagabond-c-tan, #a2a2a2);
 }
