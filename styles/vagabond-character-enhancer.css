@@ -2018,6 +2018,14 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   color: var(--vce-accent, #d4a843);
   backdrop-filter: blur(4px);
   box-shadow: 0 2px 0 0 var(--vagabond-c-tan, #a2a2a2);
+  /* Normalize alignment across all cells — system .vce-bd-th base style
+     leaves each column floating at its own height, making the sticky row
+     look crooked */
+  vertical-align: middle;
+  line-height: 1;
+  height: 32px;
+  padding: 6px 8px;
+  box-sizing: border-box;
 }
 .vce-cp-sort {
   cursor: pointer;
