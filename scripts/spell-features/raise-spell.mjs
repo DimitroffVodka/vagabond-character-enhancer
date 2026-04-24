@@ -93,17 +93,22 @@ export const RaiseSpell = {
       return;
     }
 
-    // Infesting Burst perk: offer to raise the corpse as a Boomer instead.
-    // If the caster accepts, we bypass the corpse picker and spawn the
-    // Zombie, Boomer system actor directly (Boomer's own HD 3 is used for
-    // the budget check).
+    // Infesting Burst perk (Raise-adjacent): offer the Zombie, Boomer as an
+    // alternative spawn. Rulebook: "you can choose to raise them up as a
+    // Boomer." If the caster chooses Yes, skip the corpse picker entirely and
+    // spawn a single Zombie, Boomer consuming HD 3 of the budget. If they
+    // pick No, the normal multi-select picker opens.
+    //
+    // Known limitation: you can't mix a Boomer with regular corpses in one
+    // cast today — two casts required. Revisit when/if that comes up.
     const features = getFeatures(caster);
-    let uuid;
+    let picks;
     if (features?.perk_infestingBurst) {
       const boomerHD = 3;
       const useBoomer = await foundry.applications.api.DialogV2.confirm({
         window: { title: "Infesting Burst" },
-        content: `<p>Raise this one as a <strong>Boomer</strong>? (HD ${boomerHD}, explodes for 2d6 in Near aura and dies.)</p><p><em>Yes = summon Zombie, Boomer. No = pick a specific corpse.</em></p>`,
+        content: `<p>Raise a <strong>Zombie Boomer</strong> (HD ${boomerHD})?</p>
+                  <p><em>The Boomer explodes for 2d6 in Near aura then dies. No = open the normal corpse picker for regular undead.</em></p>`,
         rejectClose: false,
       });
       if (useBoomer) {
@@ -111,15 +116,11 @@ export const RaiseSpell = {
           ui.notifications.warn(`Boomer HD (${boomerHD}) exceeds remaining budget (${remainingHD}).`);
           return;
         }
-        uuid = BOOMER_UUID;
+        picks = [{ uuid: BOOMER_UUID, name: "Zombie, Boomer" }];
       }
     }
 
-    let picks;
-    if (uuid) {
-      // Infesting Burst shortcut — caller already resolved a specific UUID
-      picks = [{ uuid, name: "Boomer" }];
-    } else {
+    if (!picks) {
       // Rich-table multi-select picker, excluding Artificial/Undead/Construct/Object
       // per rulebook ("non-Artificial/Undead corpse"). Multi-pick so L4 caster
       // can raise e.g. 2×HD2 in a single cast within their HD budget.
