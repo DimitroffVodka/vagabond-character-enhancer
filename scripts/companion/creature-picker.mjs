@@ -158,6 +158,10 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       speed: actor.system?.speed ?? 30,
       speedValues: actor.system?.speedValues ?? {},
       actions: actor.system?.actions ?? [],
+      abilities: actor.system?.abilities ?? [],
+      senses: actor.system?.senses ?? "",
+      immunities: actor.system?.immunities ?? [],
+      weaknesses: actor.system?.weaknesses ?? [],
       sourceLabel,
     });
   }
@@ -175,6 +179,10 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       speed: entry.system?.speed ?? 30,
       speedValues: entry.system?.speedValues ?? {},
       actions: entry.system?.actions ?? [],
+      abilities: entry.system?.abilities ?? [],
+      senses: entry.system?.senses ?? "",
+      immunities: entry.system?.immunities ?? [],
+      weaknesses: entry.system?.weaknesses ?? [],
       sourceLabel,
     });
   }
@@ -299,13 +307,15 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!html) return;
       const el = ensurePreview();
       el.innerHTML = html;
-      // Position to the right of the row; flip left if off-screen
+      // Position to the LEFT of the row; flip right if off-screen
       const rect = row.getBoundingClientRect();
       el.style.display = "block";
-      // After display, measure
-      const preferredLeft = rect.right + 10;
-      const wouldOverflow = preferredLeft + el.offsetWidth > window.innerWidth;
-      const left = wouldOverflow ? Math.max(10, rect.left - el.offsetWidth - 10) : preferredLeft;
+      // After display, measure for placement math
+      const preferredLeft = rect.left - el.offsetWidth - 10;
+      const wouldOverflow = preferredLeft < 10;
+      const left = wouldOverflow
+        ? Math.min(rect.right + 10, window.innerWidth - el.offsetWidth - 10)
+        : preferredLeft;
       const top = Math.min(rect.top, window.innerHeight - el.offsetHeight - 10);
       el.style.left = `${left}px`;
       el.style.top = `${Math.max(10, top)}px`;
