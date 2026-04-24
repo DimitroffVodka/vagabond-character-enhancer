@@ -2097,7 +2097,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   font-weight: bold;
   color: var(--vagabond-c-text-primary);
   min-width: 52px;
-  text-align: right;
+  text-align: center;
 }
 .vce-companion-armor {
   font-size: 12px;

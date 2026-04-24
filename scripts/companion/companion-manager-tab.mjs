@@ -299,11 +299,11 @@ export const CompanionManagerTab = {
         <div class="vce-companion-body">
           <div class="vce-companion-hp-row">
             <span class="vce-companion-hp-label">HP</span>
+            <span class="vce-companion-hp-text">${hp} / ${maxHP}</span>
             <div class="vce-companion-hp-bar-wrap">
               <div class="vce-companion-hp-bar vce-hp-${hpClass}" style="width:${hpPct}%"></div>
             </div>
-            <span class="vce-companion-hp-text">${hp} / ${maxHP}</span>
-            <span class="vce-companion-armor">ARM ${armor}</span>
+            <span class="vce-companion-armor">Armor ${armor}</span>
           </div>
 
           ${statusChips ? `<div class="vce-companion-statuses">${statusChips}</div>` : ""}
