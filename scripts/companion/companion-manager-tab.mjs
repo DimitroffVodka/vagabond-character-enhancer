@@ -103,6 +103,18 @@ export const CompanionManagerTab = {
     Hooks.on("deleteToken", this._onCompanionStateChange.bind(this));
     Hooks.on("updateToken", this._onCompanionStateChange.bind(this));
 
+    // Catch character sheets that rendered BEFORE this init ran (e.g. a
+    // sheet Foundry auto-opens on world load, which triggers
+    // renderApplicationV2 in the setup phase — before VCE's ready hook
+    // registers the listener above). Without this, the first post-reload
+    // open of that sheet shows no Companions tab until the user closes
+    // and reopens it.
+    for (const app of foundry.applications.instances.values()) {
+      if (app.document?.type === "character" && app.element?.isConnected) {
+        this._onRenderSheet(app);
+      }
+    }
+
     log("CompanionManagerTab", "Tab renderer registered");
   },
 
