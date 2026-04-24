@@ -1970,6 +1970,23 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   cursor: pointer;
 }
 
+/* CreaturePicker hover-preview panel (custom floating div, not Foundry tooltip) */
+.vce-cp-preview {
+  position: fixed;
+  z-index: 10000;
+  max-width: 360px;
+  padding: 10px 12px;
+  background: rgba(20, 18, 28, 0.96);
+  color: #e0e0e0;
+  border: 1px solid var(--vce-accent, #d4a843);
+  border-radius: 5px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
 /* CreaturePicker sticky header + sortable columns */
 .vce-creature-picker-app .window-content .vce-creature-picker {
   display: flex;

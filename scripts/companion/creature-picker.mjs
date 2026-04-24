@@ -277,25 +277,53 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     });
     if (search) setTimeout(() => search.focus(), 60);
 
-    // Hover → rich tooltip with full creature details (HP, armor, speed,
-    // senses, immunities, weaknesses, actions, abilities). Uses Foundry's
-    // TooltipManager so it inherits the system's tooltip styling + placement.
+    // Hover → rich tooltip with full creature details. Uses a custom floating
+    // panel (not Foundry's TooltipManager, which v13's options shape varies
+    // across builds and often strips raw HTML). The panel is a single div
+    // appended to document.body, positioned next to the hovered row.
     const tooltipMap = this._tooltips ?? new Map();
+    let previewEl = null;
+    const ensurePreview = () => {
+      if (previewEl) return previewEl;
+      previewEl = document.createElement("div");
+      previewEl.className = "vce-cp-preview";
+      previewEl.style.display = "none";
+      document.body.appendChild(previewEl);
+      return previewEl;
+    };
+    const hidePreview = () => {
+      if (previewEl) previewEl.style.display = "none";
+    };
+    const showPreview = (row) => {
+      const html = tooltipMap.get(row.dataset.uuid);
+      if (!html) return;
+      const el = ensurePreview();
+      el.innerHTML = html;
+      // Position to the right of the row; flip left if off-screen
+      const rect = row.getBoundingClientRect();
+      el.style.display = "block";
+      // After display, measure
+      const preferredLeft = rect.right + 10;
+      const wouldOverflow = preferredLeft + el.offsetWidth > window.innerWidth;
+      const left = wouldOverflow ? Math.max(10, rect.left - el.offsetWidth - 10) : preferredLeft;
+      const top = Math.min(rect.top, window.innerHeight - el.offsetHeight - 10);
+      el.style.left = `${left}px`;
+      el.style.top = `${Math.max(10, top)}px`;
+    };
+
     root.querySelectorAll(".vce-cp-row").forEach(row => {
-      const tooltipHTML = tooltipMap.get(row.dataset.uuid);
-      if (!tooltipHTML) return;
-      row.addEventListener("mouseenter", () => {
-        try {
-          game.tooltip.activate(row, { html: true, content: tooltipHTML, direction: "RIGHT" });
-        } catch (e) {
-          // Some Foundry builds require just { text }; silent fallback
-          try { game.tooltip.activate(row, { text: row.dataset.name }); } catch {}
-        }
-      });
-      row.addEventListener("mouseleave", () => {
-        try { game.tooltip.deactivate(); } catch {}
-      });
+      if (!tooltipMap.has(row.dataset.uuid)) return;
+      row.addEventListener("mouseenter", () => showPreview(row));
+      row.addEventListener("mouseleave", hidePreview);
     });
+
+    // Clean up preview element when the dialog closes
+    this._previewCleanup = () => {
+      if (previewEl) {
+        previewEl.remove();
+        previewEl = null;
+      }
+    };
 
     // Row click — single or multi select. In multi mode, shift-click
     // decrements the count (removes one copy); plain click adds a copy.
@@ -489,6 +517,8 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
 
   async close(options) {
     if (this._closedWithoutSelect) this._resolve(null);
+    // Clean up the floating preview panel (if any)
+    try { this._previewCleanup?.(); } catch {}
     return super.close(options);
   }
 }
