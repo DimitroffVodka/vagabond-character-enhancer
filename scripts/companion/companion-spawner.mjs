@@ -362,7 +362,11 @@ export const CompanionSpawner = {
         sourceMeta,
         hp: actor.system?.health?.value ?? 0,
         maxHP: actor.system?.health?.max ?? 0,
-        armor: actor.system?.armor?.value ?? 0,
+        // NPC armor is a plain number (system.armor === 0), character armor
+        // is an object (system.armor.value). Handle both.
+        armor: (typeof actor.system?.armor === "number"
+          ? actor.system.armor
+          : actor.system?.armor?.value) ?? 0,
         statuses: Array.from(actor.statuses ?? []),
       });
     };
