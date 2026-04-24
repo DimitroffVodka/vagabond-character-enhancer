@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased — Post-v0.4.0 Polish & Animate Picker Fixes
+
+### Animate Picker
+
+- **Picker no longer hangs on close.** Row-click and Cancel now resolve the promise via an idempotent `finish()` helper; X-button / Escape / click-outside dismissal is caught via the `closeDialogV2` hook. The previous implementation passed `close: () => resolve(...)` as a constructor option to DialogV2, which doesn't honour it (that was Dialog V1's API), so the await hung indefinitely and the Companions-tab `_triggerLocks` map kept the Conjure button disabled until reload.
+- **Picker UI now matches the other companion popouts.** Converted from Dialog V1 to DialogV2 with `classes: ["vce-creature-picker-app"]`, content wrapped in `<form class="vce-creature-picker">` with `.vce-cp-header` / `.vce-cp-scroll` / `.vce-cp-table` so the existing dark CSS + sticky gold table header pick it up. Removes the visible-style regression where Animate's dialog rendered with light Dialog V1 chrome while Beast / Raise / Conjurer used the dark ApplicationV2 chrome.
+- **Synthetic NPC sheet opens locked.** New Animated Object actors are now created with `system.locked: true`, so the sheet renders in display mode (no yellow edit banner, no `+ Add Action` buttons). Matches the experience of any other NPC summon.
+- **Item sort: weapons first, then alphabetical within each group.** Animate's most common target is a weapon — they now sort to the top of the inventory picker. Detection covers both `item.type === "weapon"` and the newer `equipment` + `equipmentType: "weapon"` schema.
+- **Dialog size 900 × 580** (was 600 × 450) to match `CreaturePicker`.
+
+### Accessibility
+
+- **aria-label on search inputs and icon-only buttons.** Creature Picker search, Alchemy Cookbook search, and the four browse/preview buttons in Configure Feature FX now have descriptive `aria-label`s. Star icons in the creature picker get `role="img"` + `aria-label` so screen readers announce the favorite state as part of the row's text.
+- **Keyboard `F` shortcut for favoriting** in `CreaturePicker`. Right-click was the only path before — keyboard-only users had no way to favorite. Rows gain `aria-keyshortcuts="f"` and a keydown handler that fires only when the row has focus (typing `f` into the search input still works because the search is a sibling element, not a descendant of any row).
+- **`:focus-within` rings on composite search pills.** The cookbook and gold-sink search inputs had `outline: none` with no replacement focus indicator. The parent composite (`.vcb-cook-search`, `.vce-gs-search`) now gets a gold border + soft glow when the inner input is focused. WCAG 2.4.7 (Focus Visible) compliance.
+- **Cookbook item images** get `alt=""` so screen readers don't read the file path.
+- **Removed conflicting `role="grid"`** from the creature picker table. Rows have `role="button"`, which mixed badly with the grid pattern's arrow-navigation contract. Native table semantics + button rows is correct for click-to-pick lists.
+
+### Theming — New Design Tokens
+
+- **`--vce-accent-bg-quiet` / `-bg` / `-bg-hover` / `-bg-active` / `-ring`** (5 named opacity stops on the brand gold). Consolidates 12 scattered `rgba(212, 168, 67, ...)` literal uses across the file onto semantic tokens.
+- **`--vce-hp-ok` / `-mid` / `-low` / `-critical`** for HP gradient backgrounds. Mirrors the documented `--vcb-hp-*` tokens from `vagabond-crawler` but is declared locally so HP coloring works without that optional module installed.
+- **11 plain hex literals → existing tokens**: `#d4a843` (3 sites), `#4a7c3f` (2 sites), `#8b0000` (2 sites), `#7b5ea7`, `#8fef7f`, `#4ade80`, `#e0e0e0` all replaced with their `--vce-*` counterparts.
+- **3 inline template colors tokenized**: `creature-picker.hbs` star, `alchemy-cookbook.hbs` formula star, and the matching JS re-render string in `creature-picker.mjs`.
+
+### Code Quality
+
+- **`transition: all 0.15s` → explicit property list** on `.vce-fx-nav-btn` (color, background-color, border-left-color). Avoids surprise animations if future styles add layout properties to the rule.
+- **Inline layout styles lifted to utility classes.** Removed `style="max-height:400px; overflow-y:auto;"`, `style="width:24px;"`, `style="opacity:0.35;"`, `style="text-align:center;opacity:0.6;padding:12px;"` from `templates/creature-picker.hbs`; new `.vce-cp-th-fav`, `.vce-cp-fav-on`, `.vce-cp-fav-off`, `.vce-cp-empty-row` classes. `.vce-cp-scroll` absorbs the `max-height` rule.
+- **`CLAUDE.md` refresh** — new "Companion System (v0.4.0+)" section covering `CompanionSpawner`, the source registry, dismiss handlers, shared pickers, undead template, flag schema, and save/NPC-action routing. "Other Module Files" updated to include `scripts/companion/`, the new spell-features adapters, expanded perk-features subdirectory, socket-relay op list, and `templates/`. Exposed-API list expanded to reflect the actual surface (~25 entries vs the previous 12). New "Build & Release" subsection points at `pwsh ./build-zip.ps1`.
+
 ## v0.4.0 — CompanionManager + Phase 2 Feature Adapters
 
 Major release. The old per-companion Summon tab is replaced by a unified **Companions** tab on every character sheet, driven by a source-agnostic engine. Six new feature adapters (Beast, Raise, Animate, Animal Companion, Reanimator, Conjurer) plus three Raise-adjacent perks (Grim Harvest, Infesting Burst, Necromancer) build on that engine. The creature picker got a substantial UX overhaul.

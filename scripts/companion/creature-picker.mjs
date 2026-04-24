@@ -354,6 +354,14 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
       // Keyboard activation
       row.addEventListener("keydown", (ev) => {
         if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); row.click(); }
+        // "F" — toggle favorite (matches aria-keyshortcuts="f" on the row).
+        // Only fires when a row has focus; the search input is a sibling and
+        // its keydowns don't reach this handler, so typing "f" into search works.
+        else if ((ev.key === "f" || ev.key === "F") && !ev.ctrlKey && !ev.metaKey && !ev.altKey
+                 && this._opts.favoritesFlag && this._opts.caster) {
+          ev.preventDefault();
+          this._toggleFavorite(row);
+        }
       });
       // Right-click — toggle favorite (if caller opted in)
       if (this._opts.favoritesFlag && this._opts.caster) {
@@ -453,8 +461,8 @@ class CreaturePickerDialog extends HandlebarsApplicationMixin(ApplicationV2) {
     const star = row.querySelector(".vce-cp-fav");
     if (star) {
       star.innerHTML = isFav
-        ? '<i class="far fa-star" style="opacity:0.35;" title="Right-click to favorite"></i>'
-        : '<i class="fas fa-star" style="color:#d4a843;" title="Favorited — right-click to unfavorite"></i>';
+        ? '<i class="far fa-star vce-cp-fav-off" role="img" aria-label="Not favorited" title="Right-click or press F to favorite"></i>'
+        : '<i class="fas fa-star vce-cp-fav-on" role="img" aria-label="Favorited" title="Favorited — right-click or press F to unfavorite"></i>';
     }
 
     // Reorder row

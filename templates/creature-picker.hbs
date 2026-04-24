@@ -1,7 +1,7 @@
 <form class="vce-creature-picker">
   <div class="vce-cp-header">
     {{#if showSearch}}
-      <input type="text" class="vce-cp-search" placeholder="Search creatures…" autocomplete="off">
+      <input type="text" class="vce-cp-search" placeholder="Search creatures…" aria-label="Search creatures by name" autocomplete="off">
     {{/if}}
     {{#if multi}}
       <p class="vce-cp-budget">
@@ -21,11 +21,11 @@
     {{/if}}
   </div>
 
-  <div class="vce-bd-scroll vce-cp-scroll" style="max-height:400px; overflow-y:auto;">
-    <table class="vce-bd-table vce-cp-table" role="grid">
+  <div class="vce-bd-scroll vce-cp-scroll">
+    <table class="vce-bd-table vce-cp-table">
       <thead>
         <tr class="vce-bd-header-row">
-          {{#if hasFavorites}}<th class="vce-bd-th vce-bd-th-center vce-cp-sort" data-sort="fav" scope="col" style="width:24px;" title="Sort by favorite">★</th>{{/if}}
+          {{#if hasFavorites}}<th class="vce-bd-th vce-bd-th-center vce-cp-sort vce-cp-th-fav" data-sort="fav" scope="col" title="Sort by favorite">★</th>{{/if}}
           <th class="vce-bd-th vce-bd-th-img" scope="col"></th>
           <th class="vce-bd-th vce-cp-sort" data-sort="name" scope="col">Creature <span class="vce-cp-sort-arrow"></span></th>
           <th class="vce-bd-th vce-bd-th-center vce-cp-sort" data-sort="hd" scope="col">HD <span class="vce-cp-sort-arrow"></span></th>
@@ -39,13 +39,13 @@
       </thead>
       <tbody>
         {{#each creatures}}
-          <tr class="vce-cp-row" data-uuid="{{uuid}}" data-name="{{name}}" data-hd="{{hd}}" data-beingtype="{{beingType}}" data-size="{{sizeOrder}}" data-hp="{{hp}}" data-armor="{{armor}}" data-speed="{{speed}}" data-favorite="{{#if isFavorite}}1{{else}}0{{/if}}" role="button" tabindex="0">
+          <tr class="vce-cp-row" data-uuid="{{uuid}}" data-name="{{name}}" data-hd="{{hd}}" data-beingtype="{{beingType}}" data-size="{{sizeOrder}}" data-hp="{{hp}}" data-armor="{{armor}}" data-speed="{{speed}}" data-favorite="{{#if isFavorite}}1{{else}}0{{/if}}" role="button" tabindex="0"{{#if ../hasFavorites}} aria-keyshortcuts="f"{{/if}}>
             {{#if ../hasFavorites}}
               <td class="vce-bd-cell vce-bd-cell-center vce-cp-fav">
                 {{#if isFavorite}}
-                  <i class="fas fa-star" style="color:#d4a843;" title="Favorited — right-click to unfavorite"></i>
+                  <i class="fas fa-star vce-cp-fav-on" role="img" aria-label="Favorited" title="Favorited — right-click or press F to unfavorite"></i>
                 {{else}}
-                  <i class="far fa-star" style="opacity:0.35;" title="Right-click to favorite"></i>
+                  <i class="far fa-star vce-cp-fav-off" role="img" aria-label="Not favorited" title="Right-click or press F to favorite"></i>
                 {{/if}}
               </td>
             {{/if}}
@@ -62,7 +62,7 @@
             <td class="vce-bd-cell vce-bd-cell-actions">{{actionsStr}}</td>
           </tr>
         {{else}}
-          <tr><td colspan="10" class="vce-bd-cell" style="text-align:center;opacity:0.6;padding:12px;">No creatures match the filter.</td></tr>
+          <tr><td colspan="10" class="vce-bd-cell vce-cp-empty-row">No creatures match the filter.</td></tr>
         {{/each}}
       </tbody>
     </table>

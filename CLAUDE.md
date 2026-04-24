@@ -174,6 +174,25 @@ Both call `VagabondChatCard.spellCast()` to render the chat card and `VagabondDa
 
 **Existing example**: `_recordCastUseFx` in `vagabond-character-enhancer.mjs` is called from both `SpellHandler.castSpell` and `CrawlerSpellDialog._cast` patches — see those for reference.
 
+### Companion System (v0.4.0+)
+Unified engine under `scripts/companion/` that replaces per-class summon plumbing. Any feature that spawns an NPC the PC controls (summon, familiar, raised undead, animated object, animal companion, conjured creature, hireling) MUST go through this rather than calling `placeToken` directly.
+
+**Core pieces:**
+- **`CompanionSpawner`** (`companion-spawner.mjs`) — spawn/dismiss/query. Signature: `CompanionSpawner.spawn({ caster, sourceId, actor, tokenData, allowMultiple?, suppressChat?, grantOwnershipFrom? })`. Handles socket-relayed token creation, ownership grants, combat auto-add, replace-on-same-source prompt, and wildcard token resolution.
+- **Source registry** (`companion-sources.mjs`) — pure-data definitions per source (`summoner`, `familiar`, `spell-beast`, `spell-animate`, `spell-raise`, `perk-conjurer`, `perk-reanimator`, `perk-animal-companion`, `hireling-manual`, `legacy`). Declares badge color, NPC-action skill routing, termination rules. **Add new sources here**, not inline.
+- **Per-source dismiss handlers** — `CompanionSpawner.registerDismissHandler(sourceId, fn)`. Called before generic dismiss; use for focus release, synthetic-actor cleanup, caster-side state flags. Fires on every dismiss path (tab button, zero-HP auto, replace-on-spawn).
+- **`CreaturePicker`** (`creature-picker.mjs`) — shared ApplicationV2 dialog. Filter config: `{ types, sizes, maxHD, pack, customFilter, excludeTypes, allowFavorites }`. Use this instead of rolling a bespoke picker.
+- **`CorpsePicker`** (`corpse-picker.mjs`) — defeated-token picker for Raise/Reanimator. Single- or multi-select; optional compendium fallback pool.
+- **`applyUndeadTemplate(actor, { sourceName })`** (`undead-template.mjs`) — tagged AE for raised undead. GM-proxied via `createActorAE` socket op.
+
+**Flag schema on spawned NPC:**
+- `companionMeta: { sourceId, casterActorId, ... }` — primary identifier (v0.4.0+). `sourceId` keys into the source registry.
+- `controllerActorId` + `controllerType` (`"companion"` | `"hireling"`) — save-routing + NPC-action routing.
+
+**Save routing** (v0.3.4+) — `handleSaveRoll` / `handleSaveReminderRoll` are patched in `save-routing-patch.mjs` so flagged NPCs roll saves via the controller PC's stats. Don't re-patch — compose through the existing patch.
+
+**NPC action routing** — `VagabondChatCard.npcAction` is patched so any action click on a companion routes through the controller PC's Mana Skill (or Leadership for hirelings). New source types must be added to the routing switch in `vagabond-character-enhancer.mjs` (search for `companionMeta`).
+
 ### Key System Fields for Active Effects
 ```
 # Crit thresholds (negative = lower threshold, e.g., -1 means crit on 19+)
@@ -202,19 +221,21 @@ saves.reflex.bonus, saves.endure.bonus, saves.will.bonus
 
 ### Other Module Files
 - `scripts/utils.mjs` — `MODULE_ID`, `log()`, `hasFeature()`, `getFeatures()`, `combineFavor()`
+- `scripts/companion/` — v0.4.0 unified companion system. Key files: `companion-spawner.mjs` (spawn/dismiss engine), `companion-sources.mjs` (source registry), `companion-manager-tab.mjs` (Companions tab on every PC sheet), `companion-termination.mjs` (GM-side HP-to-0 auto-dismiss), `creature-picker.mjs`, `corpse-picker.mjs`, `undead-template.mjs`, `controller-dialog.mjs` (Set Save Controller), `gather-companions.mjs` (compress/release HUD button), `save-routing.mjs` + `save-routing-patch.mjs`. See the Companion System section above.
 - `scripts/polymorph/` — Druid beast form system (dialog, manager, sheet injection, beast cache)
 - `scripts/alchemy/` — Alchemist cookbook UI and crafting helpers
 - `scripts/ancestry-features/` — One file per ancestry with trait registries
 - `scripts/perk-features.mjs` — Perk automation registry (all 104 perks with flags)
-- `scripts/perk-features/` — Per-perk subdirectory for complex perks (e.g., `familiar.mjs`). Simple flag-based perks stay in `perk-features.mjs`.
-- `scripts/spell-features/` — Spell automation (bless-manager, imbue-manager, ward-manager, effect-only-handler)
+- `scripts/perk-features/` — Per-perk subdirectory for complex perks: `familiar.mjs`, `animal-companion.mjs`, `conjurer.mjs`, `raise-perks.mjs` (Grim Harvest / Infesting Burst / Necromancer), `reanimator.mjs`. Simple flag-based perks stay in `perk-features.mjs`.
+- `scripts/spell-features/` — Spell automation. Managers: `bless-manager.mjs`, `imbue-manager.mjs`, `ward-manager.mjs`, `effect-only-handler.mjs`. Companion-summoning spell adapters (v0.4.0): `beast-spell.mjs`, `raise-spell.mjs`, `animate-spell.mjs`.
 - `scripts/aura/aura-manager.mjs` — Persistent spell aura templates that follow tokens and apply buffs (Revelator Paragon's Aura)
 - `scripts/brawl/brawl-intent.mjs` — Grapple/Shove intent system for Brawl attacks
 - `scripts/merchant/gold-sink-sheet.mjs` — Merchant Gold Sink shop tab injection (shares junk flag with vagabond-crawler)
-- `scripts/socket-relay.mjs` — GM-proxied operations (token creation, actor import/delete) for player clients via socket
+- `scripts/socket-relay.mjs` — GM-proxied operations for player clients. Ops: `placeToken` (with `grantOwnershipFrom`), `removeToken`, `createTokens`/`deleteTokens` (batch, for Gather), `createActor` (Animate synthetic NPCs), `createActorAE` (Undead template on non-owned actor), `updateActorFlags` (atomic multi-flag), `updateToken`, `setActorFlag`.
 - `scripts/range-validator.mjs` — Weapon range enforcement, target count limits, auto-hinder
 - `scripts/status-effects.mjs` — Custom status effect definitions
 - `scripts/focus/` — Focus tracking + Feature FX system (see `docs/feature-fx-system.md`)
+- `templates/` — Handlebars templates for ApplicationV2 dialogs: `alchemy-cookbook.hbs`, `controller-dialog.hbs`, `corpse-picker.hbs`, `creature-picker.hbs`, `feature-fx-config.hbs`.
 - `packs/vce-beasts/` — LevelDB compendium of 72 modified beast actors for Druid polymorph
 
 ### Reference Documents
@@ -236,7 +257,18 @@ Key points:
 - Focus tracking: features consume focus slots from the same pool as spells (`system.focus.max`)
 
 ### Exposed API
-`game.vagabondCharacterEnhancer` provides: `rescan(actor)`, `rescanAll()`, `getFlags(actor)`, `debug(actor)`, `virtuoso(actor)`, `stepUp(actor)`, `getStepUpData(actor)`, `getVirtuosoData(actor)`, `focusAcquire(actor, key, label, icon)`, `focusRelease(actor, key)`, `focusStatus(actor)`, `focus` (FocusManager object)
+`game.vagabondCharacterEnhancer` exposes (see `scripts/vagabond-character-enhancer.mjs:1305` for source of truth):
+- **Scan / debug:** `rescan(actor)`, `rescanAll()`, `getFlags(actor)`, `debug(actor)`
+- **Focus:** `focus` (FocusManager), `focusAcquire(actor, key, label, icon)`, `focusRelease(actor, key)`, `focusStatus(actor)`
+- **Bard:** `virtuoso(actor)`, `getVirtuosoData(actor)` (crawler API)
+- **Dancer:** `stepUp(actor)`, `getStepUpData(actor)` (crawler API)
+- **Hunter / Revelator / Draken:** `hunterMark(actor)`, `layOnHands(actor)`, `setDraconicResilience(actor)`
+- **Aura / Imbue / Brawl:** `aura(actor, spell, radius)`, `auraMenu(actor)`, `auraEnd(actor)`, `imbue` (ImbueManager), `clearImbue(actor)`, `brawlIntent` (BrawlIntent)
+- **Witch:** `witch`, `hex(...)`, `unhex(...)`, `betwixt(actor)`
+- **Summons / familiars:** `summoner`, `conjure(actor)`, `banish(actor)`, `getSummonData(actor)`, `familiar`, `conjureFamiliar(actor)`, `banishFamiliar(actor)`
+- **Alchemy / Polymorph:** `alchemist`, `alchemy`, `polymorph`
+- **Merchant:** `getGoldSinkData(actor)` (crawler API)
+- **Weapon flags:** `markAreaAttack(item, enabled)` — bypass RangeValidator single-target check for breath/cone weapons
 
 ### Related Modules
 - **vagabond-crawler** — Companion module (optional). Uses VCE's API for Step Up and Virtuoso integration.
@@ -251,8 +283,12 @@ Full Vagabond rulebook in Obsidian markdown: `F:/Obsidian/Vagabond/Vagabond/`
 **Always read the relevant class file before implementing a class feature. Don't guess at rules.**
 
 ## Development Notes
-- FoundryVTT v13.351, Vagabond system v5.0.0+ (per module.json)
+- FoundryVTT v13.351, Vagabond system v5.0.0+, module v0.4.0 (per module.json)
 - Module runs as ES modules (`.mjs`), no build step
 - System methods are patched via monkey-patching on `ready` hook (no libWrapper currently)
 - MCP bridge available for live testing via `foundry-mcp-bridge` module
 - The `status` field in registry entries tracks implementation state: check it before working on a feature
+
+### Build & Release
+- **Package release zip:** `pwsh ./build-zip.ps1` — produces `module.zip` at repo root containing `module.json`, `scripts/`, `styles/`, `languages/`, `packs/`, and docs. Upload both `module.json` + `module.zip` as GitHub release assets (Foundry manifest points at `releases/latest/download/`).
+- **Live reload in Foundry:** no hot reload. After editing a `.mjs`, either F5-refresh the Foundry tab or use the MCP bridge's `evaluate` for quick validation.

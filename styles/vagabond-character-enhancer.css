@@ -64,6 +64,20 @@
   --vce-formula-green: #4ade80;
   --vce-star-gold: #facc15;
 
+  /* Gold accent tints (opacity variants of --vce-accent #d4a843 / rgb(212,168,67)) */
+  --vce-accent-bg-quiet:  rgba(212, 168, 67, 0.10);
+  --vce-accent-bg:        rgba(212, 168, 67, 0.15);
+  --vce-accent-bg-hover:  rgba(212, 168, 67, 0.20);
+  --vce-accent-bg-active: rgba(212, 168, 67, 0.30);
+  --vce-accent-ring:      rgba(212, 168, 67, 0.25);
+
+  /* HP gradient. Mirrors --vcb-hp-* in vagabond-crawler; declared locally so
+     HP color works without the crawler module installed. */
+  --vce-hp-ok:        #3aaa3a;
+  --vce-hp-mid:       #b8a020;
+  --vce-hp-low:       #c86040;
+  --vce-hp-critical:  #8a1010;
+
   /* Spacing scale */
   --vce-space-xs: 4px;
   --vce-space-sm: 6px;
@@ -240,6 +254,10 @@ nav.sheet-tabs:has([data-tab^="vce-"] ~ [data-tab^="vce-"]) [data-tab] {
   border: 1px solid var(--vcb-border);
 }
 .vcb-cook-search i { color: var(--vcb-text-muted); font-size: 11px; }
+.vcb-cook-search:focus-within {
+  border-color: var(--vce-accent, #d4a843);
+  box-shadow: 0 0 0 2px var(--vce-accent-ring);
+}
 .vcb-cook-search-input {
   flex: 1; background: none; border: none; color: var(--vcb-text);
   font-family: var(--vcb-font); font-size: 12px; outline: none;
@@ -964,21 +982,21 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
 }
 
 .vce-force-of-nature.success {
-  border: 1px solid #4a7c3f;
+  border: 1px solid var(--vce-beast-primary);
   background: rgba(74, 124, 63, 0.13);
 }
 
 .vce-force-of-nature.success .vce-fon-icon {
-  color: #4a7c3f;
+  color: var(--vce-beast-primary);
 }
 
 .vce-force-of-nature.failure {
-  border: 1px solid #8b0000;
+  border: 1px solid var(--vce-danger);
   background: rgba(139, 0, 0, 0.13);
 }
 
 .vce-force-of-nature.failure .vce-fon-icon {
-  color: #8b0000;
+  color: var(--vce-danger);
 }
 
 /* -------------------------------------------- */
@@ -1014,7 +1032,7 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
 
 .vce-choreographer-note {
   margin-top: 8px;
-  color: #7b5ea7;
+  color: var(--vce-inspiration-accent);
   font-style: italic;
 }
 
@@ -1140,8 +1158,8 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
 
 .vce-virt-buff-btn.vce-virt-active {
   border-color: var(--vce-accent);
-  background: rgba(212, 168, 67, 0.15);
-  box-shadow: 0 0 6px rgba(212, 168, 67, 0.3);
+  background: var(--vce-accent-bg);
+  box-shadow: 0 0 6px var(--vce-accent-bg-active);
 }
 
 .vce-virt-buff-btn > i {
@@ -1261,7 +1279,7 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
   margin-bottom: 12px;
   font-family: "Paradigm", serif;
   font-size: 12px;
-  color: #8fef7f;
+  color: var(--vce-beast-primary-bright);
 }
 
 .vce-su-active-banner i {
@@ -1295,7 +1313,7 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
 
 .vce-su-ally:has(input:checked) {
   border-color: var(--vce-accent);
-  background: rgba(212, 168, 67, 0.15);
+  background: var(--vce-accent-bg);
 }
 
 .vce-su-ally input[type="checkbox"] {
@@ -1382,8 +1400,8 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
 .vce-feature-focus-section {
   margin-top: 6px;
   padding: 6px 8px;
-  background: rgba(212, 168, 67, 0.08);
-  border: 1px solid rgba(212, 168, 67, 0.25);
+  background: var(--vce-accent-bg-quiet);
+  border: 1px solid var(--vce-accent-ring);
   border-radius: 4px;
 }
 
@@ -1466,7 +1484,7 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
 
 .vce-fx-chip-on {
   background: rgba(34, 197, 94, 0.15);
-  color: #4ade80;
+  color: var(--vce-formula-green);
 }
 
 .vce-fx-chip-off {
@@ -1503,7 +1521,7 @@ body.theme-light .vcb-context-menu { background: var(--vcb-bg); }
   font-size: 12px;
   text-align: left;
   border-left: 3px solid transparent;
-  transition: all 0.15s;
+  transition: color 0.15s, background-color 0.15s, border-left-color 0.15s;
 }
 
 .vce-fx-nav-btn:hover {
@@ -1671,7 +1689,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 }
 
 .vce-gs-wallet i {
-  color: #d4a843;
+  color: var(--vce-accent);
 }
 
 .vce-gs-search {
@@ -1680,6 +1698,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   gap: 6px;
   padding: 4px 8px;
   background: var(--vagabond-c-inset-2, rgba(0,0,0,0.1));
+  border: 1px solid transparent;
   border-radius: 3px;
 }
 
@@ -1687,6 +1706,10 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   opacity: 0.5;
 }
 
+.vce-gs-search:focus-within {
+  border-color: var(--vce-accent, #d4a843);
+  box-shadow: 0 0 0 2px var(--vce-accent-ring);
+}
 .vce-gs-search-input {
   flex: 1;
   background: transparent;
@@ -1718,7 +1741,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 .vce-gs-filter-btn.active {
   opacity: 1;
   background: var(--vagabond-c-inset-2, rgba(255,255,255,0.1));
-  border-color: #d4a843;
+  border-color: var(--vce-accent);
 }
 
 .vce-gs-filter-btn:hover {
@@ -1825,7 +1848,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 
 /* Favorited items */
 .vce-gs-fav-icon {
-  color: #d4a843;
+  color: var(--vce-accent);
   font-size: 10px;
   flex-shrink: 0;
 }
@@ -1872,7 +1895,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   padding: 6px 12px;
   border: 1px solid var(--vce-accent-dim);
   border-radius: 4px;
-  background: rgba(212, 168, 67, 0.10);
+  background: var(--vce-accent-bg-quiet);
   color: var(--vagabond-c-text-primary, #BDC1C6);
   font-family: "Germania", serif;
   font-size: 14px;
@@ -1886,7 +1909,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 }
 
 .vce-companion-conjure-btn:hover {
-  background: rgba(212, 168, 67, 0.20);
+  background: var(--vce-accent-bg-hover);
   border-color: var(--vce-accent);
 }
 
@@ -1977,7 +2000,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   max-width: 360px;
   padding: 10px 12px;
   background: rgba(20, 18, 28, 0.96);
-  color: #e0e0e0;
+  color: var(--vce-text);
   border: 1px solid var(--vce-accent, #d4a843);
   border-radius: 5px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.6);
@@ -2001,6 +2024,17 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 }
 .vce-cp-scroll {
   position: relative;
+  max-height: 400px;
+  overflow-y: auto;
+}
+/* Table column widths / inline-extracted utilities */
+.vce-cp-th-fav   { width: 24px; }
+.vce-cp-fav-on   { color: var(--vce-accent); }
+.vce-cp-fav-off  { opacity: 0.35; }
+.vce-cp-empty-row {
+  text-align: center;
+  opacity: 0.6;
+  padding: 12px;
 }
 /* System styles on .vce-bd-table apply border-collapse:collapse and
  * overflow:hidden — both BREAK position:sticky on <th> children. Override. */
@@ -2049,7 +2083,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 
 /* CreaturePicker multi-select row highlight */
 .vce-cp-row.vce-cp-selected {
-  background: rgba(212, 168, 67, 0.18) !important;
+  background: var(--vce-accent-bg-hover) !important;
   border-left: 3px solid var(--vce-accent, #d4a843) !important;
 }
 .vce-cp-row.vce-cp-selected strong {
@@ -2068,7 +2102,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   vertical-align: middle;
 }
 .vce-cp-confirm {
-  background: rgba(212, 168, 67, 0.18);
+  background: var(--vce-accent-bg-hover);
   border: 1px solid var(--vce-accent, #d4a843);
   color: var(--vagabond-c-text-primary, #BDC1C6);
   font-family: "Germania", serif;
@@ -2079,7 +2113,7 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   margin-right: 6px;
 }
 .vce-cp-confirm:hover {
-  background: rgba(212, 168, 67, 0.32);
+  background: var(--vce-accent-bg-active);
 }
 
 /* Necromancer heal button — injected by RaisePerks onto raised-undead cards */
@@ -2165,10 +2199,10 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   border-radius: 7px;
   transition: width 0.3s, background 0.3s;
 }
-.vce-companion-hp-bar.vce-hp-ok       { background: #3aaa3a; }
-.vce-companion-hp-bar.vce-hp-mid      { background: #b8a020; }
-.vce-companion-hp-bar.vce-hp-low      { background: #c86040; }
-.vce-companion-hp-bar.vce-hp-critical { background: #8a1010; }
+.vce-companion-hp-bar.vce-hp-ok       { background: var(--vce-hp-ok); }
+.vce-companion-hp-bar.vce-hp-mid      { background: var(--vce-hp-mid); }
+.vce-companion-hp-bar.vce-hp-low      { background: var(--vce-hp-low); }
+.vce-companion-hp-bar.vce-hp-critical { background: var(--vce-hp-critical); }
 .vce-companion-hp-text {
   font-size: 13px;
   font-weight: bold;

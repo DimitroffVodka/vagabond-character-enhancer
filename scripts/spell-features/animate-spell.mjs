@@ -230,6 +230,7 @@ export const AnimateSpell = {
         size: "small",
         beingType: "Artificials",
         senses: "",
+        locked: true,          // open in display (locked) mode, not edit mode
         actions: [{
           name: attackName,
           attackType,
@@ -395,12 +396,28 @@ export const AnimateSpell = {
       return null;
     }
 
+    // Sort: weapons first (most common Animate target), then alphabetical within
+    // each group. A weapon is either type "weapon" or equipment with
+    // equipmentType "weapon".
+    const isWeaponItem = (it) =>
+      it.type === "weapon" || (it.type === "equipment" && it.system?.equipmentType === "weapon");
+    items.sort((a, b) => {
+      const aw = isWeaponItem(a) ? 0 : 1;
+      const bw = isWeaponItem(b) ? 0 : 1;
+      if (aw !== bw) return aw - bw;
+      return a.name.localeCompare(b.name);
+    });
+
     return new Promise((resolve) => {
-      // Track picked item separately so the `close` callback (which fires
-      // synchronously inside d.close()) doesn't race ahead and resolve(null)
-      // before we've had a chance to pass the user's pick. Whatever `picked`
-      // is at close time wins — undefined/null = cancel, item = selection.
-      let picked = null;
+      // DialogV2 does NOT support a `close` constructor hook like Dialog V1 did,
+      // so we must resolve from each exit path explicitly. Guard is idempotent
+      // in case multiple paths fire (e.g., row click → dialog.close() → hook).
+      let settled = false;
+      const finish = (item) => {
+        if (settled) return;
+        settled = true;
+        resolve(item);
+      };
 
       const rows = items.map((it) => {
         const { formula, type } = this._getItemDamage(it);
@@ -408,7 +425,7 @@ export const AnimateSpell = {
           ? "—" // no listed damage — picker shows em-dash
           : (type && type !== "-" ? `${formula} ${type}` : formula);
         return `
-        <tr class="vce-animate-row" data-item-id="${it.id}" role="button" tabindex="0">
+        <tr class="vce-cp-row vce-animate-row" data-item-id="${it.id}" role="button" tabindex="0">
           <td class="vce-bd-cell vce-bd-cell-img">
             <img src="${it.img || "icons/svg/mystery-man.svg"}" class="vce-bd-beast-img" alt="" />
           </td>
@@ -418,50 +435,59 @@ export const AnimateSpell = {
         </tr>`;
       }).join("");
 
+      // Content shape mirrors templates/creature-picker.hbs so the
+      // `.vce-creature-picker-app` dark-mode CSS in styles/*.css picks it up.
       const content = `
-        <p>Pick an item from your inventory to animate. Must fit in ≤1 Slot.
-        Non-weapons default to a 1d4 Slam.</p>
-        <div class="vce-bd-scroll" style="max-height:400px; overflow-y:auto;">
-          <table class="vce-bd-table" role="grid">
-            <thead>
-              <tr class="vce-bd-header-row">
-                <th class="vce-bd-th vce-bd-th-img" scope="col"></th>
-                <th class="vce-bd-th" scope="col">Item</th>
-                <th class="vce-bd-th vce-bd-th-center" scope="col">Slots</th>
-                <th class="vce-bd-th" scope="col">Damage</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>`;
+        <form class="vce-creature-picker">
+          <div class="vce-cp-header">
+            <p class="vce-cp-budget">Pick an item from your inventory to animate. Must fit in ≤1 Slot. Non-weapons default to a 1d4 Slam.</p>
+          </div>
+          <div class="vce-bd-scroll vce-cp-scroll">
+            <table class="vce-bd-table vce-cp-table">
+              <thead>
+                <tr class="vce-bd-header-row">
+                  <th class="vce-bd-th vce-bd-th-img" scope="col"></th>
+                  <th class="vce-bd-th" scope="col">Item</th>
+                  <th class="vce-bd-th vce-bd-th-center" scope="col">Slots</th>
+                  <th class="vce-bd-th" scope="col">Damage</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </form>`;
 
-      const d = new Dialog({
-        title: `${caster.name} — Animate Object`,
+      const dialog = new foundry.applications.api.DialogV2({
+        window: { title: `${caster.name} — Animate Object`, resizable: true },
+        position: { width: 900, height: 580 },
+        classes: ["vce-creature-picker-app"],
         content,
-        buttons: {
-          cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => { picked = null; } }
-        },
-        default: "cancel",
-        render: (html) => {
-          // Dialog V1 in v13 may pass html as either jQuery or HTMLElement
-          // depending on core version. Normalize to a DOM element we can
-          // query natively so listeners reliably bind.
-          const root = html?.[0] ?? html;
-          const bind = (row) => {
-            row.addEventListener("click", (ev) => {
-              const itemId = ev.currentTarget.dataset.itemId;
-              picked = caster.items.get(itemId) || null;
-              d.close(); // close callback resolves with whatever `picked` holds
-            });
-            row.addEventListener("keydown", (ev) => {
-              if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.currentTarget.click(); }
-            });
-          };
-          root.querySelectorAll?.(".vce-animate-row").forEach(bind);
-        },
-        close: () => resolve(picked),
-      }, { width: 600, height: 450 });
-      d.render(true);
+        buttons: [
+          { action: "cancel", label: "Cancel", icon: "fas fa-times", default: true, callback: () => finish(null) }
+        ],
+        rejectClose: false,
+      });
+
+      // Fallback for X-button / Escape dismissal — DialogV2 fires this hook
+      // on every close regardless of path. `finish` is idempotent, so it's a
+      // no-op if a row click or Cancel already resolved.
+      Hooks.once("closeDialogV2", (app) => {
+        if (app === dialog) finish(null);
+      });
+
+      dialog.render({ force: true }).then(() => {
+        const root = dialog.element;
+        if (!root) return;
+        root.querySelectorAll(".vce-animate-row").forEach((row) => {
+          row.addEventListener("click", () => {
+            finish(caster.items.get(row.dataset.itemId) || null);
+            dialog.close();
+          });
+          row.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); row.click(); }
+          });
+        });
+      });
     });
   },
 };

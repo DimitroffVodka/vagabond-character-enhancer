@@ -6,7 +6,7 @@
       <span>Materials: <strong>{{totalSilver}}s</strong> remaining</span>
     </div>
     <div class="vcb-cook-stat">
-      <i class="fas fa-star" style="color:#facc15"></i>
+      <i class="fas fa-star" style="color:var(--vce-star-gold);"></i>
       <span>Formulae: <strong>{{formulaeCount}}/{{maxFormulaeCount}}</strong>
         (Lv{{level}}, max {{maxFormulaeValueLabel}})</span>
     </div>
@@ -16,7 +16,7 @@
   <div class="vcb-cook-search">
     <i class="fas fa-search"></i>
     <input type="text" class="vcb-cook-search-input" placeholder="Search items..."
-           value="{{searchText}}" />
+           aria-label="Search alchemy items by name" value="{{searchText}}" />
   </div>
 
   {{!-- Item list --}}
@@ -24,7 +24,7 @@
     {{#each items}}
     <div class="vcb-cook-item {{#if this.cantAfford}}vcb-cook-disabled{{/if}} {{#if this.isFormula}}vcb-cook-formula{{/if}}"
          data-item-name="{{this.name}}" data-eligible="{{this.eligibleAsFormula}}">
-      <img class="vcb-cook-item-img" src="{{this.img}}" width="28" height="28" />
+      <img class="vcb-cook-item-img" src="{{this.img}}" width="28" height="28" alt="" />
       <div class="vcb-cook-item-info">
         <span class="vcb-cook-item-name">
           {{#if this.isFormula}}<i class="fas fa-star vcb-cook-star"></i>{{/if}}
