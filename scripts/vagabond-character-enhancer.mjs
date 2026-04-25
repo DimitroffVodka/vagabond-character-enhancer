@@ -1061,7 +1061,13 @@ Hooks.once("ready", async () => {
         _directSourceAttackType = directAction.attackType;
       } else if (!_directSourceAttackType && button.dataset.itemId) {
         const directSourceItem = directSourceActor?.items.get(button.dataset.itemId);
-        if (directSourceItem?.type === 'spell') _directSourceAttackType = 'cast';
+        // Treat both vanilla spells and Psychic Talents (our custom item type)
+        // as cast attacks for the armor-bypass path. The talent type uses the
+        // namespaced key from CONFIG.Item.dataModels.
+        if (directSourceItem?.type === 'spell' ||
+            directSourceItem?.type === `${MODULE_ID}.talent`) {
+          _directSourceAttackType = 'cast';
+        }
       }
 
       try {
