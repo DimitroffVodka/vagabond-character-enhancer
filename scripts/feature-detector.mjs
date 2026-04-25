@@ -4,6 +4,7 @@
  */
 
 import { MODULE_ID, log } from "./utils.mjs";
+import { TalentPickDialog } from "./talent/talent-pick-dialog.mjs";
 
 // Import class registries — each class file owns all its feature definitions
 import { BARBARIAN_REGISTRY } from "./class-features/barbarian.mjs";
@@ -105,6 +106,93 @@ const ANCESTRY_TRAIT_REGISTRY = {
  * Combined registry of all perk features.
  */
 const PERK_FEATURE_REGISTRY = PERK_REGISTRY;
+
+/* -------------------------------------------- */
+/*  Psychic Talent pick-on-detect               */
+/* -------------------------------------------- */
+
+/**
+ * Per-actor async lock so re-entrant scans (e.g., re-render mid-pick) don't
+ * open a second picker while the first is still awaiting a player decision.
+ */
+const _psychicPickLocks = new Map(); // actorId → true while picker is running
+
+/**
+ * Tier table: level → how many Talent picks the actor earns at that tier.
+ */
+const PSYCHIC_PICK_TIERS = [
+  { tier: 1, count: 3 },
+  { tier: 3, count: 1 },
+  { tier: 5, count: 1 },
+  { tier: 7, count: 1 },
+  { tier: 9, count: 1 },
+];
+
+/**
+ * Check whether the given actor needs to pick Talents for any outstanding
+ * Psychic level tier, and if so open the pick dialog sequentially.
+ *
+ * Called from FeatureDetector.scan() after the class-scan block.
+ *
+ * @param {Actor} actor
+ */
+async function _checkPsychicTalentPicks(actor) {
+  // Guard: only the GM fires the dialog (clients don't have pack write access).
+  if (!game.user.isGM) return;
+
+  // Guard: actor must have a Psychic class item.
+  const psychic = actor.items.find(i => i.type === "class" && i.name === "Psychic");
+  if (!psychic) return;
+
+  // Per-actor re-entrancy lock.
+  if (_psychicPickLocks.has(actor.id)) return;
+  _psychicPickLocks.set(actor.id, true);
+
+  try {
+    // Use the class item's own level field (same field the system exposes per item).
+    const level = psychic.system.level ?? 1;
+
+    // Already-completed tiers are stored as an array of tier numbers.
+    let picked = actor.getFlag(MODULE_ID, "psychicTalentsPicked") ?? [];
+
+    for (const { tier, count } of PSYCHIC_PICK_TIERS) {
+      if (level < tier) break;        // tiers are sorted ascending; nothing else applies
+      if (picked.includes(tier)) continue; // already done this tier
+
+      log("FeatureDetector", `Psychic tier ${tier} pending for ${actor.name} — opening picker (${count} picks)`);
+
+      const result = await TalentPickDialog.show(actor, count);
+
+      if (!result?.length) {
+        // Player cancelled or closed the dialog — do NOT mark the tier complete.
+        // The picker will re-fire on the next scan so the player can't skip it forever.
+        log("FeatureDetector", `Psychic tier ${tier} pick cancelled for ${actor.name}`);
+        return; // stop processing further tiers this scan
+      }
+
+      // Create the chosen Talent items on the actor.
+      const pack = game.packs.get(`${MODULE_ID}.vce-talents`);
+      if (!pack) {
+        ui.notifications.error(`VCE: Talent compendium (${MODULE_ID}.vce-talents) not found — cannot grant Talents.`);
+        return;
+      }
+
+      const docs = await Promise.all(result.map(r => pack.getDocument(r.id)));
+      const itemData = docs.filter(Boolean).map(d => d.toObject());
+      await actor.createEmbeddedDocuments("Item", itemData);
+
+      // Mark this tier complete so the picker doesn't re-fire.
+      const newPicked = [...picked, tier];
+      await actor.setFlag(MODULE_ID, "psychicTalentsPicked", newPicked);
+      // Update local copy so the next loop iteration sees the updated state.
+      picked = newPicked;
+
+      log("FeatureDetector", `Psychic tier ${tier} complete for ${actor.name}: ${result.map(r => r.name).join(", ")}`);
+    }
+  } finally {
+    _psychicPickLocks.delete(actor.id);
+  }
+}
 
 /* -------------------------------------------- */
 /*  Feature Detector Singleton                  */
@@ -261,6 +349,10 @@ export const FeatureDetector = {
 
     // Always fire postScan so modules can sync item-level data (e.g., spell explosion)
     Hooks.callAll(`${MODULE_ID}.postScan`, actor, features);
+
+    // --- Psychic: auto-fire Talent pick dialog for any outstanding tier ---
+    // Runs after flags/effects are committed so the Psychic class is fully detected.
+    await _checkPsychicTalentPicks(actor);
 
     log("FeatureDetector",`Scan complete for ${actor.name}:`, features);
   },
