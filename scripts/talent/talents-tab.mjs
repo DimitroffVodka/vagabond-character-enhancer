@@ -111,13 +111,19 @@ export const TalentsTab = {
       ctx
     );
 
-    // Inject tab nav link — append after existing tabs so Talents is last.
+    // Inject tab nav link — place immediately to the LEFT of the Features tab
+    // so the bar reads (Companions if present) → Talents → Features → ...
     const tabLink = document.createElement("a");
     tabLink.setAttribute("data-action", "tab");
     tabLink.setAttribute("data-tab", "vce-talents");
     tabLink.setAttribute("data-group", "primary");
     tabLink.innerHTML = `<span>Talents</span>`;
-    nav.appendChild(tabLink);
+    const featuresLink = nav.querySelector('[data-tab="features"]');
+    if (featuresLink) {
+      nav.insertBefore(tabLink, featuresLink);
+    } else {
+      nav.appendChild(tabLink);
+    }
 
     // Inject panel section before the first existing tab section.
     const section = document.createElement("section");
