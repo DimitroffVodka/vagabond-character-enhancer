@@ -103,6 +103,15 @@ export const CompanionManagerTab = {
     Hooks.on("deleteToken", this._onCompanionStateChange.bind(this));
     Hooks.on("updateToken", this._onCompanionStateChange.bind(this));
 
+    // Re-evaluate tab visibility when items change on a character (gaining a
+    // Beast spell, losing a perk, etc. should make the tab appear/disappear).
+    Hooks.on("createItem", (item) => {
+      if (item.parent?.documentName === "Actor") this._onCompanionStateChange(item.parent);
+    });
+    Hooks.on("deleteItem", (item) => {
+      if (item.parent?.documentName === "Actor") this._onCompanionStateChange(item.parent);
+    });
+
     // Catch character sheets that rendered BEFORE this init ran (e.g. a
     // sheet Foundry auto-opens on world load, which triggers
     // renderApplicationV2 in the setup phase — before VCE's ready hook
@@ -120,12 +129,59 @@ export const CompanionManagerTab = {
 
   _onRenderSheet(app, html, data) {
     if (app.document?.type !== "character") return;
+
+    const pc = app.document;
+    const shouldShow = this._shouldShowTab(pc);
+
+    const existingNavLink = app.element.querySelector('nav.sheet-tabs [data-tab="vce-companions"]');
+    const existingPanel = app.element.querySelector('section[data-tab="vce-companions"]');
+
+    if (!shouldShow) {
+      // Tear down any orphaned tab + panel from a prior state where the PC
+      // qualified (e.g., they just lost the Beast spell or had their controller
+      // assignment cleared).
+      if (existingNavLink) existingNavLink.remove();
+      if (existingPanel) existingPanel.remove();
+      return;
+    }
+
     // Guard specifically on the NAV LINK: ApplicationV2 re-renders replace
     // nav.sheet-tabs but can leave orphaned section children in .window-content.
     // A generic [data-tab="vce-companions"] check would match the orphaned
     // section and skip re-injection, leaving the tab invisible in the nav bar.
-    if (app.element.querySelector('nav.sheet-tabs [data-tab="vce-companions"]')) return;
+    if (existingNavLink) return;
     this._inject(app);
+  },
+
+  /**
+   * Decide whether a character should see the Companions tab.
+   *
+   * Show it ONLY if the PC has access to summoning content OR has been
+   * assigned as the save-controller for at least one NPC. Plain characters
+   * with no companion sources don't get the tab — it would just be empty
+   * clutter on every sheet.
+   *
+   * @param {Actor} pc
+   * @returns {boolean}
+   */
+  _shouldShowTab(pc) {
+    if (pc.type !== "character") return false;
+
+    // 1) Any spawn-capable source on the PC?
+    const features = getFeatures(pc) ?? {};
+    const spells = new Set(
+      pc.items.filter(i => i.type === "spell").map(i => i.name.toLowerCase())
+    );
+    for (const entry of ACTION_BAR_ENTRIES) {
+      if (entry.available(pc, features, spells)) return true;
+    }
+
+    // 2) Is this PC the save-controller for any NPC?
+    for (const a of game.actors) {
+      if (a.getFlag(MODULE_ID, "controllerActorId") === pc.id) return true;
+    }
+
+    return false;
   },
 
   _onCompanionStateChange(doc) {
