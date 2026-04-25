@@ -2476,3 +2476,12 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   object-fit: cover;
 }
 .vce-talent-pick-dialog .vce-bd-cell-img { width: 44px; }
+
+/* DialogV2 host with header + buttons constrains the scroll area —
+   override the creature-picker-app's flex/max-height-none rule which is
+   meant for the full-screen ApplicationV2 picker, not our DialogV2. */
+.vce-talent-pick-dialog .vce-cp-scroll {
+  max-height: 420px !important;
+  flex: none !important;
+  overflow-y: auto;
+}
