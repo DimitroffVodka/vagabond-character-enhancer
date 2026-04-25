@@ -117,6 +117,7 @@ import { RangeValidator } from "./range-validator.mjs";
 import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companion/save-routing-patch.mjs";
 import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
 import { TalentsTab } from "./talent/talents-tab.mjs";
+import { TalentPickDialog } from "./talent/talent-pick-dialog.mjs";
 import { CompanionTerminationManager } from "./companion/companion-termination.mjs";
 import { GatherCompanions } from "./companion/gather-companions.mjs";
 // Phase 2 spell adapters
@@ -1464,6 +1465,9 @@ Hooks.once("ready", async () => {
         buyItem: (uuid) => buyFavoriteItem(actor, uuid),
       };
     },
+    /** Talent pick dialog — fire manually for testing (Task 6 wires auto-fire).
+     *  Usage: await game.vagabondCharacterEnhancer.talentPicker.show(actor, 3) */
+    talentPicker: TalentPickDialog,
     debug: (actor) => {
       if (!actor) {
         console.warn(`${MODULE_ID} | debug: No actor provided. Usage: game.vagabondCharacterEnhancer.debug(game.actors.get("id"))`);
