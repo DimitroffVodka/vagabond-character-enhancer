@@ -168,13 +168,16 @@ class TalentCastDialog extends foundry.applications.api.ApplicationV2 {
     let damageSection = "";
     if (this._hasDamage) {
       const diceHighlight = s.damageDice > 1 ? "vce-tcd-highlight" : "";
+      // Allow damageDice = 0 if the talent ALSO has an effect (player wants
+      // effect-only mode). For damage-only talents, floor the dice at 1.
+      const minDice = this._hasEffect ? 0 : 1;
       damageSection = `
         <div class="vce-tcd-row">
           <label>Damage Dice</label>
           <div class="vce-tcd-controls">
-            <button type="button" class="vce-tcd-btn vce-tcd-dmg-down" ${(!s.includeDamage || s.damageDice <= 1) ? "disabled" : ""}>−</button>
+            <button type="button" class="vce-tcd-btn vce-tcd-dmg-down" ${s.damageDice <= minDice ? "disabled" : ""}>−</button>
             <span class="vce-tcd-val ${diceHighlight}">${s.damageDice}d6</span>
-            <button type="button" class="vce-tcd-btn vce-tcd-dmg-up" ${!s.includeDamage ? "disabled" : ""}>+</button>
+            <button type="button" class="vce-tcd-btn vce-tcd-dmg-up">+</button>
           </div>
           <span class="vce-tcd-badge">${damageCost > 0 ? `+${damageCost}` : "free"}</span>
         </div>`;
@@ -258,15 +261,31 @@ class TalentCastDialog extends foundry.applications.api.ApplicationV2 {
       if (!btn) return;
 
       if (btn.classList.contains("vce-tcd-dmg-up")) {
-        if (!this._state.includeDamage) return;
-        const deliveryCost = DELIVERY_COSTS[this._state.deliveryType] ?? 0;
-        const fxSurcharge  = this._state.includeEffect ? 1 : 0;
-        const maxDice      = Math.max(1, this.cap - deliveryCost - fxSurcharge + 1);
-        if (this._state.damageDice < maxDice) this._state.damageDice++;
+        // Coming up from 0 means damage is being re-enabled. The 1d6 baseline
+        // is free; cap-checked below.
+        if (this._state.damageDice === 0) {
+          this._state.includeDamage = true;
+          this._state.damageDice = 1;
+          // Effect-only mode being abandoned: if effect was on (free in
+          // effect-only mode) it stays on, but now incurs the +1 surcharge.
+          // Cap is enforced; if surcharge pushes over cap, _prepareContext's
+          // canCast check will disable the Cast button until user adjusts.
+        } else {
+          const deliveryCost = DELIVERY_COSTS[this._state.deliveryType] ?? 0;
+          const fxSurcharge  = this._state.includeEffect ? 1 : 0;
+          const maxDice      = Math.max(1, this.cap - deliveryCost - fxSurcharge + 1);
+          if (this._state.damageDice < maxDice) this._state.damageDice++;
+        }
       }
       else if (btn.classList.contains("vce-tcd-dmg-down")) {
-        if (!this._state.includeDamage) return;
-        if (this._state.damageDice > 1) this._state.damageDice--;
+        const minDice = this._hasEffect ? 0 : 1;
+        if (this._state.damageDice > minDice) this._state.damageDice--;
+        // When dropping to 0, talent has an effect (precondition for minDice=0).
+        // Auto-enable the effect so casting now produces effect-only output.
+        if (this._state.damageDice === 0) {
+          this._state.includeDamage = false;
+          if (this._hasEffect) this._state.includeEffect = true;
+        }
       }
       else if (btn.classList.contains("vce-tcd-fx-toggle")) {
         this._state.includeEffect = !this._state.includeEffect;
@@ -452,7 +471,12 @@ export const TalentCast = {
           "/systems/vagabond/module/helpers/damage-helper.mjs"
         );
         const targetsAtRollTime = Array.from(game.user.targets).map(t => ({
-          tokenId: t.id, actorId: t.actor?.id, name: t.actor?.name, img: t.actor?.img,
+          sceneId: t.scene?.id ?? t.document?.parent?.id ?? canvas.scene?.id,
+          tokenId: t.id,
+          actorId: t.actor?.id,
+          actorName: t.actor?.name,
+          name: t.actor?.name,
+          img: t.actor?.img,
         }));
         damageRoll = await VagabondDamageHelper.rollSpellDamage(
           actor,
@@ -471,7 +495,12 @@ export const TalentCast = {
 
     // ── 4. Assemble spellCastResult + call spellCast ─────────────────────────
     const targetsAtRollTime = Array.from(game.user.targets).map(t => ({
-      tokenId: t.id, actorId: t.actor?.id, name: t.actor?.name, img: t.actor?.img,
+      sceneId: t.scene?.id ?? t.document?.parent?.id ?? canvas.scene?.id,
+      tokenId: t.id,
+      actorId: t.actor?.id,
+      actorName: t.actor?.name,
+      name: t.actor?.name,
+      img: t.actor?.img,
     }));
 
     const damageCost   = includeDamage ? Math.max(0, damageDice - 1) : 0;
