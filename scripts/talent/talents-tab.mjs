@@ -12,6 +12,7 @@
 import { MODULE_ID, log } from "../utils.mjs";
 import { TALENT_TYPE } from "./talent-data-model.mjs";
 import { TalentCast } from "./talent-cast.mjs";
+import { TalentPickDialog } from "./talent-pick-dialog.mjs";
 
 export const TalentsTab = {
   init() {
@@ -230,9 +231,18 @@ export const TalentsTab = {
       });
     });
 
-    // STUB: Pick Talents — Task 4 wires this to TalentPickDialog.
-    panel.querySelector("[data-action='pick-talents']")?.addEventListener("click", () => {
-      log("TalentsTab", "[STUB] Pick Talents clicked — Task 4 pending");
+    // Pick Talents — open a manage dialog where the player can freely
+    // check/uncheck which Talents are in their loadout. Per RAW, downtime
+    // study allows retraining any character choice; this is the in-game UX
+    // for that. Saves a diff (delete the unchecked, add the newly checked).
+    panel.querySelector("[data-action='pick-talents']")?.addEventListener("click", async () => {
+      const psychic = actor.items.find(i => i.type === "class" && i.name === "Psychic");
+      const level = psychic?.system?.level ?? 1;
+      // Talent count progression: 3 / 3 / 4 / 4 / 5 / 5 / 6 / 6 / 7 / 7
+      const expected = 3 + Math.floor(Math.max(0, level - 1) / 2);
+      // Foundry auto-rerenders the actor sheet when items are added/removed,
+      // so we don't need to manually trigger a re-render here.
+      await TalentPickDialog.manage(actor, expected);
     });
 
     // STUB: Transcendence — Task 12 wires this to TalentTranscendenceDialog.
