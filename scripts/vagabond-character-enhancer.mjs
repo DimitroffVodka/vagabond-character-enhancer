@@ -116,6 +116,7 @@ import { registerSocketRelay } from "./socket-relay.mjs";
 import { RangeValidator } from "./range-validator.mjs";
 import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companion/save-routing-patch.mjs";
 import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
+import { TalentsTab } from "./talent/talents-tab.mjs";
 import { CompanionTerminationManager } from "./companion/companion-termination.mjs";
 import { GatherCompanions } from "./companion/gather-companions.mjs";
 // Phase 2 spell adapters
@@ -1512,6 +1513,7 @@ Hooks.once("ready", async () => {
   SummonerFeatures.registerHooks();
   FamiliarFeatures.registerHooks();
   CompanionManagerTab.init();
+  TalentsTab.init();
   CompanionTerminationManager.init();
   GatherCompanions.init();
   // Phase 2: spell adapters

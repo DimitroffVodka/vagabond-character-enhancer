@@ -1,0 +1,34 @@
+<div class="vce-talents-content">
+  <header class="vce-talents-header">
+    <span class="vce-talents-stat">Mana Cap: <strong>{{cap}}</strong></span>
+    <span class="vce-talents-stat">Focus: <strong>{{focusedCount}}/{{maxFocus}}</strong></span>
+    <button type="button" data-action="pick-talents" class="vce-talents-btn">Pick Talents</button>
+    {{#if (gte level 10)}}
+      <button type="button" data-action="transcendence" class="vce-talents-btn">Transcendence</button>
+    {{/if}}
+  </header>
+
+  <div class="vce-talents-cards">
+    {{#each talents}}
+      <div class="vce-talent-card{{#if isFocused}} vce-talent-focused{{/if}}" data-talent-id="{{id}}">
+        <img src="{{img}}" class="vce-talent-img" alt=""/>
+        <div class="vce-talent-info">
+          <div class="vce-talent-name">{{name}}</div>
+          <div class="vce-talent-desc">{{descExcerpt}}</div>
+        </div>
+        <div class="vce-talent-actions">
+          {{#unless isBuff}}
+            <button type="button" data-action="cast-talent" data-talent-id="{{id}}" class="vce-talent-btn-cast">Cast</button>
+          {{else}}
+            <span class="vce-talent-buff-badge">Buff</span>
+          {{/unless}}
+          <button type="button" data-action="focus-talent" data-talent-id="{{id}}" class="vce-talent-btn-focus">
+            {{#if isFocused}}Unfocus{{else}}Focus{{/if}}
+          </button>
+        </div>
+      </div>
+    {{else}}
+      <div class="vce-talents-empty">No Talents known. Click "Pick Talents" to choose your starting set.</div>
+    {{/each}}
+  </div>
+</div>

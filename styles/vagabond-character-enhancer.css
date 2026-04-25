@@ -2330,3 +2330,127 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   padding: 4px 8px;
   font-size: 13px;
 }
+
+/* -------------------------------------------- */
+/*  Talents Tab (Psychic class)                 */
+/* -------------------------------------------- */
+
+.vce-talents-content { padding: 12px; }
+
+.vce-talents-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--vagabond-c-tan);
+}
+
+.vce-talents-stat {
+  color: var(--vagabond-c-text-primary);
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+}
+
+.vce-talents-stat strong { color: var(--vce-accent); }
+
+.vce-talents-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  background: var(--vce-accent-bg-hover);
+  border: 1px solid var(--vce-accent);
+  color: var(--vagabond-c-text-primary);
+  font-family: "Germania", serif;
+  font-size: 12px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.vce-talents-btn:hover { background: var(--vce-accent-bg-active); }
+
+/* Second .vce-talents-btn (Transcendence) — don't override margin-left auto */
+.vce-talents-btn + .vce-talents-btn { margin-left: 0; }
+
+.vce-talents-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vce-talent-card {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  background: var(--vce-surface);
+  border: 1px solid var(--vagabond-c-tan);
+  border-radius: 4px;
+}
+
+.vce-talent-focused {
+  border-color: var(--vce-accent);
+  background: var(--vce-accent-bg-quiet);
+}
+
+.vce-talent-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.vce-talent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.vce-talent-name {
+  font-family: "Manofa", sans-serif;
+  font-weight: bold;
+  color: var(--vce-accent);
+}
+
+.vce-talent-desc {
+  font-size: 11px;
+  color: var(--vagabond-c-text-primary);
+  opacity: 0.85;
+}
+
+.vce-talent-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.vce-talent-btn-cast,
+.vce-talent-btn-focus {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: "Germania", serif;
+  background: transparent;
+  border: 1px solid var(--vce-accent);
+  color: var(--vce-accent);
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.vce-talent-btn-cast:hover,
+.vce-talent-btn-focus:hover { background: var(--vce-accent-bg-hover); }
+
+.vce-talent-buff-badge {
+  padding: 3px 8px;
+  font-size: 10px;
+  font-family: "Manofa", sans-serif;
+  text-transform: uppercase;
+  background: var(--vce-inspiration-accent);
+  color: white;
+  border-radius: 3px;
+}
+
+.vce-talents-empty {
+  padding: 24px;
+  text-align: center;
+  opacity: 0.6;
+  color: var(--vagabond-c-text-primary);
+}
