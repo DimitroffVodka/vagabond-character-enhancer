@@ -42,6 +42,13 @@ export let _directSourceAttackType = null;
 // whether the cast paid for Fx and gate effects accordingly.
 let _currentApplySpellId = null;
 
+// Pending Shield (Focus) d4 reduction for the current damage application.
+// Set by handleApplyDirect / _rollSave when the defender is focusing Shield;
+// consumed by calculateFinalDamage which subtracts it from the post-armor
+// damage. Cleared in the same finally that clears _directSourceAttackType.
+// Uses an async Roll() so Dice So Nice animates the d4 as a real roll.
+let _pendingShieldD4Reduction = 0;
+
 // Cast-time useFx tracking. Keyed by `${actorId}:${spellId}`. Value is the
 // boolean useFx state at the moment castSpell ran. Entries auto-expire after
 // 5 minutes — long enough for a normal apply flow but bounded so stale records
@@ -360,35 +367,12 @@ Hooks.once("ready", async () => {
         }
       }
 
-      // Psychic Shield Talent: while Focusing on Shield, the defender rolls a
-      // fresh d4 on each incoming attack and adds the result to their armor
-      // (i.e., reduces the damage by that much further). Per RAW the d4 is
-      // rolled per attack — implemented here in calculateFinalDamage so it
-      // fires before any save resolution.
-      //
-      // calculateFinalDamage must remain SYNCHRONOUS (return a number, not
-      // a Promise) — every caller treats the return value as a finalized
-      // number. So the d4 is generated via Math.random and the chat post
-      // is fire-and-forget.
-      try {
-        const hasShield = actor.effects?.some(e =>
-          !e.disabled && e.name?.startsWith("Shield") && e.getFlag(MODULE_ID, "talentId")
-        );
-        if (hasShield && result > 0) {
-          const d4Total = Math.floor(Math.random() * 4) + 1;
-          result = Math.max(0, result - d4Total);
-          // Fire-and-forget chat message (no await — keep this fn sync)
-          ChatMessage.create({
-            speaker: ChatMessage.getSpeaker({ actor }),
-            content: `<div class="vagabond-chat-card-v2"><div class="card-body" style="padding:6px 10px;">
-              <i class="fas fa-shield-alt" style="color:var(--vce-accent);"></i>
-              <strong>Shield (Focus):</strong> rolled <strong>${d4Total}</strong> on 1d4 — reduces incoming damage by ${d4Total}.
-            </div></div>`,
-            rollMode: "publicroll",
-          }).catch(err => log("Psychic", `Shield chat post failed: ${err.message}`));
-        }
-      } catch (e) {
-        log("Psychic", `Shield die roll failed: ${e.message}`);
+      // Psychic Shield Talent: consume any Shield d4 that the upstream
+      // handleApplyDirect / _rollSave hooks pre-rolled (those are async
+      // and can use Roll() + DSN animation; this fn is synchronous and
+      // can't). Reduces post-armor damage by the rolled value.
+      if (_pendingShieldD4Reduction > 0 && result > 0) {
+        result = Math.max(0, result - _pendingShieldD4Reduction);
       }
 
       // Sneak Attack: armor penetration (reduce armor by sneak dice count)
@@ -1102,6 +1086,72 @@ Hooks.once("ready", async () => {
       }
 
       try {
+        // Psychic Shield (Focus): if any defender is focusing Shield, pre-roll
+        // a 1d4 here (async, so DSN animates the die) and stash the total in
+        // _pendingShieldD4Reduction. calculateFinalDamage will subtract it
+        // post-armor. Fires before the damage application so the d4 is
+        // visible to players before the HP change lands.
+        try {
+          const targetsForShield = (() => {
+            try { return JSON.parse((button.dataset.targets || '[]').replace(/&quot;/g, '"')); }
+            catch { return []; }
+          })();
+          // Resolve to actor docs that are currently Shield-focused
+          const shieldedActors = [];
+          for (const t of targetsForShield) {
+            const a = game.actors.get(t.actorId)
+              ?? game.scenes.get(t.sceneId)?.tokens.get(t.tokenId)?.actor;
+            if (!a) continue;
+            const hasShield = a.effects?.some(e =>
+              !e.disabled && e.name?.startsWith("Shield") && e.getFlag(MODULE_ID, "talentId")
+            );
+            if (hasShield) shieldedActors.push(a);
+          }
+          if (shieldedActors.length > 0) {
+            // RAW: each defender's d4 is independent. For multi-target
+            // attacks, roll one d4 per shielded defender and post a
+            // chat card showing each. For the calc-final stash, we
+            // currently only handle ONE defender per call (Vagabond's
+            // single-target Apply Direct path). If targets > 1 we still
+            // post the chat for visibility but stash the first roll.
+            for (const defender of shieldedActors) {
+              const roll = new Roll("1d4");
+              await roll.evaluate();
+              if (defender === shieldedActors[0]) {
+                _pendingShieldD4Reduction = roll.total;
+              }
+              // Proper styled chat card matching the system's vagabond-chat-card-v2
+              await ChatMessage.create({
+                speaker: ChatMessage.getSpeaker({ actor: defender }),
+                content: `<div class="vagabond-chat-card-v2" data-card-type="generic">
+                  <div class="card-body">
+                    <header class="card-header">
+                      <div class="header-icon">
+                        <img src="icons/equipment/shield/heater-steel-worn.webp" alt="Shield" />
+                      </div>
+                      <div class="header-info">
+                        <h3 class="header-title">Shield (Focus)</h3>
+                        <div class="metadata-tags-row">
+                          <div class="meta-tag tag-skill"><span>Armor +d4</span></div>
+                        </div>
+                      </div>
+                    </header>
+                    <section class="content-body">
+                      <div class="card-description">
+                        <p><strong>${defender.name}</strong> rolled <strong>${roll.total}</strong> on 1d4 — incoming damage reduced by ${roll.total}.</p>
+                      </div>
+                    </section>
+                  </div>
+                </div>`,
+                rolls: [roll],          // ← Dice So Nice picks this up and animates
+                rollMode: "publicroll",
+              });
+            }
+          }
+        } catch (e) {
+          log("Psychic", `Shield d4 pre-roll failed: ${e.message}`);
+        }
+
         // Fix Cleave: system splits evenly, RAW is full to first + half to rest
         const sourceItem = directSourceActor?.items.get(button.dataset.itemId);
         const hasCleave = sourceItem?.system?.properties?.includes('Cleave');
@@ -1145,7 +1195,12 @@ Hooks.once("ready", async () => {
         // Ward: prompt caster for reactive damage reduction AFTER damage is applied
         try { await WardManager.onPostDamage(button); } catch (e) { /* Don't crash apply flow */ }
         return;
-      } finally { _damageSourceActorId = null; _directSourceAttackType = null; _currentApplySpellId = null; }
+      } finally {
+        _damageSourceActorId = null;
+        _directSourceAttackType = null;
+        _currentApplySpellId = null;
+        _pendingShieldD4Reduction = 0;
+      }
     };
     console.log(`${MODULE_ID} | Patched handleApplyDirect.`);
 
