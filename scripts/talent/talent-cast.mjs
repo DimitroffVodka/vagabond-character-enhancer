@@ -401,90 +401,41 @@ export const TalentCast = {
 
     const { damageDice, includeDamage, includeEffect, isFocused } = config;
 
-    // ── 1. Look up the REAL source spell and layer talent flavor on top ────
+    // ── 1. Build a duck-typed spell from the talent's own data ─────────────
     //
-    // Each spell-aliased Talent has talent.system.aliasOf set to the source
-    // spell's lowercase name (e.g., "burn" for Pyrokinesis). Using the real
-    // spell — instead of a fake duck-typed object — gives us:
-    //   - Correct causedStatuses (Burn's countdown burning, etc.)
-    //   - Correct attackType resolution (cast attacks bypass armor via
-    //     existing VCE patches)
-    //   - Correct save handling
-    //   - Correct effect application
+    // Talent items carry the source spell's status fields directly
+    // (causedStatuses, critCausedStatuses, damageDieSize) — see
+    // talent-data-model.mjs and the content migration that copied data
+    // from each source spell.
     //
-    // We override only `name` and `img` via Object.create so the chat card
-    // displays the talent's flavor (Pyrokinesis, not Burn). All system
-    // properties + methods come through the prototype chain.
-    const aliasName = (talent.system.aliasOf ?? "").toString().trim().toLowerCase();
-    let castSpell;
-    if (aliasName) {
-      const pack = game.packs.get("vagabond.spells");
-      const docs = await pack.getDocuments();
-      const sourceSpell = docs.find(s => s.name.toLowerCase() === aliasName);
-      if (sourceSpell) {
-        // Layer name + img + id overrides on a prototype-chained object.
-        //
-        // Why `id = talent.id` (not sourceSpell.id):
-        //   The system stores `spell.id` in the Roll Damage button's
-        //   data-item-id. When the player clicks Roll Damage, the system
-        //   does `actor.items.get(itemId)` — which only finds items on
-        //   the actor. The source Burn spell isn't on the Psychic actor;
-        //   the Pyrokinesis Talent is. So we override id to the talent's id.
-        //
-        // The talent items themselves carry `causedStatuses`,
-        // `critCausedStatuses`, and `damageDieSize` (copied from the source
-        // spell at content-build time — see talent-data-model.mjs schema and
-        // the MCP migration). So when the system resolves the talent item
-        // post-Roll-Damage, it finds the correct status data.
-        //
-        // For the spellCast call itself (which captures `description` and
-        // a few other fields synchronously and stores the result in the
-        // chat card), the prototype chain to sourceSpell still resolves
-        // `system.formatDescription`, `system.crit`, etc., correctly.
-        castSpell = Object.create(sourceSpell);
-        castSpell.id   = talent.id;
-        castSpell.name = talent.name;
-        castSpell.img  = talent.img;
-      } else {
-        ui.notifications.warn(
-          `Talent ${talent.name}: source spell "${aliasName}" not found in vagabond.spells. Falling back to plain damage roll.`
-        );
-      }
-    }
-
-    // Fallback duck-typed spell for talents without a source (or if lookup
-    // failed). This path won't get countdown effects but at least produces
-    // a valid chat card for testing.
-    if (!castSpell) {
-      const effectName = includeEffect && talent.system.effect ? talent.system.effect : null;
-      const causedStatuses = effectName
-        ? [{
-            statusId:          effectName.toLowerCase().replace(/\s+/g, "-"),
-            requiresDamage:    includeDamage,
-            saveType:          "will",
-            duration:          "",
-            tickDamageEnabled: false,
-            damageOnTick:      "",
-            damageType:        talent.system.damageType ?? "-",
-          }]
-        : [];
-      castSpell = {
-        id:   talent.id,
-        name: talent.name,
-        img:  talent.img,
-        type: "spell",
-        system: {
-          damageType:        includeDamage ? (talent.system.damageType || "-") : "-",
-          damageDieSize:     null,
-          description:       talent.system.description ?? "",
-          crit:              null,
-          formatDescription: (html) => html ?? "",
-          causedStatuses,
-          critCausedStatuses: [],
-          currentDamage:     null,
-        },
-      };
-    }
+    // We pass a plain object (not Object.create on a Foundry Document —
+    // Document.id is a getter and can't be shadowed). The id field MUST
+    // be the talent's id so the system's post-Roll-Damage
+    // `actor.items.get(spell.id)` resolves to the talent item that the
+    // player actually owns.
+    //
+    // type: "spell" lets the system branch through spell-specific paths
+    // (spell damage bonuses, attackType: 'cast' resolution, etc.).
+    //
+    // formatDescription is a no-op identity since the talent's description
+    // doesn't use the system's description-template tokens.
+    const castSpell = {
+      id:   talent.id,
+      name: talent.name,
+      img:  talent.img,
+      type: "spell",
+      uuid: talent.uuid,
+      system: {
+        damageType:         talent.system.damageType || "-",
+        damageDieSize:      talent.system.damageDieSize ?? null,
+        description:        talent.system.description ?? "",
+        crit:               null,
+        formatDescription:  (html) => html ?? "",
+        causedStatuses:     talent.system.causedStatuses ?? [],
+        critCausedStatuses: talent.system.critCausedStatuses ?? [],
+        currentDamage:      null,
+      },
+    };
 
     // ── 2. Cast check (Mysticism / Awareness) — only vs hostile targets ─────
     const unwillingTargets = Array.from(game.user.targets).filter(
