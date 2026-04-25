@@ -27,6 +27,7 @@ import { REVELATOR_REGISTRY } from "./class-features/revelator.mjs";
 import { MERCHANT_REGISTRY } from "./class-features/merchant.mjs";
 import { MONK_REGISTRY } from "./class-features/monk.mjs";
 import { SUMMONER_REGISTRY } from "./class-features/summoner.mjs";
+import { PSYCHIC_REGISTRY } from "./class-features/psychic.mjs";
 
 // Import ancestry registries — each ancestry file owns all its trait definitions
 import { HUMAN_TRAITS } from "./ancestry-features/human.mjs";
@@ -57,7 +58,8 @@ const _CLASS_REGISTRIES = [
   ALCHEMIST_REGISTRY, FIGHTER_REGISTRY, VANGUARD_REGISTRY, PUGILIST_REGISTRY,
   HUNTER_REGISTRY, GUNSLINGER_REGISTRY, SORCERER_REGISTRY, WIZARD_REGISTRY,
   WITCH_REGISTRY, DRUID_REGISTRY, LUMINARY_REGISTRY, MAGUS_REGISTRY,
-  REVELATOR_REGISTRY, MERCHANT_REGISTRY, MONK_REGISTRY, SUMMONER_REGISTRY
+  REVELATOR_REGISTRY, MERCHANT_REGISTRY, MONK_REGISTRY, SUMMONER_REGISTRY,
+  PSYCHIC_REGISTRY
 ];
 
 // Flat registry (last-wins) — still used for managed AE sync and legacy lookups

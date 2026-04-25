@@ -14,6 +14,7 @@ import { TALENT_TYPE } from "./talent-data-model.mjs";
 import { TalentCast } from "./talent-cast.mjs";
 import { TalentPickDialog } from "./talent-pick-dialog.mjs";
 import { TalentBuffs } from "./talent-buffs.mjs";
+import { TalentTranscendence } from "./talent-transcendence.mjs";
 
 export const TalentsTab = {
   init() {
@@ -251,9 +252,16 @@ export const TalentsTab = {
       await TalentPickDialog.manage(actor, expected);
     });
 
-    // STUB: Transcendence — Task 12 wires this to TalentTranscendenceDialog.
-    panel.querySelector("[data-action='transcendence']")?.addEventListener("click", () => {
-      log("TalentsTab", "[STUB] Transcendence clicked — Task 12 pending");
+    // Transcendence (L10) — open the Talent swap dialog. Hidden on pre-L10
+    // sheets via the same level gate the template uses.
+    panel.querySelector("[data-action='transcendence']")?.addEventListener("click", async () => {
+      const psychic = actor.items.find(i => i.type === "class" && i.name === "Psychic");
+      const level = psychic?.system?.level ?? 1;
+      if (level < 10) {
+        ui.notifications.warn("Transcendence requires Psychic level 10.");
+        return;
+      }
+      await TalentTranscendence.show(actor);
     });
   }
 };

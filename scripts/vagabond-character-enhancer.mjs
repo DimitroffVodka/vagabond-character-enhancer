@@ -77,6 +77,79 @@ function _filterStatusesUseFxOff(statuses, spell) {
   });
 }
 
+/**
+ * Pre-roll Shield (Focus) d4s for any defender in the targets payload that
+ * is currently focusing the Shield Talent. Rolls one DSN-animated d4 per
+ * shielded defender, posts a styled chat card showing each, and stashes
+ * the FIRST roll's total in `_pendingShieldD4Reduction` so the existing
+ * calculateFinalDamage patch subtracts it post-armor.
+ *
+ * Called from BOTH the Apply Direct path (handleApplyDirect) and the
+ * save-bearing damage path (handleSaveRoll), so Shield reduces damage
+ * regardless of whether the system requires a save first.
+ *
+ * @param {HTMLElement|{dataset:Object}} button — the chat-card button or mock
+ * @returns {Promise<void>}
+ */
+async function _preRollShieldD4FromTargets(button) {
+  let targets;
+  try {
+    targets = JSON.parse((button.dataset.targets || '[]').replace(/&quot;/g, '"'));
+  } catch {
+    return;
+  }
+  if (!Array.isArray(targets) || targets.length === 0) return;
+
+  const shieldedActors = [];
+  for (const t of targets) {
+    const a = game.actors.get(t.actorId)
+      ?? game.scenes.get(t.sceneId)?.tokens.get(t.tokenId)?.actor;
+    if (!a) continue;
+    const hasShield = a.effects?.some(e =>
+      !e.disabled && e.name?.startsWith("Shield") && e.getFlag(MODULE_ID, "talentId")
+    );
+    if (hasShield) shieldedActors.push(a);
+  }
+  if (shieldedActors.length === 0) return;
+
+  // RAW: each defender's d4 is independent. Multi-target attacks that hit
+  // multiple shielded defenders get one chat card per defender, but only
+  // the first roll feeds the single-target calcFinalDamage stash. This
+  // matches the existing single-defender limitation in handleApplyDirect.
+  for (const defender of shieldedActors) {
+    const roll = new Roll("1d4");
+    await roll.evaluate();
+    if (defender === shieldedActors[0]) {
+      _pendingShieldD4Reduction = roll.total;
+    }
+    await ChatMessage.create({
+      speaker: ChatMessage.getSpeaker({ actor: defender }),
+      content: `<div class="vagabond-chat-card-v2" data-card-type="generic">
+        <div class="card-body">
+          <header class="card-header">
+            <div class="header-icon">
+              <img src="icons/equipment/shield/heater-steel-worn.webp" alt="Shield" />
+            </div>
+            <div class="header-info">
+              <h3 class="header-title">Shield (Focus)</h3>
+              <div class="metadata-tags-row">
+                <div class="meta-tag tag-skill"><span>Armor +d4</span></div>
+              </div>
+            </div>
+          </header>
+          <section class="content-body">
+            <div class="card-description">
+              <p><strong>${defender.name}</strong> rolled <strong>${roll.total}</strong> on 1d4 — incoming damage reduced by ${roll.total}.</p>
+            </div>
+          </section>
+        </div>
+      </div>`,
+      rolls: [roll],
+      rollMode: "publicroll",
+    });
+  }
+}
+
 // Range hinder. Set by rollAttack patch when RangeValidator applies hinder
 // (e.g. Thrown at Far range), consumed by buildAndEvaluateD20WithRollData.
 let _rangeFavorHinder = "none";
@@ -103,6 +176,7 @@ import { RogueFeatures } from "./class-features/rogue.mjs";
 import { SorcererFeatures } from "./class-features/sorcerer.mjs";
 import { VanguardFeatures } from "./class-features/vanguard.mjs";
 import { WitchFeatures } from "./class-features/witch.mjs";
+import { PsychicFeatures } from "./class-features/psychic.mjs";
 import { WizardFeatures } from "./class-features/wizard.mjs";
 import { PolymorphManager } from "./polymorph/polymorph-manager.mjs";
 import { AuraManager } from "./aura/aura-manager.mjs";
@@ -126,6 +200,7 @@ import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
 import { TalentsTab } from "./talent/talents-tab.mjs";
 import { TalentPickDialog } from "./talent/talent-pick-dialog.mjs";
 import { TalentCast } from "./talent/talent-cast.mjs";
+import { TalentBuffs } from "./talent/talent-buffs.mjs";
 import { CompanionTerminationManager } from "./companion/companion-termination.mjs";
 import { GatherCompanions } from "./companion/gather-companions.mjs";
 // Phase 2 spell adapters
@@ -954,6 +1029,18 @@ Hooks.once("ready", async () => {
         }
       } catch (e) { /* Don't let Bless code crash the save flow */ }
 
+      // Psychic Shield (Focus): pre-roll d4s for shielded defenders BEFORE
+      // the save resolves. Per the user's intent: "calculate armor before
+      // saves so the d4 stacks with armor". calcFinalDamage will subtract
+      // _pendingShieldD4Reduction post-armor whether or not the save passed.
+      // Skip when there's no damage payload (effect-only saves).
+      try {
+        const dmgAmt = parseInt(button.dataset.damageAmount ?? "0", 10);
+        if (dmgAmt > 0) await _preRollShieldD4FromTargets(button);
+      } catch (e) {
+        log("Psychic", `Shield d4 pre-roll (save path) failed: ${e.message}`);
+      }
+
       try {
         // Fix Cleave save path: all targets take half damage (RAW: "half damage to two targets")
         const cleaveSaveSource = game.actors.get(button.dataset.actorId);
@@ -1001,6 +1088,7 @@ Hooks.once("ready", async () => {
         for (const ctx of _blessContexts) await BlessManager.onPostRollSave(ctx);
         _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
         _currentApplySpellId = null;
+        _pendingShieldD4Reduction = 0;
         VagabondDamageHelper._vceRemoveDiceCount = 0;
       }
     };
@@ -1045,7 +1133,11 @@ Hooks.once("ready", async () => {
         const useFx = _castUseFxBySpell.get(key);
         if (useFx === false) {
           const spell = game.actors.get(sourceActorId)?.items.get(spellId);
-          if (spell?.type === "spell") {
+          // Accept Psychic Talent items too — they share the spell cast pipeline,
+          // so the same Fx-gating rule applies (causedStatuses only fire when
+          // the player paid for the Effect layer in the cast dialog).
+          const TALENT_TYPE = `${MODULE_ID}.talent`;
+          if (spell?.type === "spell" || spell?.type === TALENT_TYPE) {
             const before = statuses?.length ?? 0;
             statuses = _filterStatusesUseFxOff(statuses, spell);
             const after = statuses?.length ?? 0;
@@ -1086,68 +1178,12 @@ Hooks.once("ready", async () => {
       }
 
       try {
-        // Psychic Shield (Focus): if any defender is focusing Shield, pre-roll
-        // a 1d4 here (async, so DSN animates the die) and stash the total in
-        // _pendingShieldD4Reduction. calculateFinalDamage will subtract it
-        // post-armor. Fires before the damage application so the d4 is
-        // visible to players before the HP change lands.
+        // Psychic Shield (Focus): pre-roll d4s for any shielded defender.
+        // Async so DSN animates; calcFinalDamage subtracts the stashed total
+        // from post-armor damage. Same helper is also called from the save
+        // path (handleSaveRoll) so Shield works regardless of save vs direct.
         try {
-          const targetsForShield = (() => {
-            try { return JSON.parse((button.dataset.targets || '[]').replace(/&quot;/g, '"')); }
-            catch { return []; }
-          })();
-          // Resolve to actor docs that are currently Shield-focused
-          const shieldedActors = [];
-          for (const t of targetsForShield) {
-            const a = game.actors.get(t.actorId)
-              ?? game.scenes.get(t.sceneId)?.tokens.get(t.tokenId)?.actor;
-            if (!a) continue;
-            const hasShield = a.effects?.some(e =>
-              !e.disabled && e.name?.startsWith("Shield") && e.getFlag(MODULE_ID, "talentId")
-            );
-            if (hasShield) shieldedActors.push(a);
-          }
-          if (shieldedActors.length > 0) {
-            // RAW: each defender's d4 is independent. For multi-target
-            // attacks, roll one d4 per shielded defender and post a
-            // chat card showing each. For the calc-final stash, we
-            // currently only handle ONE defender per call (Vagabond's
-            // single-target Apply Direct path). If targets > 1 we still
-            // post the chat for visibility but stash the first roll.
-            for (const defender of shieldedActors) {
-              const roll = new Roll("1d4");
-              await roll.evaluate();
-              if (defender === shieldedActors[0]) {
-                _pendingShieldD4Reduction = roll.total;
-              }
-              // Proper styled chat card matching the system's vagabond-chat-card-v2
-              await ChatMessage.create({
-                speaker: ChatMessage.getSpeaker({ actor: defender }),
-                content: `<div class="vagabond-chat-card-v2" data-card-type="generic">
-                  <div class="card-body">
-                    <header class="card-header">
-                      <div class="header-icon">
-                        <img src="icons/equipment/shield/heater-steel-worn.webp" alt="Shield" />
-                      </div>
-                      <div class="header-info">
-                        <h3 class="header-title">Shield (Focus)</h3>
-                        <div class="metadata-tags-row">
-                          <div class="meta-tag tag-skill"><span>Armor +d4</span></div>
-                        </div>
-                      </div>
-                    </header>
-                    <section class="content-body">
-                      <div class="card-description">
-                        <p><strong>${defender.name}</strong> rolled <strong>${roll.total}</strong> on 1d4 — incoming damage reduced by ${roll.total}.</p>
-                      </div>
-                    </section>
-                  </div>
-                </div>`,
-                rolls: [roll],          // ← Dice So Nice picks this up and animates
-                rollMode: "publicroll",
-              });
-            }
-          }
+          await _preRollShieldD4FromTargets(button);
         } catch (e) {
           log("Psychic", `Shield d4 pre-roll failed: ${e.message}`);
         }
@@ -1217,6 +1253,7 @@ Hooks.once("ready", async () => {
       BardFeatures.onPreRollSave(ctx);
       await DancerFeatures.onPreRollSave(ctx);
       HunterFeatures.onPreRollSave(ctx);
+      PsychicFeatures.onPreRollSave(ctx);
       try {
         const result = await origRollSave.call(this, actor, saveType, ctx.isHindered, shiftKey, ctx.ctrlKey, ctx.attackerModifier);
         if (ctx.needRestore) actor.system.favorHinder = ctx.origFH;
@@ -1226,50 +1263,42 @@ Hooks.once("ready", async () => {
         }
 
         // Psychic Evade Talent: while focusing Evade, +d4 to Reflex saves.
-        // Roll the d4 separately (so DSN animates it independently) and
-        // augment the returned roll's _total. The downstream caller compares
-        // total to difficulty — augmenting total here makes the save more
-        // likely to succeed, exactly as RAW intends.
+        // Splice the d4 directly into the returned Roll's terms so it appears
+        // as part of the save's chat card (rendered by VagabondChatCard via
+        // formatRollWithDice, which iterates roll.terms). DSN animates all
+        // dice on the resulting chat message, so both d20 and d4 fly together.
         if (saveType === "reflex") {
           const hasEvade = actor.effects?.some(e =>
             !e.disabled && e.name?.startsWith("Evade") && e.getFlag(MODULE_ID, "talentId")
           );
           if (hasEvade && result) {
-            const d4 = new Roll("1d4");
-            await d4.evaluate();
-            const newTotal = (result.total ?? 0) + d4.total;
-            // Mutate the roll's internal total. Foundry exposes `total` as
-            // a getter that reads from `_total` once evaluated; setting
-            // `_total` directly is the cleanest path that keeps the rest
-            // of the roll's metadata (terms, formula, etc.) intact for
-            // chat-card rendering by downstream code.
-            result._total = newTotal;
-            // Styled chat card matching the system's vagabond-chat-card-v2
-            ChatMessage.create({
-              speaker: ChatMessage.getSpeaker({ actor }),
-              content: `<div class="vagabond-chat-card-v2" data-card-type="generic">
-                <div class="card-body">
-                  <header class="card-header">
-                    <div class="header-icon">
-                      <img src="icons/skills/movement/figure-running-gray.webp" alt="Evade" />
-                    </div>
-                    <div class="header-info">
-                      <h3 class="header-title">Evade (Focus)</h3>
-                      <div class="metadata-tags-row">
-                        <div class="meta-tag tag-skill"><span>Reflex +d4</span></div>
-                      </div>
-                    </div>
-                  </header>
-                  <section class="content-body">
-                    <div class="card-description">
-                      <p><strong>${actor.name}</strong> rolled <strong>${d4.total}</strong> on 1d4 — Reflex save +${d4.total} (new total ${newTotal}).</p>
-                    </div>
-                  </section>
-                </div>
-              </div>`,
-              rolls: [d4],
-              rollMode: "publicroll",
-            }).catch(err => log("Psychic", `Evade chat post failed: ${err.message}`));
+            try {
+              const OperatorTerm = foundry.dice.terms.OperatorTerm;
+              // Evaluate the d4 in isolation (no chat message — DSN doesn't
+              // fire here; it'll fire when _postSaveResult creates the card).
+              const d4Roll = new Roll("1d4");
+              await d4Roll.evaluate();
+
+              // Build the operator term that joins d20 and d4.
+              // OperatorTerm auto-evaluates on construction in v13 — calling
+              // .evaluate() afterwards throws "already evaluated and immutable".
+              const opTerm = new OperatorTerm({ operator: "+" });
+
+              // Reuse the d20 result's terms + " + " + d4's terms
+              const combinedTerms = [
+                ...result.terms,
+                opTerm,
+                ...d4Roll.terms,
+              ];
+              const combined = Roll.fromTerms(combinedTerms);
+              // combined.total is auto-computed from the term results
+              log("Psychic", `Evade: rolled +${d4Roll.total} on d4 (save total ${combined.total})`);
+              return combined;
+            } catch (err) {
+              // If anything in the splice fails, fall back to the raw d20
+              // result so the save still resolves.
+              log("Psychic", `Evade splice failed, using d20 only: ${err.message}`);
+            }
           }
         }
 
@@ -1464,6 +1493,10 @@ Hooks.once("ready", async () => {
 
   // Expose module API
   game.vagabondCharacterEnhancer = {
+    /** Register cast-time useFx for the Fx-gating filter in
+     *  StatusHelper.processCausedStatuses. Used by the Talent cast pipeline
+     *  (talent-cast.mjs) so gating works the same way it does for spells. */
+    recordCastUseFx: _recordCastUseFx,
     detector: FeatureDetector,
     barbarian: BarbarianFeatures,
     bard: BardFeatures,
@@ -1613,6 +1646,53 @@ Hooks.once("ready", async () => {
     /** Talent cast dialog — fire manually for testing (Task 8 wires from the tab Cast button).
      *  Usage: await game.vagabondCharacterEnhancer.talentCast.openDialog(actor, talentItem) */
     talentCast: TalentCast,
+    /** API for Vagabond Crawler: get Talent menu data for a Psychic actor. */
+    getTalentData: (actor) => {
+      if (!actor) return null;
+      const talents = actor.items.filter(i => i.type === TALENT_TYPE);
+      if (talents.length === 0) return null;
+      const flag = actor.getFlag(MODULE_ID, "psychicTalents") ?? {};
+      const focusedIds = Array.isArray(flag.focusedIds) ? flag.focusedIds : [];
+      const maxFocus = flag.maxFocus ?? TalentBuffs.getMaxFocus(actor);
+      return {
+        hasTalents: true,
+        focusedIds,
+        maxFocus,
+        talents: talents.map(t => {
+          const dmg = t.system?.damage ?? "";
+          const dType = t.system?.damageType && t.system.damageType !== "-"
+            ? ` ${t.system.damageType}` : "";
+          const isBuff = t.system?.focusBuffAE !== null && t.system?.focusBuffAE !== undefined;
+          const dmgLabel = dmg
+            ? `${dmg}${dType}`
+            : (isBuff ? "Buff" : "");
+          return {
+            id: t.id,
+            name: t.name,
+            img: t.img,
+            dmgLabel,
+            isBuff,
+            isFocused: focusedIds.includes(t.id),
+          };
+        }),
+      };
+    },
+    /** Open the Talent cast dialog and execute the cast on confirm. */
+    castTalent: async (actor, talentItemId) => {
+      if (!actor) return;
+      const talent = actor.items.get(talentItemId);
+      if (!talent || talent.type !== TALENT_TYPE) return;
+      const config = await TalentCast.openDialog(actor, talent);
+      if (!config) return;
+      await TalentCast.executeCast(actor, talent, config);
+    },
+    /** Toggle Focus on a Talent (applies/removes focusBuffAE if buff Talent). */
+    toggleTalentFocus: async (actor, talentItemId) => {
+      if (!actor) return;
+      const talent = actor.items.get(talentItemId);
+      if (!talent || talent.type !== TALENT_TYPE) return;
+      return TalentBuffs.toggleFocus(actor, talent);
+    },
     debug: (actor) => {
       if (!actor) {
         console.warn(`${MODULE_ID} | debug: No actor provided. Usage: game.vagabondCharacterEnhancer.debug(game.actors.get("id"))`);
@@ -1664,6 +1744,7 @@ Hooks.once("ready", async () => {
   CompanionManagerTab.init();
   TalentsTab.init();
   TalentCast.registerHooks();
+  PsychicFeatures.init();
   CompanionTerminationManager.init();
   GatherCompanions.init();
   // Phase 2: spell adapters

@@ -1,10 +1,46 @@
 # Changelog
 
-## Unreleased — Post-v0.4.0 Polish & Animate Picker Fixes
+## v0.4.1 — Psychic Class + Polish + Animate Picker Fixes
 
-### Class Data — Psychic
+### New Class — Psychic (RAW)
 
-- **Psionics feature: added missing `Focus:` clause** ("You don't spend Mana to Focus on Talents.") to the level-1 Psionics feature description in `vce-classes`. The previous compendium entry had only the *3 Talents* and *As Spells* clauses; the third (free Focus on Talents) was a documented gameplay rule that wasn't carried over. Compared against the latest rulebook page; everything else (feature names, levels, talent list, casting stat, skill grant, level progression) already matched.
+Full implementation of the Psychic class and its Talent magic system. Psychic actors get a dedicated **Talents** tab on the character sheet with a Cast pipeline modeled on the system's spell flow, focus tracking, four self-buff Talents, and all class features through level 10.
+
+#### Talent Item Type
+- **New custom item type** `vagabond-character-enhancer.talent`. Schema covers description, damage / damageDieSize / damageType, effect text, delivery list, duration, focus-buff AE definition, alias-of (for spell-aliased Talents), and full `causedStatuses` / `critCausedStatuses` arrays so saves/effects flow through the same pipeline as system spells.
+- **Custom Talent sheet** (ApplicationV2) for editing in the compendium — reuses the dark `vce-creature-picker-app` palette.
+- **14 RAW Talents** authored in the new `vce-talents` compendium: 10 spell-aliased (Pyrokinesis, Cryokinesis, Befuddle, Control, Destroy, Launch, Levitate, Mind Speech, Seize, Telekinetic Hand) and 4 self-buff (Absence, Evade, Shield, Transvection).
+
+#### Talents Tab
+- **Tab injection on Psychic actors only** — uses the same renderApplicationV2 pattern as the Companions tab, placed immediately to the left of Features in the nav bar. Live-updates on item add/remove and class-level change.
+- **Cards per known Talent** with name, icon, description excerpt, focus / cast / unfocus buttons, plus a focus counter ("2 / 3 Focused"). Light-mode and dark-mode readable.
+- **"Manage Talents" button** opens a Pick dialog where the player can freely retrain their loadout (RAW: downtime study). Saves a diff (delete unchecked, embed new picks). Talent count progression: 3 / 3 / 4 / 4 / 5 / 5 / 6 / 6 / 7 / 7 by level.
+- **Pick dialog auto-fires** on Psychic class detection and on level-up when the count goes up. Sequential, non-skippable until the actor has the right loadout.
+
+#### Cast Pipeline
+- **Cast dialog** mirrors the Crawler's `CrawlerSpellDialog` UX: −/Nd6/+ pill buttons for damage dice, On/Off Effect toggle, Delivery dropdown, prominent Mana row with cap (red when over), Focus toggle, Cast / Cancel footer. Mana cap = `floor(psychicLevel / 2)`. Free-cast 1d6 OR effect-only OR damage+effect (+1 Mana surcharge).
+- **Cast resolution** routes through the system's `VagabondChatCard.spellCast` and `VagabondDamageHelper.rollSpellDamage` for free polish: targets section with token portraits, big damage numbers, Apply Direct, styled save buttons. The cast item is duck-typed as `type: "spell"` for the system pipeline; `id` is preserved as the actual talent id so `processCausedStatuses` can find it.
+- **Cast checks now use favor** — Mysticism cast roll is built via `VagabondRollBuilder.buildAndEvaluateD20` so the actor's `system.favorHinder` (e.g. from Absence focus) reaches the d20 with an animated favored d6.
+- **Cast attacks bypass armor** — the v0.3.3 cast-armor-bypass branch now also recognizes Talent items as cast attacks (was only matching `spell` type).
+- **Effect gating ("Fx Off" doesn't apply Burning")** — `StatusHelper.processCausedStatuses` Fx-gating filter now accepts Talent type alongside spell type, and `TalentCast.executeCast` registers `useFx` on cast via the new `recordCastUseFx` API. Casting Pyrokinesis with Effect: Off applies fire damage but no Burning, matching RAW.
+
+#### Focus Tracking & Buff Talents
+- **Focus toggle** per Talent. Duality enforces capacity (1 / 2 / 3 by level: L1-3 / L4-7 / L8+).
+- **Buff AE applied with the canonical status path** — for Talents whose `focusBuffAE.statuses` includes a registered status (e.g. Absence's `invisible`), we toggle the system status the canonical way so the token HUD palette highlights it and Foundry renders the standard status icon. The Talent's own buff AE is created with a long duration so its dedicated icon also renders alongside the status icon.
+- **Absence (Focus)** — `system.favorHinder = "favor"` override (favor on attacks, saves, checks) plus the canonical `invisible` status applied to the actor. Two icons render on the token: the Absence stealth icon and the canonical invisible eye.
+- **Evade (Focus)** — `+1d4 to Reflex saves`, **rendered inside the save chat card**. The d4 is spliced into the d20 Roll's terms via `Roll.fromTerms` so DSN animates both dice together and the save card shows them in the same breakdown ("d20 11 + d4 3 = 14").
+- **Shield (Focus)** — `+1d4 to Armor`, async-rolled as a real DSN-animated d4 with a styled chat card. Fires on **both the Apply Direct path and the save-roll path** (per the rules "Shield reduces damage that gets through whether or not the attack forced a save"). The d4 reduction is calculated before saves resolve so it stacks with armor.
+- **Transvection (Focus)** — pure marker AE (winged-feather icon). Flying is descriptive in Vagabond RAW; the icon communicates "this character is flying" to the GM/player.
+
+#### Class Features (Phase 7)
+- **Awakening (L1)** — `createItem` hook auto-grants the Telepath Perk if the system creator's `allowedPerks` didn't auto-pick it, and sets the `psychicMindTrinket` flag on the actor for downstream Trinket-slot logic. Idempotent — no duplicate Telepath if you reapply.
+- **Precognition (L2)** — `onPreRollSave` hook: while at least one Talent is focused, the first save each combat round gets Favor (cancels Hinder, otherwise grants it; doesn't stack with existing Favor). Per-actor flag `psychicPrecognitionUsedRound` cleared on `combatRound` and `deleteCombat`.
+- **Duality (L4 / L8)** — capacity calc lives in `TalentBuffs.getMaxFocus`. Registry entries are flavor.
+- **Mental Fortress (L6)** — passive AE adding `berserk`, `charmed`, `confused`, `frightened` to `system.statusImmunities`. Auto-managed by `_syncManagedEffects` from the registry.
+- **Transcendence (L10)** — DialogV2 swap: pick a known Talent to remove, pick a compendium Talent to add. Confirm → drops focus on the removed Talent (cleans up its AE + status), deletes it, embeds the new one, posts a styled chat card. Pre-L10 Psychics don't see the button.
+
+#### Class Data — Psionics Feature
+- **Psionics: added missing `Focus:` clause** ("You don't spend Mana to Focus on Talents.") to the level-1 Psionics feature description in `vce-classes`. The previous compendium entry had only the *3 Talents* and *As Spells* clauses; the third (free Focus on Talents) was a documented gameplay rule that wasn't carried over.
 
 ### Animate Picker
 

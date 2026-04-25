@@ -1350,42 +1350,70 @@ git add scripts/class-features/psychic.mjs scripts/feature-detector.mjs
 git commit -m "feat(psychic): Mental Fortress (L6) status immunities AE"
 ```
 
-### Task 13: Awakening — flag for "mind as Trinket"
+### Task 13: Awakening — auto-grant Telepath + flag for "mind as Trinket"
 
-**Goal:** L1 Psychic gets `flags.vagabond-character-enhancer.psychicMindTrinket: true` on class detection. Telepath grant remains player-driven via the existing `perkAmount: 1`.
+**Goal:** When a Psychic class item is added to an actor, ensure the Telepath perk is on that actor (defensive — the system creator's `allowedPerks` doesn't reliably auto-pick a single-entry pool) AND set the `psychicMindTrinket` flag.
+
+**Background:** The Vagabond compendium Psychic class declares Awakening with `perkAmount: 1` and `allowedPerks: ["Compendium.vagabond.perks.Item.jmhv9Tnc6FnwqSY9"]` (Telepath UUID). In testing, even with the constrained pool, the system creator didn't auto-grant Telepath — the player still had to actively pick. To match the rule "You gain the Telepath Perk" prescriptively, our feature-detector grants Telepath if it's missing.
 
 **Files:**
 - Modify: `scripts/class-features/psychic.mjs`
 
 **Acceptance Criteria:**
+- [ ] After Psychic class is added, the actor has a Telepath perk in their items.
 - [ ] After Psychic class is added, `actor.getFlag("vagabond-character-enhancer", "psychicMindTrinket")` returns `true`.
+- [ ] If Telepath is already present (e.g., from a previous run or manual add), it's not duplicated.
 - [ ] Flag is set once and persists.
 
-**Verify:** `actor.getFlag("vagabond-character-enhancer", "psychicMindTrinket") === true`.
+**Verify:**
+```js
+actor.items.some(i => i.type === "perk" && i.name === "Telepath") === true;
+actor.getFlag("vagabond-character-enhancer", "psychicMindTrinket") === true;
+```
 
 **Steps:**
 
-- [ ] **Step 1: Set flag on class detect.** Add to `PsychicFeatures.init()` create-item hook:
+- [ ] **Step 1: Wire grant + flag on class detect.** Add to `PsychicFeatures.init()` create-item hook:
 
 ```js
+const TELEPATH_UUID = "Compendium.vagabond.perks.Item.jmhv9Tnc6FnwqSY9";
+
 Hooks.on("createItem", async (item) => {
   if (item.type !== "class" || item.name !== "Psychic") return;
   const actor = item.parent;
   if (!actor) return;
+
+  // Set Trinket flag (rules flavor — mind counts as a Trinket slot)
   if (!actor.getFlag(MODULE_ID, "psychicMindTrinket")) {
     await actor.setFlag(MODULE_ID, "psychicMindTrinket", true);
   }
+
+  // Defensive auto-grant of Telepath. The system creator's allowedPerks
+  // doesn't reliably auto-pick from a single-entry pool, so we ensure
+  // the rule "You gain the Telepath Perk" actually lands.
+  if (!actor.items.some(i => i.type === "perk" && i.name === "Telepath")) {
+    const telepath = await fromUuid(TELEPATH_UUID);
+    if (telepath) {
+      await actor.createEmbeddedDocuments("Item", [telepath.toObject()]);
+    } else {
+      log("Psychic", `Could not resolve Telepath at ${TELEPATH_UUID}`);
+    }
+  }
+
   this._updateMaxFocus(actor, item.system.level ?? 1);
 });
 ```
 
-- [ ] **Step 2: Verify.** Drop Psychic class onto an actor → check flag.
+- [ ] **Step 2: Verify.** Drop Psychic class onto a fresh actor:
+  - Check `actor.items` includes Telepath (type `perk`).
+  - Check `actor.getFlag(MODULE_ID, "psychicMindTrinket") === true`.
+  - Drop a SECOND Psychic class on the same actor (edge case): no duplicate Telepath.
 
 - [ ] **Step 3: Commit.**
 
 ```bash
 git add scripts/class-features/psychic.mjs
-git commit -m "feat(psychic): Awakening — set psychicMindTrinket flag"
+git commit -m "feat(psychic): Awakening — auto-grant Telepath + set Trinket flag"
 ```
 
 ### Task 14: Precognition (L2) — first-save Favor while Focusing

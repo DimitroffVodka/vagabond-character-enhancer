@@ -228,6 +228,24 @@ The Gold Sink tab lets Merchants browse and buy from system compendiums (no Reli
 
 ---
 
+### Psychic
+
+| Feature           | Level | Status    | What's Automated                                                                          |
+|-------------------|-------|-----------|-------------------------------------------------------------------------------------------|
+| Psionics          | 1     | ✅ Module  | Talents tab + Pick dialog + Cast pipeline. Mana cap = floor(level/2). Free Focus.         |
+| Awakening         | 1     | ✅ Module  | Auto-grants Telepath Perk on class drop; sets `psychicMindTrinket` flag                   |
+| Precognition      | 2     | ✅ Module  | While Focusing, first Save each round gets Favor (cancels Hinder); resets on round end    |
+| Duality           | 4     | ✅ Module  | Focus on up to 2 Talents simultaneously (capacity enforced by TalentBuffs.getMaxFocus)    |
+| Mental Fortress   | 6     | ✅ AE      | statusImmunities ADD: berserk, charmed, confused, frightened                              |
+| Transcendent Duality | 8  | ✅ Module  | Focus on up to 3 Talents simultaneously                                                   |
+| Transcendence     | 10    | ✅ Module  | DialogV2 swap: drop one known Talent, learn another (1 Action, honor system)              |
+
+The Talents tab on the character sheet shows one card per known Talent with Cast / Focus / Manage Talents / Transcendence (L10) buttons. Cast opens a Crawler-style configuration dialog (-/Nd6/+ pill buttons, Effect toggle, Delivery dropdown, Mana row with cap), routes through the system's `VagabondChatCard.spellCast` and `VagabondDamageHelper.rollSpellDamage` for full polish (targets section, big damage numbers, Apply Direct, save buttons), and respects the v0.3.3 Effect (Fx) gating — casting Pyrokinesis with Effect: Off does fire damage but no Burning. Cast attacks bypass armor and the cast check uses Mysticism with favor/hinder applied.
+
+The four self-buff Talents apply both their own focus-badge icon AND any registered canonical status (e.g. Absence's `invisible`) on the token. Evade adds a +1d4 to Reflex saves spliced into the save's chat card so DSN animates both dice together. Shield rolls a real DSN-animated 1d4 reducing damage on both the Apply Direct path and the save path (per RAW: Shield reduces damage that gets through, save or not), with the d4 calculated before saves resolve so it stacks with armor. Transvection's "you can fly" is a marker-icon AE — flying is descriptive in Vagabond RAW.
+
+---
+
 ### Revelator
 
 | Feature        | Level | Status    | What's Automated                                          |

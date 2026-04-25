@@ -4,55 +4,55 @@
     {
       "id": 1,
       "subject": "Task 1: Talent data model + sheet registration",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Register a `talent` item type with a data model.\n\n**Files:**\n- Create: `scripts/talent/talent-data-model.mjs`\n- Create: `scripts/talent/talent-sheet.mjs`\n- Create: `templates/talent-sheet.hbs`\n- Modify: `scripts/vagabond-character-enhancer.mjs`\n\n**Verify:** Item.create({type:\"talent\"}) succeeds, sheet renders.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-data-model.mjs\", \"scripts/talent/talent-sheet.mjs\", \"templates/talent-sheet.hbs\", \"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"manual: Item.create({name:'X',type:'talent'},{temporary:true}) in Foundry console\", \"acceptanceCriteria\": [\"CONFIG.Item.dataModels.talent exists\", \"Talent item creation works\", \"Talent sheet renders\", \"Other item types unaffected\"]}\n```"
     },
     {
       "id": 2,
       "subject": "Task 2: Create vce-talents pack and register it",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** Empty LevelDB pack registered in module.json.\n\n**Files:**\n- Create: `packs/vce-talents/`\n- Modify: `module.json`\n\n**Verify:** game.packs.get('vagabond-character-enhancer.vce-talents') returns CompendiumCollection, count=0.\n\n```json:metadata\n{\"files\": [\"packs/vce-talents/\", \"module.json\"], \"verifyCommand\": \"manual: game.packs.get('vagabond-character-enhancer.vce-talents')\", \"acceptanceCriteria\": [\"Pack registered in module.json\", \"Pack appears in compendium browser\", \"Pack count = 0\"]}\n```"
     },
     {
       "id": 3,
       "subject": "Task 3: Author 14 Talent items in vce-talents",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** All 14 Talents per spec table, with full data model fields populated.\n\n**Files:**\n- Modify: `packs/vce-talents/*` (LevelDB write-through)\n\n**Verify:** Pack contains 14 talent-type items; buff Talents have non-null focusBuffAE; spell-aliased Talents have aliasOf set.\n\n```json:metadata\n{\"files\": [\"packs/vce-talents/\"], \"verifyCommand\": \"manual: const docs = await game.packs.get('vagabond-character-enhancer.vce-talents').getDocuments(); console.log(docs.length)\", \"acceptanceCriteria\": [\"14 talent items total\", \"4 buff Talents have focusBuffAE\", \"10 aliased Talents have aliasOf set\"]}\n```"
     },
     {
       "id": 4,
       "subject": "Task 4: Inject Talents tab on Psychic character sheets",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** Talents tab visible on Psychic actors only, rendering known Talents as cards (Cast/Focus stubs).\n\n**Files:**\n- Create: `scripts/talent/talents-tab.mjs`\n- Create: `templates/talents-tab.hbs`\n- Modify: `scripts/vagabond-character-enhancer.mjs`\n- Modify: `styles/vagabond-character-enhancer.css`\n\n**Verify:** Open Psychic sheet → Talents tab present. Open Wizard sheet → no Talents tab.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talents-tab.mjs\", \"templates/talents-tab.hbs\", \"styles/vagabond-character-enhancer.css\", \"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"manual: open Psychic actor sheet, verify Talents tab visible\", \"acceptanceCriteria\": [\"Tab visible on Psychic actors only\", \"Cards render with name/icon/description\", \"Cast/Focus stub buttons render\", \"Buff Talents show Buff badge\", \"Header shows Mana Cap and Focus counter\"]}\n```"
     },
     {
       "id": 5,
       "subject": "Task 5: Build Talent pick dialog",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4],
       "description": "**Goal:** DialogV2 picker for selecting Talents. Standalone — fired manually.\n\n**Files:**\n- Create: `scripts/talent/talent-pick-dialog.mjs`\n- Create: `templates/talent-pick-dialog.hbs`\n\n**Verify:** TalentPickDialog.show(actor, 3) returns array of picked talents on confirm, null on cancel.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-pick-dialog.mjs\", \"templates/talent-pick-dialog.hbs\"], \"verifyCommand\": \"manual: await game.vagabondCharacterEnhancer.talentPicker.show(actor, 3)\", \"acceptanceCriteria\": [\"Dialog shows all Talents not already known\", \"Live counter updates on check/uncheck\", \"Cap enforcement at exact count\", \"Confirm returns picked array\", \"Cancel returns null\"]}\n```"
     },
     {
       "id": 6,
       "subject": "Task 6: Auto-fire pick dialog on class detection / level-up",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** Picker fires automatically when a Psychic actor needs to pick (class detect → 3 picks; L3/5/7/9 level-ups → 1 pick each).\n\n**Files:**\n- Modify: `scripts/feature-detector.mjs`\n\n**Verify:** Drop Psychic class on fresh actor → picker fires for 3. Level to 3 → picker fires for 1.\n\n```json:metadata\n{\"files\": [\"scripts/feature-detector.mjs\"], \"verifyCommand\": \"manual: create actor, add Psychic class, verify picker fires\", \"acceptanceCriteria\": [\"Picker fires on Psychic class create (3 picks)\", \"Picker fires on level to 3/5/7/9 (1 pick)\", \"flags.psychicTalentsPicked tracks completed tiers\", \"Cancel does not mark tier complete\", \"Picked Talents added to actor as items\"]}\n```"
     },
     {
       "id": 7,
       "subject": "Task 7: Build Talent cast dialog (full RAW)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4],
       "description": "**Goal:** Cast dialog with damage slider + delivery dropdown + effect toggle + duration radio, bounded by Mana cap.\n\n**Files:**\n- Create: `scripts/talent/talent-cast.mjs`\n- Create: `templates/talent-cast-dialog.hbs`\n\n**Verify:** TalentCast.openDialog(actor, talent) returns config object on cast, null on cancel.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-cast.mjs\", \"templates/talent-cast-dialog.hbs\"], \"verifyCommand\": \"manual: await game.vagabondCharacterEnhancer.talentCast.openDialog(actor, talent)\", \"acceptanceCriteria\": [\"Damage slider 0 to cap\", \"Delivery dropdown filtered to allowed and affordable\", \"Effect toggle gated by remaining cap\", \"Live spent/cap counter\", \"Returns config object on cast\", \"Returns null on cancel\"]}\n```"
     },
     {
       "id": 8,
       "subject": "Task 8: Resolve cast → roll damage → render chat card",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7],
       "description": "**Goal:** Confirmed cast actually rolls damage and renders chat card with working save buttons.\n\n**Files:**\n- Modify: `scripts/talent/talent-cast.mjs`\n- Modify: `scripts/talent/talents-tab.mjs`\n\n**Verify:** Cast Pyrokinesis at L1 Touch → 1d6 damage card → save button works.\n\n```json:metadata\n{\"files\": [\"scripts/talent/talent-cast.mjs\", \"scripts/talent/talents-tab.mjs\"], \"verifyCommand\": \"manual: cast Pyrokinesis from Talents tab, verify chat card and save\", \"acceptanceCriteria\": [\"Damage rolls correctly with cap-bounded scaling\", \"Chat card renders\", \"Save button routes through VCE save handling\", \"Effect-only Talents work without damage\"]}\n```"
     },
@@ -113,5 +113,5 @@
       "description": "**Goal:** Document the Psychic / Talents system.\n\n**Files:**\n- Modify: `CLAUDE.md`\n- Modify: `CHANGELOG.md`\n\n**Verify:** Both docs reflect the new system.\n\n```json:metadata\n{\"files\": [\"CLAUDE.md\", \"CHANGELOG.md\"], \"verifyCommand\": \"manual: read both docs\", \"acceptanceCriteria\": [\"CLAUDE.md has Psychic/Talents architecture section\", \"CHANGELOG Unreleased section captures user-facing additions\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-24"
+  "lastUpdated": "2026-04-24T19:00:00-05:00"
 }

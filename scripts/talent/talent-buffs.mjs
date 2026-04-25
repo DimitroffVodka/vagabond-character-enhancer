@@ -117,18 +117,47 @@ export const TalentBuffs = {
     );
     if (existing) return;
 
-    // Build an AE definition. Foundry expects { name, img, changes, statuses, flags ... }.
+    // Statuses are applied via the canonical path (actor.toggleStatusEffect)
+    // so the system creates a "real" status AE that the token HUD palette
+    // recognizes as active and that Foundry renders the proper status icon
+    // for. Custom AEs with `statuses: [...]` arrays alone don't trigger the
+    // HUD highlight or render the canonical status icon on the token.
+    const statusIds = Array.isArray(buff.statuses) ? buff.statuses : [];
+    const appliedStatusIds = [];
+    for (const sid of statusIds) {
+      // Don't toggle on if it's already there (e.g. user manually applied) —
+      // that would flip it OFF. Skip in that case and don't track it for
+      // removal, so we don't clobber the user's manual application.
+      if (actor.statuses.has(sid)) continue;
+      await actor.toggleStatusEffect(sid, { active: true });
+      appliedStatusIds.push(sid);
+    }
+
+    // Build the buff AE for the `changes` (e.g., system.favorHinder = "favor").
+    // We do NOT include `statuses` here — that's the system AE's job above.
+    // Track which status IDs we applied so removal knows what to toggle off.
+    //
+    // Foundry only renders an AE's icon on the token when `isTemporary` is
+    // true (has duration.seconds/rounds/turns OR has at least one status).
+    // Since we hand off statuses to the canonical path, this AE has none —
+    // so we set a long duration to keep it temporary, ensuring the talent's
+    // own focus-badge icon renders alongside the system status icon. The
+    // duration is purely cosmetic (we manage focus lifecycle ourselves);
+    // 1e6 seconds (~12 days) safely outlasts any session.
     const aeData = {
       name:   buff.name   ?? `${talent.name} (Focus)`,
       img:    buff.img    ?? talent.img,
       origin: talent.uuid,
       disabled: false,
       transfer: false,
-      statuses: Array.isArray(buff.statuses) ? buff.statuses : [],
+      duration: { seconds: 1_000_000 },
       changes:  Array.isArray(buff.changes)  ? buff.changes  : [],
       flags: {
         ...(buff.flags ?? {}),
-        [MODULE_ID]: { [AE_TALENT_FLAG]: talent.id },
+        [MODULE_ID]: {
+          [AE_TALENT_FLAG]: talent.id,
+          appliedStatusIds, // tracked for clean removal
+        },
       },
     };
 
@@ -137,6 +166,7 @@ export const TalentBuffs = {
 
   /**
    * Remove the buff AE matching this talent from the actor.
+   * Also toggles off any status effects we applied at focus time.
    *
    * @param {Actor} actor
    * @param {Item}  talent
@@ -147,6 +177,16 @@ export const TalentBuffs = {
       e.getFlag(MODULE_ID, AE_TALENT_FLAG) === talent.id
     );
     if (!ae) return;
+
+    // Toggle off the same statuses we toggled on (only the ones we applied —
+    // skips any pre-existing statuses we deliberately didn't touch).
+    const applied = ae.getFlag(MODULE_ID, "appliedStatusIds") ?? [];
+    for (const sid of applied) {
+      if (actor.statuses.has(sid)) {
+        await actor.toggleStatusEffect(sid, { active: false });
+      }
+    }
+
     await ae.delete();
   },
 

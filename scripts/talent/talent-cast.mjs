@@ -419,6 +419,14 @@ export const TalentCast = {
     //
     // formatDescription is a no-op identity since the talent's description
     // doesn't use the system's description-template tokens.
+    // RAW: the Effect layer is a separate Mana purchase. We register the
+    // useFx state for this cast so StatusHelper.processCausedStatuses (which
+    // VCE patches in vagabond-character-enhancer.mjs) gates the talent's
+    // causedStatuses at apply time — same mechanism used for system spells.
+    // Crit-only entries (critCausedStatuses) still fire on a crit even with
+    // useFx=false, matching the rules expectation.
+    game.vagabondCharacterEnhancer?.recordCastUseFx?.(actor.id, talent.id, !!includeEffect);
+
     const castSpell = {
       id:   talent.id,
       name: talent.name,
@@ -453,8 +461,21 @@ export const TalentCast = {
       const trained       = actor.system?.skills?.mysticism?.trained ?? false;
       difficulty = 20 - (trained ? awarenessStat * 2 : awarenessStat);
 
-      castRoll   = await new Roll("1d20").evaluate();
-      const nat  = castRoll.terms?.[0]?.results?.[0]?.result ?? castRoll.total;
+      // Route through VagabondRollBuilder so the actor's system.favorHinder
+      // (e.g., Absence "favor" override, Confused "hinder", etc.) and any
+      // universalCheckBonus are applied — same pattern the system's
+      // SpellHandler uses for cast checks (spell-handler.mjs:510-517).
+      const { VagabondRollBuilder } = await import(
+        "/systems/vagabond/module/helpers/roll-builder.mjs"
+      );
+      const systemFavorHinder = actor.system.favorHinder || 'none';
+      const effectiveFavorHinder = VagabondRollBuilder.calculateEffectiveFavorHinder(
+        systemFavorHinder, false, false
+      );
+      castRoll = await VagabondRollBuilder.buildAndEvaluateD20(actor, effectiveFavorHinder);
+      // The d20 is always the first Die term; favor/hinder d6 is appended.
+      const d20Term = castRoll.terms.find(t => t.constructor.name === "Die" && t.faces === 20);
+      const nat = d20Term?.results?.[0]?.result ?? castRoll.total;
       isCritical = nat === 20;
       isSuccess  = isCritical || castRoll.total >= difficulty;
     }
