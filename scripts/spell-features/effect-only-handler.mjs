@@ -76,7 +76,11 @@ export const EffectOnlyHandler = {
     const actor = game.actors.get(actorId);
     if (!actor) return;
     const item = actor.items.get(itemId);
-    if (!item || item.type !== "spell") return;
+    // Accept both vanilla spells and Psychic Talents (custom item type) — the
+    // rest of the handler reads item.system.causedStatuses, which talents
+    // now carry directly (see talent-data-model.mjs schema + migration).
+    if (!item) return;
+    if (item.type !== "spell" && item.type !== `${MODULE_ID}.talent`) return;
 
     // Determine if this is an effect-only cast. Two scenarios:
     //  1. Spell has damageType "-" (always effect-only, e.g., Color)
