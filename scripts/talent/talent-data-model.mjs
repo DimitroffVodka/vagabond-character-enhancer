@@ -69,7 +69,31 @@ export class TalentData extends foundry.abstract.TypeDataModel {
        * Pure flavor — powers a subtitle on the chat card.
        * Example: Pyrokinesis → aliasOf "burn"
        */
-      aliasOf: new fields.StringField({ required: false, blank: true, initial: "" })
+      aliasOf: new fields.StringField({ required: false, blank: true, initial: "" }),
+
+      /**
+       * Status entries applied on a successful cast — mirrors the Vagabond
+       * spell schema's `system.causedStatuses`. Each entry shape:
+       *   { statusId, requiresDamage, saveType, duration, tickDamageEnabled,
+       *     damageOnTick, damageType }
+       *
+       * Populated from the source spell at content-build time. Required so
+       * the system's chat card resolves the talent item via actor.items.get
+       * post-Roll-Damage and finds the right status data to apply.
+       */
+      causedStatuses: new fields.ArrayField(new fields.ObjectField(), { initial: [] }),
+
+      /**
+       * Status entries applied on a critical hit. Mirrors the system spell's
+       * `system.critCausedStatuses`. Same shape as causedStatuses.
+       */
+      critCausedStatuses: new fields.ArrayField(new fields.ObjectField(), { initial: [] }),
+
+      /**
+       * Override for the damage die size. Null means "use actor default" (6).
+       * Mirrors the system spell's `system.damageDieSize`.
+       */
+      damageDieSize: new fields.NumberField({ required: false, nullable: true, initial: null })
     };
   }
 }

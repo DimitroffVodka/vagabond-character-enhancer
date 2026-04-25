@@ -422,11 +422,27 @@ export const TalentCast = {
       const docs = await pack.getDocuments();
       const sourceSpell = docs.find(s => s.name.toLowerCase() === aliasName);
       if (sourceSpell) {
-        // Layer name/img overrides on a prototype-chained object. Methods
-        // and fields like `system.causedStatuses` resolve up to the real
-        // spell, so the system handles countdown effects, save types, etc.
-        // exactly as it would for a normal cast of the source spell.
+        // Layer name + img + id overrides on a prototype-chained object.
+        //
+        // Why `id = talent.id` (not sourceSpell.id):
+        //   The system stores `spell.id` in the Roll Damage button's
+        //   data-item-id. When the player clicks Roll Damage, the system
+        //   does `actor.items.get(itemId)` — which only finds items on
+        //   the actor. The source Burn spell isn't on the Psychic actor;
+        //   the Pyrokinesis Talent is. So we override id to the talent's id.
+        //
+        // The talent items themselves carry `causedStatuses`,
+        // `critCausedStatuses`, and `damageDieSize` (copied from the source
+        // spell at content-build time — see talent-data-model.mjs schema and
+        // the MCP migration). So when the system resolves the talent item
+        // post-Roll-Damage, it finds the correct status data.
+        //
+        // For the spellCast call itself (which captures `description` and
+        // a few other fields synchronously and stores the result in the
+        // chat card), the prototype chain to sourceSpell still resolves
+        // `system.formatDescription`, `system.crit`, etc., correctly.
         castSpell = Object.create(sourceSpell);
+        castSpell.id   = talent.id;
         castSpell.name = talent.name;
         castSpell.img  = talent.img;
       } else {
