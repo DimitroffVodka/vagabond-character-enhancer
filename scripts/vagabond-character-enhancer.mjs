@@ -360,6 +360,33 @@ Hooks.once("ready", async () => {
         }
       }
 
+      // Psychic Shield Talent: while Focusing on Shield, the defender rolls a
+      // fresh d4 on each incoming attack and adds the result to their armor
+      // (i.e., reduces the damage by that much further). Per RAW the d4 is
+      // rolled per attack — implemented here in calculateFinalDamage so it
+      // fires before any save resolution.
+      try {
+        const hasShield = actor.effects?.some(e =>
+          !e.disabled && e.name?.startsWith("Shield") && e.getFlag(MODULE_ID, "talentId")
+        );
+        if (hasShield && result > 0) {
+          const d4 = await new Roll("1d4").evaluate();
+          result = Math.max(0, result - d4.total);
+          // Brief notification so the player sees the Shield die kicking in
+          ChatMessage.create({
+            speaker: ChatMessage.getSpeaker({ actor }),
+            content: `<div class="vagabond-chat-card-v2"><div class="card-body" style="padding:6px 10px;">
+              <i class="fas fa-shield-alt" style="color:var(--vce-accent);"></i>
+              <strong>Shield (Focus):</strong> rolled <strong>${d4.total}</strong> — reduces damage by ${d4.total}.
+            </div></div>`,
+            rolls: [d4],
+            rollMode: "publicroll",
+          });
+        }
+      } catch (e) {
+        log("Psychic", `Shield die roll failed: ${e.message}`);
+      }
+
       // Sneak Attack: armor penetration (reduce armor by sneak dice count)
       const sneakCtx = { actor, result, damage };
       RogueFeatures.onCalculateFinalDamage(sneakCtx);

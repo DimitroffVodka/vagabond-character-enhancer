@@ -13,6 +13,7 @@ import { MODULE_ID, log } from "../utils.mjs";
 import { TALENT_TYPE } from "./talent-data-model.mjs";
 import { TalentCast } from "./talent-cast.mjs";
 import { TalentPickDialog } from "./talent-pick-dialog.mjs";
+import { TalentBuffs } from "./talent-buffs.mjs";
 
 export const TalentsTab = {
   init() {
@@ -222,12 +223,17 @@ export const TalentsTab = {
       });
     });
 
-    // STUB: Focus toggle — Task 11 (talent-buffs.mjs) wires this.
+    // Focus toggle — adds/removes the talent from psychicTalents.focusedIds
+    // and applies/removes the focusBuffAE on the actor. Capacity is enforced
+    // by Duality (1 / 2 at L4 / 3 at L8).
     panel.querySelectorAll("[data-action='focus-talent']").forEach(btn => {
-      btn.addEventListener("click", (e) => {
+      btn.addEventListener("click", async (e) => {
         const talentId = e.currentTarget.dataset.talentId;
-        log("TalentsTab", `[STUB] Focus clicked for talent ${talentId} — Task 11 pending`);
-        ui.notifications.info("Focus toggling not yet implemented (Task 11).");
+        const talent = actor.items.get(talentId);
+        if (!talent) return;
+        await TalentBuffs.toggleFocus(actor, talent);
+        // Foundry auto-rerenders the actor sheet on flag/effect change,
+        // which redraws the tab with updated focused state + counter.
       });
     });
 
