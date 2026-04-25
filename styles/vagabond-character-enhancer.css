@@ -2528,12 +2528,21 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 .vce-creature-picker-app {
   max-height: 92vh !important;
 }
-.vce-creature-picker-app .window-content {
-  max-height: 92vh !important;
+/* DialogV2 inserts a `.dialog-form .standard-form` wrapper AND a
+   `.dialog-content .standard-form` wrapper between `.window-content` and the
+   user's content. Both default to flex column with `min-height: auto` and
+   `overflow: visible`, which lets content grow unbounded — the scroll cap
+   above stops propagating. We must force the entire flex chain to compress.
+   ApplicationV2 (e.g. CreaturePicker / Conjure Summons) doesn't have these
+   wrappers, which is why its scroll works without this extra patch. */
+.vce-creature-picker-app .window-content,
+.vce-creature-picker-app .dialog-form,
+.vce-creature-picker-app .dialog-content {
   display: flex !important;
   flex-direction: column !important;
-  overflow: hidden !important;
+  flex: 1 1 auto !important;
   min-height: 0 !important;
+  overflow: hidden !important;
 }
 .vce-talent-pick-dialog {
   display: flex !important;
