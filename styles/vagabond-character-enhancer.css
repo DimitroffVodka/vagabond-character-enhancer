@@ -2508,25 +2508,47 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 }
 .vce-talent-pick-dialog .vce-bd-cell-img { width: 44px; }
 
-/* DialogV2 host with header + buttons constrains the scroll area —
-   override the creature-picker-app's flex/max-height-none rule which is
-   meant for the full-screen ApplicationV2 picker, not our DialogV2.
-   Use a viewport-bounded max-height so small monitors get a real scroll. */
-.vce-talent-pick-dialog .vce-cp-scroll {
-  max-height: min(420px, 55vh) !important;
-  flex: 0 1 auto !important;
-  overflow-y: auto !important;
-  overflow-x: hidden;
-}
-
-/* Belt-and-suspenders: bound the dialog window itself to viewport height
-   so the dialog never extends past the screen edges on small monitors. */
-.vce-creature-picker-app .window-content {
-  max-height: 85vh;
-  overflow: hidden;
-}
+/* ─────────────────────────────────────────────────────────────────────
+ * Talent Pick / Manage dialog scroll constraint
+ * ─────────────────────────────────────────────────────────────────────
+ * Goal: dialog window never exceeds the viewport, and the talent table
+ * scrolls internally even on small monitors.
+ *
+ * Why this needs so many `!important`s and `min-height: 0`s: by default
+ * a flex item's `min-height` is `auto` (= content height), which prevents
+ * the scroll container from shrinking below its content. So the dialog
+ * grows to fit all 14 rows. Forcing `min-height: 0` lets flex actually
+ * compress, and the max-height ceiling kicks in.
+ *
+ * Three selectors needed:
+ *   1. The dialog outer (max viewport height)
+ *   2. The window-content (flex column that holds the form)
+ *   3. The form + scroll container (flex children that can shrink)
+ */
 .vce-creature-picker-app {
-  max-height: 95vh;
+  max-height: 92vh !important;
+}
+.vce-creature-picker-app .window-content {
+  max-height: 92vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  min-height: 0 !important;
+}
+.vce-talent-pick-dialog {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+.vce-talent-pick-dialog .vce-cp-scroll,
+.vce-talent-pick-dialog .vce-bd-scroll {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  max-height: none !important;     /* let flex compute the height */
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
 }
 
 /* -------------------------------------------- */
