@@ -401,45 +401,74 @@ export const TalentCast = {
 
     const { damageDice, includeDamage, includeEffect, isFocused } = config;
 
-    // ── 1. Build duck-typed fake spell ──────────────────────────────────────
+    // ── 1. Look up the REAL source spell and layer talent flavor on top ────
     //
-    // causedStatuses shape mirrors a real Vagabond spell entry:
-    //   { statusId, requiresDamage, saveType, duration, tickDamageEnabled,
-    //     damageOnTick, damageType }
-    // For Talents, if effect is present we add a stub entry; the system uses
-    // this to highlight save buttons on the chat card.
+    // Each spell-aliased Talent has talent.system.aliasOf set to the source
+    // spell's lowercase name (e.g., "burn" for Pyrokinesis). Using the real
+    // spell — instead of a fake duck-typed object — gives us:
+    //   - Correct causedStatuses (Burn's countdown burning, etc.)
+    //   - Correct attackType resolution (cast attacks bypass armor via
+    //     existing VCE patches)
+    //   - Correct save handling
+    //   - Correct effect application
     //
-    // We use "will" as the default saveType for Psychic effects (mental origin).
-    // statusId is the effect string (lowercase, system-key form).
-    const effectName    = includeEffect && talent.system.effect ? talent.system.effect : null;
-    const causedStatuses = effectName
-      ? [{
-          statusId:          effectName.toLowerCase().replace(/\s+/g, "-"),
-          requiresDamage:    includeDamage,
-          saveType:          "will",
-          duration:          "",
-          tickDamageEnabled: false,
-          damageOnTick:      "",
-          damageType:        talent.system.damageType ?? "-",
-        }]
-      : [];
+    // We override only `name` and `img` via Object.create so the chat card
+    // displays the talent's flavor (Pyrokinesis, not Burn). All system
+    // properties + methods come through the prototype chain.
+    const aliasName = (talent.system.aliasOf ?? "").toString().trim().toLowerCase();
+    let castSpell;
+    if (aliasName) {
+      const pack = game.packs.get("vagabond.spells");
+      const docs = await pack.getDocuments();
+      const sourceSpell = docs.find(s => s.name.toLowerCase() === aliasName);
+      if (sourceSpell) {
+        // Layer name/img overrides on a prototype-chained object. Methods
+        // and fields like `system.causedStatuses` resolve up to the real
+        // spell, so the system handles countdown effects, save types, etc.
+        // exactly as it would for a normal cast of the source spell.
+        castSpell = Object.create(sourceSpell);
+        castSpell.name = talent.name;
+        castSpell.img  = talent.img;
+      } else {
+        ui.notifications.warn(
+          `Talent ${talent.name}: source spell "${aliasName}" not found in vagabond.spells. Falling back to plain damage roll.`
+        );
+      }
+    }
 
-    const fakeSpell = {
-      id:   talent.id,
-      name: talent.name,
-      img:  talent.img,
-      type: "spell",
-      system: {
-        damageType:      includeDamage ? (talent.system.damageType || "-") : "-",
-        damageDieSize:   null,    // use actor default (6) like real spells
-        description:     talent.system.description ?? "",
-        crit:            null,
-        formatDescription: (html) => html ?? "",
-        causedStatuses,
-        critCausedStatuses: [],
-        currentDamage:   null,   // not applicable
-      },
-    };
+    // Fallback duck-typed spell for talents without a source (or if lookup
+    // failed). This path won't get countdown effects but at least produces
+    // a valid chat card for testing.
+    if (!castSpell) {
+      const effectName = includeEffect && talent.system.effect ? talent.system.effect : null;
+      const causedStatuses = effectName
+        ? [{
+            statusId:          effectName.toLowerCase().replace(/\s+/g, "-"),
+            requiresDamage:    includeDamage,
+            saveType:          "will",
+            duration:          "",
+            tickDamageEnabled: false,
+            damageOnTick:      "",
+            damageType:        talent.system.damageType ?? "-",
+          }]
+        : [];
+      castSpell = {
+        id:   talent.id,
+        name: talent.name,
+        img:  talent.img,
+        type: "spell",
+        system: {
+          damageType:        includeDamage ? (talent.system.damageType || "-") : "-",
+          damageDieSize:     null,
+          description:       talent.system.description ?? "",
+          crit:              null,
+          formatDescription: (html) => html ?? "",
+          causedStatuses,
+          critCausedStatuses: [],
+          currentDamage:     null,
+        },
+      };
+    }
 
     // ── 2. Cast check (Mysticism / Awareness) — only vs hostile targets ─────
     const unwillingTargets = Array.from(game.user.targets).filter(
@@ -471,16 +500,20 @@ export const TalentCast = {
           "/systems/vagabond/module/helpers/damage-helper.mjs"
         );
         const targetsAtRollTime = Array.from(game.user.targets).map(t => ({
-          sceneId: t.scene?.id ?? t.document?.parent?.id ?? canvas.scene?.id,
-          tokenId: t.id,
-          actorId: t.actor?.id,
-          actorName: t.actor?.name,
-          name: t.actor?.name,
-          img: t.actor?.img,
+          // Match the system's _resolveStoredTargets shape EXACTLY (see
+          // damage-helper.mjs:150-156). Using `name`/`img` (without the
+          // actor- prefix) is wrong; the system reads `actorName`/`actorImg`.
+          // Source the values from the TOKEN, not the actor — the chat
+          // card's Targets section displays the token portrait + name.
+          tokenId:   t.id,
+          sceneId:   t.scene?.id ?? t.document?.parent?.id ?? canvas.scene?.id,
+          actorId:   t.actor?.id,
+          actorName: t.name ?? t.document?.name ?? t.actor?.name,
+          actorImg:  t.document?.texture?.src ?? t.actor?.img,
         }));
         damageRoll = await VagabondDamageHelper.rollSpellDamage(
           actor,
-          fakeSpell,
+          castSpell,
           { damageDice, deliveryType: config.delivery },
           isCritical,
           "awareness",
@@ -533,7 +566,7 @@ export const TalentCast = {
     );
 
     await VagabondChatCard.spellCast(
-      actor, fakeSpell, spellCastResult, damageRoll, targetsAtRollTime
+      actor, castSpell, spellCastResult, damageRoll, targetsAtRollTime
     );
 
     // ── 5. Focus (Task 11 — not yet implemented) ────────────────────────────
