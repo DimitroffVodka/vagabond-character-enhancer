@@ -2485,3 +2485,133 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   flex: none !important;
   overflow-y: auto;
 }
+
+/* -------------------------------------------- */
+/*  Talent Cast Dialog                           */
+/* -------------------------------------------- */
+
+.vce-talent-cast-dialog {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* -------------------------------------------- */
+/*  Talent Cast Dialog (vce-tc-*)               */
+/*  Top-level scope intentional; vce-tc- prefix */
+/*  is unique enough to avoid collisions.       */
+/* -------------------------------------------- */
+
+.vce-tc-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.vce-tc-talent-name {
+  font-family: "Manofa", sans-serif;
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--vce-accent);
+}
+
+.vce-tc-counter {
+  font-family: "Paradigm", serif;
+  font-size: 13px;
+  color: var(--vce-text);
+  transition: color 0.15s;
+}
+.vce-tc-counter.vce-tc-over-cap {
+  color: var(--vce-danger-text, #ff8888);
+  font-weight: bold;
+}
+
+.vce-tc-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vce-tc-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.vce-tc-label {
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  color: var(--vce-text-warm, #e0d8c0);
+  font-weight: bold;
+}
+
+.vce-tc-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: normal;
+  cursor: pointer;
+}
+
+.vce-tc-sublabel {
+  font-family: "Paradigm", serif;
+  font-size: 11px;
+  color: var(--vce-text-dim, #aaa);
+}
+
+.vce-tc-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 22px;
+}
+
+.vce-tc-slider {
+  flex: 1;
+  accent-color: var(--vce-accent);
+}
+
+.vce-tc-dice-val {
+  font-family: "Manofa", sans-serif;
+  font-size: 12px;
+  color: var(--vce-accent);
+  min-width: 36px;
+}
+
+.vce-tc-cost-note {
+  font-family: "Paradigm", serif;
+  font-size: 10px;
+  color: var(--vce-text-muted, #8a8a7a);
+  font-weight: normal;
+}
+
+.vce-tc-select {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+  color: var(--vce-text, #e0e0e0);
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  padding: 3px 6px;
+  width: 100%;
+}
+
+.vce-tc-radio-group {
+  display: flex;
+  gap: 16px;
+  padding-left: 4px;
+}
+
+.vce-tc-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  color: var(--vce-text, #e0e0e0);
+  cursor: pointer;
+}

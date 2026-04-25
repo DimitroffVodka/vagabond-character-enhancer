@@ -118,6 +118,7 @@ import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companio
 import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
 import { TalentsTab } from "./talent/talents-tab.mjs";
 import { TalentPickDialog } from "./talent/talent-pick-dialog.mjs";
+import { TalentCast } from "./talent/talent-cast.mjs";
 import { CompanionTerminationManager } from "./companion/companion-termination.mjs";
 import { GatherCompanions } from "./companion/gather-companions.mjs";
 // Phase 2 spell adapters
@@ -1468,6 +1469,9 @@ Hooks.once("ready", async () => {
     /** Talent pick dialog — fire manually for testing (Task 6 wires auto-fire).
      *  Usage: await game.vagabondCharacterEnhancer.talentPicker.show(actor, 3) */
     talentPicker: TalentPickDialog,
+    /** Talent cast dialog — fire manually for testing (Task 8 wires from the tab Cast button).
+     *  Usage: await game.vagabondCharacterEnhancer.talentCast.openDialog(actor, talentItem) */
+    talentCast: TalentCast,
     debug: (actor) => {
       if (!actor) {
         console.warn(`${MODULE_ID} | debug: No actor provided. Usage: game.vagabondCharacterEnhancer.debug(game.actors.get("id"))`);
