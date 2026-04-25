@@ -1224,6 +1224,55 @@ Hooks.once("ready", async () => {
           const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");
           VagabondRollBuilder.buildAndEvaluateD20WithConditionalHinder = ctx._origConditionalHinder;
         }
+
+        // Psychic Evade Talent: while focusing Evade, +d4 to Reflex saves.
+        // Roll the d4 separately (so DSN animates it independently) and
+        // augment the returned roll's _total. The downstream caller compares
+        // total to difficulty — augmenting total here makes the save more
+        // likely to succeed, exactly as RAW intends.
+        if (saveType === "reflex") {
+          const hasEvade = actor.effects?.some(e =>
+            !e.disabled && e.name?.startsWith("Evade") && e.getFlag(MODULE_ID, "talentId")
+          );
+          if (hasEvade && result) {
+            const d4 = new Roll("1d4");
+            await d4.evaluate();
+            const newTotal = (result.total ?? 0) + d4.total;
+            // Mutate the roll's internal total. Foundry exposes `total` as
+            // a getter that reads from `_total` once evaluated; setting
+            // `_total` directly is the cleanest path that keeps the rest
+            // of the roll's metadata (terms, formula, etc.) intact for
+            // chat-card rendering by downstream code.
+            result._total = newTotal;
+            // Styled chat card matching the system's vagabond-chat-card-v2
+            ChatMessage.create({
+              speaker: ChatMessage.getSpeaker({ actor }),
+              content: `<div class="vagabond-chat-card-v2" data-card-type="generic">
+                <div class="card-body">
+                  <header class="card-header">
+                    <div class="header-icon">
+                      <img src="icons/skills/movement/figure-running-gray.webp" alt="Evade" />
+                    </div>
+                    <div class="header-info">
+                      <h3 class="header-title">Evade (Focus)</h3>
+                      <div class="metadata-tags-row">
+                        <div class="meta-tag tag-skill"><span>Reflex +d4</span></div>
+                      </div>
+                    </div>
+                  </header>
+                  <section class="content-body">
+                    <div class="card-description">
+                      <p><strong>${actor.name}</strong> rolled <strong>${d4.total}</strong> on 1d4 — Reflex save +${d4.total} (new total ${newTotal}).</p>
+                    </div>
+                  </section>
+                </div>
+              </div>`,
+              rolls: [d4],
+              rollMode: "publicroll",
+            }).catch(err => log("Psychic", `Evade chat post failed: ${err.message}`));
+          }
+        }
+
         return result;
       } catch (e) {
         if (ctx.needRestore) actor.system.favorHinder = ctx.origFH;
