@@ -2454,3 +2454,25 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   opacity: 0.6;
   color: var(--vagabond-c-text-primary);
 }
+
+/* Talent pick dialog — name + description column layout */
+.vce-talent-pick-dialog .vce-tpd-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.vce-talent-pick-dialog .vce-tpd-desc {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--vagabond-c-text-primary);
+  opacity: 0.75;
+  margin-top: 2px;
+  line-height: 1.35;
+}
+/* Slightly tighter image in the pick dialog (rows are denser than the creature picker) */
+.vce-talent-pick-dialog .vce-bd-beast-img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+}
+.vce-talent-pick-dialog .vce-bd-cell-img { width: 44px; }

@@ -53,43 +53,58 @@ export const TalentPickDialog = {
         resolve(value);
       };
 
-      // Build table rows (HTML string — inline, no separate .hbs file)
+      // Strip HTML + truncate to a one-line excerpt for the picker.
+      const excerpt = (html, len = 120) => {
+        const text = (html ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+        return text.length > len ? text.slice(0, len) + "…" : text;
+      };
+
+      // Build table rows. Reuses the .vce-cp-* / .vce-bd-* classes from
+      // the creature-picker so we inherit sticky header, hover, image sizing.
       const rows = available.map(t => {
         const deliveryStr = (t.system.delivery ?? []).join(", ") || "—";
         const damageStr = t.system.damage || "—";
         const duration = t.system.duration || "instant";
         const isBuff = !!t.system.focusBuffAE;
         const buffBadge = isBuff ? ' <span class="vce-talent-buff-badge" title="Focus buff — no cast">Buff</span>' : "";
+        const desc = excerpt(t.system.description);
         return `
-          <tr class="vce-talent-pick-row" data-talent-id="${t.id}" data-talent-name="${foundry.utils.escapeHTML(t.name)}">
-            <td class="vce-tpd-icon"><img src="${t.img || "icons/svg/item-bag.svg"}" alt="" /></td>
-            <td class="vce-tpd-name"><strong>${foundry.utils.escapeHTML(t.name)}</strong>${buffBadge}</td>
-            <td class="vce-tpd-damage">${foundry.utils.escapeHTML(damageStr)}</td>
-            <td class="vce-tpd-delivery">${foundry.utils.escapeHTML(deliveryStr)}</td>
-            <td class="vce-tpd-duration">${foundry.utils.escapeHTML(duration)}</td>
-            <td class="vce-tpd-check"><input type="checkbox" data-pick-id="${t.id}" data-pick-name="${foundry.utils.escapeHTML(t.name)}" /></td>
+          <tr class="vce-cp-row vce-talent-pick-row" data-talent-id="${t.id}" data-talent-name="${foundry.utils.escapeHTML(t.name)}">
+            <td class="vce-bd-cell vce-bd-cell-img">
+              <img src="${t.img || "icons/svg/item-bag.svg"}" class="vce-bd-beast-img" alt="" />
+            </td>
+            <td class="vce-bd-cell">
+              <div class="vce-tpd-name-line"><strong>${foundry.utils.escapeHTML(t.name)}</strong>${buffBadge}</div>
+              ${desc ? `<div class="vce-tpd-desc">${foundry.utils.escapeHTML(desc)}</div>` : ""}
+            </td>
+            <td class="vce-bd-cell vce-bd-cell-center">${foundry.utils.escapeHTML(damageStr)}</td>
+            <td class="vce-bd-cell">${foundry.utils.escapeHTML(deliveryStr)}</td>
+            <td class="vce-bd-cell vce-bd-cell-center">${foundry.utils.escapeHTML(duration)}</td>
+            <td class="vce-bd-cell vce-bd-cell-center">
+              <input type="checkbox" data-pick-id="${t.id}" data-pick-name="${foundry.utils.escapeHTML(t.name)}" />
+            </td>
           </tr>`;
       }).join("");
 
       const pluralS = count !== 1 ? "s" : "";
       const content = `
         <form class="vce-creature-picker vce-talent-pick-dialog">
-          <div class="vce-tpd-header">
-            <p class="vce-tpd-instruction">
+          <div class="vce-cp-header">
+            <p class="vce-cp-budget">
               Pick <strong>${count}</strong> Talent${pluralS}.
               &nbsp; Selected: <span class="vce-tp-count">0</span>/${count}
             </p>
           </div>
-          <div class="vce-tpd-scroll">
-            <table class="vce-tpd-table">
+          <div class="vce-bd-scroll vce-cp-scroll">
+            <table class="vce-bd-table vce-cp-table">
               <thead>
-                <tr>
-                  <th></th>
-                  <th>Name</th>
-                  <th>Damage</th>
-                  <th>Delivery</th>
-                  <th>Duration</th>
-                  <th></th>
+                <tr class="vce-bd-header-row">
+                  <th class="vce-bd-th vce-bd-th-img" scope="col"></th>
+                  <th class="vce-bd-th" scope="col">Name</th>
+                  <th class="vce-bd-th vce-bd-th-center" scope="col">Damage</th>
+                  <th class="vce-bd-th" scope="col">Delivery</th>
+                  <th class="vce-bd-th vce-bd-th-center" scope="col">Duration</th>
+                  <th class="vce-bd-th vce-bd-th-center" scope="col"></th>
                 </tr>
               </thead>
               <tbody>${rows}</tbody>
