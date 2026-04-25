@@ -365,23 +365,27 @@ Hooks.once("ready", async () => {
       // (i.e., reduces the damage by that much further). Per RAW the d4 is
       // rolled per attack — implemented here in calculateFinalDamage so it
       // fires before any save resolution.
+      //
+      // calculateFinalDamage must remain SYNCHRONOUS (return a number, not
+      // a Promise) — every caller treats the return value as a finalized
+      // number. So the d4 is generated via Math.random and the chat post
+      // is fire-and-forget.
       try {
         const hasShield = actor.effects?.some(e =>
           !e.disabled && e.name?.startsWith("Shield") && e.getFlag(MODULE_ID, "talentId")
         );
         if (hasShield && result > 0) {
-          const d4 = await new Roll("1d4").evaluate();
-          result = Math.max(0, result - d4.total);
-          // Brief notification so the player sees the Shield die kicking in
+          const d4Total = Math.floor(Math.random() * 4) + 1;
+          result = Math.max(0, result - d4Total);
+          // Fire-and-forget chat message (no await — keep this fn sync)
           ChatMessage.create({
             speaker: ChatMessage.getSpeaker({ actor }),
             content: `<div class="vagabond-chat-card-v2"><div class="card-body" style="padding:6px 10px;">
               <i class="fas fa-shield-alt" style="color:var(--vce-accent);"></i>
-              <strong>Shield (Focus):</strong> rolled <strong>${d4.total}</strong> — reduces damage by ${d4.total}.
+              <strong>Shield (Focus):</strong> rolled <strong>${d4Total}</strong> on 1d4 — reduces incoming damage by ${d4Total}.
             </div></div>`,
-            rolls: [d4],
             rollMode: "publicroll",
-          });
+          }).catch(err => log("Psychic", `Shield chat post failed: ${err.message}`));
         }
       } catch (e) {
         log("Psychic", `Shield die roll failed: ${e.message}`);
