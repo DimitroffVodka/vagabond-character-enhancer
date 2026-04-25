@@ -2518,334 +2518,165 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 }
 
 /* -------------------------------------------- */
-/*  Talent Cast Dialog                           */
+/*  Talent Cast Dialog (vce-tcd-*)              */
+/*  ApplicationV2 — mirrors CrawlerSpellDialog  */
+/*  visual style without depending on the       */
+/*  vagabond-crawler module being present.      */
 /* -------------------------------------------- */
 
+/* Window host: compact width, no extra padding */
 .vce-talent-cast-dialog {
-  padding: 12px 16px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
   gap: 0;
 }
 
-/* -------------------------------------------- */
-/*  Talent Cast Dialog (vce-tc-*)               */
-/*  Top-level scope intentional; vce-tc- prefix */
-/*  is unique enough to avoid collisions.       */
-/* -------------------------------------------- */
-
-.vce-tc-header {
+/* Header: img + name + effect subtitle */
+.vce-tcd-header {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 14px;
+  gap: 10px;
+  align-items: center;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  margin-bottom: 8px;
 }
 
-.vce-tc-talent-name {
-  font-family: "Manofa", sans-serif;
-  font-size: 15px;
-  font-weight: bold;
-  color: var(--vce-accent);
+/* Section: visual grouping with bottom separator */
+.vce-tcd-section {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.vce-tc-counter {
-  font-family: "Paradigm", serif;
-  font-size: 13px;
-  color: var(--vce-text);
-  transition: color 0.15s;
-}
-.vce-tc-counter.vce-tc-over-cap {
-  color: var(--vce-danger-text, #ff8888);
-  font-weight: bold;
-}
-
-.vce-tc-body {
+/* Row: label + controls + badge */
+.vce-tcd-row {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
 }
 
-.vce-tc-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.vce-tc-label {
-  font-family: "Paradigm", serif;
+.vce-tcd-row label {
+  flex: 0 0 100px;
+  font-weight: bold;
   font-size: 12px;
   color: var(--vce-text-warm, #e0d8c0);
-  font-weight: bold;
 }
 
-.vce-tc-inline {
+/* Controls: pill buttons + value span */
+.vce-tcd-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: normal;
-  cursor: pointer;
-}
-
-.vce-tc-sublabel {
-  font-family: "Paradigm", serif;
-  font-size: 11px;
-  color: var(--vce-text-dim, #aaa);
-}
-
-.vce-tc-slider-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-left: 22px;
-}
-
-.vce-tc-slider {
+  gap: 4px;
   flex: 1;
-  accent-color: var(--vce-accent);
 }
 
-.vce-tc-dice-val {
-  font-family: "Manofa", sans-serif;
-  font-size: 12px;
-  color: var(--vce-accent);
-  min-width: 36px;
-}
-
-.vce-tc-cost-note {
-  font-family: "Paradigm", serif;
-  font-size: 10px;
-  color: var(--vce-text-muted, #8a8a7a);
-  font-weight: normal;
-}
-
-.vce-tc-select {
-  background: rgba(0, 0, 0, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 3px;
-  color: var(--vce-text, #e0e0e0);
-  font-family: "Paradigm", serif;
-  font-size: 12px;
-  padding: 3px 6px;
-  width: 100%;
-}
-
-.vce-tc-radio-group {
-  display: flex;
-  gap: 16px;
-  padding-left: 4px;
-}
-
-.vce-tc-radio-label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-family: "Paradigm", serif;
-  font-size: 12px;
-  color: var(--vce-text, #e0e0e0);
-  cursor: pointer;
-}
-
-/* -------------------------------------------- */
-/*  Talent Chat Card                             */
-/* -------------------------------------------- */
-
-.vce-talent-card {
-  font-family: "Paradigm", serif;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 4px;
-}
-
-.vce-tc-card-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid var(--vce-border-subtle, rgba(255,255,255,0.1));
-  padding-bottom: 6px;
-}
-
-.vce-tc-card-img {
-  width: 40px;
-  height: 40px;
-  border-radius: 4px;
-  border: 1px solid var(--vce-accent-dim, #a08030);
-  object-fit: cover;
-}
-
-.vce-tc-card-header-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.vce-tc-card-title {
-  margin: 0;
-  font-size: 14px;
-  color: var(--vce-accent, #d4a843);
+.vce-tcd-val {
+  min-width: 48px;
+  text-align: center;
   font-weight: bold;
-}
-
-.vce-tc-card-sub {
-  margin: 0;
-  font-size: 11px;
-  color: var(--vce-text-dim, #aaa);
-}
-
-.vce-tc-card-roll {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--vce-text, #e0e0e0);
-  padding: 4px 6px;
-  background: rgba(255,255,255,0.04);
-  border-radius: 3px;
-}
-
-.vce-tc-card-roll-label {
-  color: var(--vce-text-dim, #aaa);
-}
-
-.vce-tc-card-roll-total {
-  font-size: 16px;
-  font-weight: bold;
-  color: var(--vce-text, #e0e0e0);
-}
-
-.vce-tc-card-roll-total.success {
-  color: #7bcd7b;
-}
-
-.vce-tc-card-roll-total.critical {
-  color: var(--vce-accent, #d4a843);
-}
-
-.vce-tc-card-roll-vs {
-  color: var(--vce-text-dim, #aaa);
-  font-size: 11px;
-}
-
-.vce-tc-card-result {
-  margin-left: auto;
-  font-size: 11px;
-  font-weight: bold;
-  padding: 1px 6px;
-  border-radius: 3px;
-}
-
-.vce-tc-card-result.success {
-  background: rgba(80, 160, 80, 0.3);
-  color: #7bcd7b;
-}
-
-.vce-tc-card-result.critical {
-  background: rgba(180, 140, 0, 0.35);
-  color: var(--vce-accent, #d4a843);
-}
-
-.vce-tc-card-result.fail {
-  background: rgba(160, 50, 50, 0.3);
-  color: var(--vce-danger-text, #ff8888);
-}
-
-.vce-tc-card-damage {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 8px;
-  background: rgba(180, 60, 60, 0.15);
-  border: 1px solid rgba(180, 60, 60, 0.3);
-  border-radius: 3px;
   font-size: 13px;
   color: var(--vce-text, #e0e0e0);
 }
 
-.vce-tc-card-damage i {
-  color: #e07070;
+.vce-tcd-highlight {
+  color: var(--vce-accent, #d4a843);
+}
+
+/* Cost badge: pill on the right edge of a row */
+.vce-tcd-badge {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  margin-left: auto;
+  color: var(--vce-text-dim, #aaa);
+}
+
+/* Delivery dropdown */
+.vce-tcd-delivery-select {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: var(--vce-text, #e0e0e0);
+  border-radius: 3px;
+  padding: 2px 4px;
   font-size: 12px;
 }
 
-.vce-tc-card-damage-total {
-  font-size: 18px;
-  color: #f0a0a0;
+/* Mana row */
+.vce-tcd-mana {
+  font-size: 12px;
+  color: var(--vce-text, #e0e0e0);
 }
 
-.vce-tc-card-damage-formula {
-  font-size: 11px;
-  color: var(--vce-text-dim, #aaa);
+/* Focus row */
+.vce-tcd-focus-row {
+  align-items: center;
+  gap: 8px;
 }
 
-.vce-tc-card-damage-type {
-  margin-left: auto;
-  font-size: 10px;
-  background: rgba(0,0,0,0.5);
-  padding: 1px 5px;
-  border-radius: 3px;
-  color: var(--vce-text-dim, #aaa);
+/* Footer: Cast + Cancel buttons */
+.vce-tcd-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* Base button — pill style */
+.vce-tcd-btn {
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  background: linear-gradient(135deg, #252830 0%, #1b1e24 100%);
+  color: var(--vce-text, #e0e0e0);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow: 1px 1px 2px rgba(0, 0, 0, 0.4);
+}
+.vce-tcd-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #2e3138 0%, #232730 100%);
+  color: #e8eaed;
+}
+.vce-tcd-btn:disabled,
+.vce-tcd-btn.vce-tcd-disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Active state (toggles — On) */
+.vce-tcd-btn.vce-tcd-active {
+  background: linear-gradient(135deg, #1e5a14 0%, #164010 100%) !important;
+  color: #e0ffe0 !important;
+  border-color: #3a8a30 !important;
+}
+
+/* Focus toggle active: blue tint instead of green */
+.vce-tcd-focus-toggle.vce-tcd-active {
+  background: linear-gradient(135deg, #1a3060 0%, #111e40 100%) !important;
+  color: #b0d0ff !important;
+  border-color: #4a6aaa !important;
+}
+
+/* Big Cast button */
+.vce-tcd-cast-btn {
+  flex: 1;
+  padding: 5px;
+  font-weight: bold;
+  background: linear-gradient(135deg, #2c3e50 0%, #1a2a3a 100%);
+  color: #e0e8f0;
+  border-color: #4a6a8a;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-
-.vce-tc-card-effect {
-  font-size: 12px;
-  color: var(--vce-text, #e0e0e0);
-  padding: 3px 6px;
-  background: rgba(100, 60, 150, 0.2);
-  border: 1px solid rgba(100, 60, 150, 0.3);
-  border-radius: 3px;
+.vce-tcd-cast-btn:hover:not(:disabled) {
+  filter: brightness(1.2);
+  box-shadow: 0 0 6px rgba(44, 62, 80, 0.4);
 }
 
-.vce-tc-card-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.vce-tc-apply-damage {
-  flex: 1;
-  padding: 4px 8px;
-  font-family: "Paradigm", serif;
-  font-size: 12px;
-  background: rgba(160, 50, 50, 0.5);
-  border: 1px solid rgba(200, 80, 80, 0.5);
-  border-radius: 3px;
-  color: #ffd0d0;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.vce-tc-apply-damage:hover {
-  background: rgba(180, 60, 60, 0.75);
-}
-
-.vce-tc-saves {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-}
-
-.vce-tc-saves-label {
-  font-size: 11px;
-  color: var(--vce-text-dim, #aaa);
-  margin-right: 2px;
-}
-
-.vce-tc-save {
-  padding: 3px 10px;
-  font-family: "Paradigm", serif;
-  font-size: 11px;
-  background: rgba(60, 80, 140, 0.4);
-  border: 1px solid rgba(80, 110, 200, 0.4);
-  border-radius: 3px;
-  color: #b0c0ff;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.vce-tc-save:hover {
-  background: rgba(70, 100, 180, 0.65);
-}
+/* Utility modifiers */
+.vce-tcd-muted  { color: var(--vce-text-dim, #aaa); font-size: 11px; }
+.vce-tcd-error  { color: var(--vce-danger-text, #ff8888); }

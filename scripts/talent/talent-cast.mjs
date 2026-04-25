@@ -1,27 +1,29 @@
 /**
- * TalentCast — full-RAW cast dialog for Psychic Talents.
+ * TalentCast — Psychic Talent cast dialog + system chat card integration.
  *
- * Usage:
- *   const config = await TalentCast.openDialog(actor, talentItem);
- *   // config: { damageDice, includeDamage, includeEffect, delivery, isFocused, totalMana }
- *   //         on cancel / close: null
+ * Dialog UX mirrors vagabond-crawler's CrawlerSpellDialog:
+ *   - Header: img + name + effect subtitle
+ *   - Damage Dice: − / Nd6 / + pill buttons + free/+N badge
+ *   - Include Effect: On/Off toggle button + badge
+ *   - Delivery dropdown
+ *   - Mana row: Cost / Cap (red if over)
+ *   - Focus Spell toggle
+ *   - Footer: Cast + Cancel
+ *
+ * Chat card: delegates to VagabondChatCard.spellCast via a duck-typed fake-spell
+ * object, giving us the full polished system card for free (targets section,
+ * big damage numbers, Apply Direct, styled save buttons).
  *
  * Cap math (per Psionics rule):
  *   cap = floor(psychicLevel / 2)
  *
  *   Mana cost breakdown:
- *   - 1d6 base damage:        FREE (if cast alone, no effect)
- *   - effect alone:           FREE (if cast alone, no damage)
- *   - damage + effect both:   +1 Mana surcharge
+ *   - 1d6 base damage:           FREE (if no effect)
+ *   - effect alone:              FREE (if no damage)
+ *   - damage + effect both:      +1 Mana surcharge
  *   - each extra die beyond 1d6: +1 Mana per die
- *   - delivery base cost:     see DELIVERY_COSTS
- *   - duration:               FREE for Talents
- *
- * Pattern mirrors talent-pick-dialog.mjs:
- *   - idempotent finish() covers all 4 exit paths
- *   - Hooks.once("closeDialogV2", ...) fallback for X/Escape
- *   - classes: ["vce-creature-picker-app"] for dark theme
- *   - rejectClose: false (no unhandled rejection on X)
+ *   - delivery base cost:        see DELIVERY_COSTS
+ *   - focus/duration:            FREE for Talents
  */
 
 import { MODULE_ID } from "../utils.mjs";
@@ -31,7 +33,7 @@ const DELIVERY_COSTS = {
   touch:  0,
   remote: 0,
   self:   0,
-  imbue:  0,   // 1-Mana minimum enforced elsewhere; included here for completeness
+  imbue:  0,
   cube:   1,
   aura:   2,
   cone:   2,
@@ -41,12 +43,20 @@ const DELIVERY_COSTS = {
 };
 
 /**
- * Compute total Mana cost for the current dialog config.
+ * Capitalize first letter of a string.
+ */
+function capitalize(s) {
+  if (!s) return "";
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/**
+ * Compute total Mana cost for the current config.
  *
  * @param {object} config
- * @param {number}  config.damageDice    — extra dice beyond the free 1d6 baseline (0+)
- * @param {boolean} config.includeDamage — whether the damage component is included
- * @param {boolean} config.includeEffect — whether the effect component is included
+ * @param {number}  config.damageDice    — TOTAL dice count (1 = free, 2 = +1 Mana, etc.)
+ * @param {boolean} config.includeDamage — whether damage component is included
+ * @param {boolean} config.includeEffect — whether effect component is included
  * @param {string}  config.delivery      — chosen delivery key
  * @param {object}  talent               — Talent item document
  * @returns {number} total Mana cost
@@ -58,60 +68,251 @@ function computeTotalMana(config, talent) {
   const dmgIncluded = config.includeDamage && hasDamage;
   const fxIncluded  = config.includeEffect  && hasEffect;
 
+  // Extra dice beyond the free base 1d6
+  const extraDice = dmgIncluded ? Math.max(0, (config.damageDice ?? 1) - 1) : 0;
+
   let total = 0;
-  total += config.damageDice;                          // extra dice beyond free 1d6
-  total += (dmgIncluded && fxIncluded) ? 1 : 0;       // both components = +1 surcharge
-  total += DELIVERY_COSTS[config.delivery] ?? 0;       // delivery base cost
-  // duration is always free for Talents
+  total += extraDice;                                    // each extra die = +1 Mana
+  total += (dmgIncluded && fxIncluded) ? 1 : 0;         // both components = +1 surcharge
+  total += DELIVERY_COSTS[config.delivery] ?? 0;         // delivery base cost
+  // focus / duration always free for Talents
   return total;
 }
 
-// ── executeCast helpers ────────────────────────────────────────────────────
+// ── TalentCastDialog (ApplicationV2) ──────────────────────────────────────────
 
-/**
- * Wire interactive buttons on a rendered talent chat card.
- * Called from the renderChatMessage hook.
- */
-function _wireCardButtons(html, message) {
-  // Apply Damage — deals the stored damage to selected tokens.
-  html.querySelectorAll(".vce-tc-apply-damage").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const totalEl = html.querySelector(".vce-tc-card-damage-total");
-      const amount = parseInt(totalEl?.dataset?.damageAmount ?? "0", 10);
-      if (!amount || amount <= 0) {
-        ui.notifications.warn("No damage to apply.");
+class TalentCastDialog extends foundry.applications.api.ApplicationV2 {
+  static DEFAULT_OPTIONS = {
+    id: "vce-talent-cast-dialog",
+    tag: "div",
+    window: { resizable: false },
+    position: { width: 360 },
+    classes: ["vce-talent-cast-dialog"],
+  };
+
+  constructor(actor, talent, cap, resolve) {
+    super();
+    this.actor    = actor;
+    this.talent   = talent;
+    this.cap      = cap;
+    this._resolve = resolve;
+    this._settled = false;
+
+    const hasDamage = !!talent.system.damage;
+    const hasEffect = !!talent.system.effect;
+
+    // Build allowed delivery list (intersect talent's delivery with known costs)
+    const allowed = (talent.system.delivery ?? []).filter(d => d in DELIVERY_COSTS);
+    const affordable0 = allowed.filter(d => (DELIVERY_COSTS[d] ?? 99) <= cap);
+    const initialDelivery = affordable0[0] ?? allowed[0] ?? "touch";
+
+    // State mirrors CrawlerSpellDialog.spellState pattern
+    this._state = {
+      damageDice:     hasDamage ? 1 : 0,  // total dice count (1 = 1d6 free)
+      includeDamage:  hasDamage,
+      includeEffect:  !hasDamage && hasEffect,  // default on if effect-only
+      deliveryType:   initialDelivery,
+      focusAfterCast: false,
+    };
+
+    this._allowedDeliveries = allowed;
+    this._hasDamage = hasDamage;
+    this._hasEffect = hasEffect;
+  }
+
+  get title() {
+    return `Cast: ${this.talent.name}`;
+  }
+
+  _finish(value) {
+    if (this._settled) return;
+    this._settled = true;
+    this._resolve(value);
+  }
+
+  async _prepareContext() {
+    const s   = this._state;
+    const cap = this.cap;
+
+    const totalMana    = computeTotalMana({
+      damageDice:     s.damageDice,
+      includeDamage:  s.includeDamage,
+      includeEffect:  s.includeEffect,
+      delivery:       s.deliveryType,
+    }, this.talent);
+    const damageCost   = s.includeDamage ? Math.max(0, s.damageDice - 1) : 0;
+    const fxCost       = (s.includeDamage && s.includeEffect) ? 1 : 0;
+    const deliveryCost = DELIVERY_COSTS[s.deliveryType] ?? 0;
+
+    const deliveryOptions = this._allowedDeliveries.map(d => {
+      const label = CONFIG.VAGABOND?.deliveryTypes?.[d] ?? capitalize(d);
+      return { value: d, label: `${label} (${DELIVERY_COSTS[d] === 0 ? "free" : `+${DELIVERY_COSTS[d]}`})`, selected: d === s.deliveryType };
+    });
+
+    const canCast = s.deliveryType !== null && totalMana <= cap;
+
+    return { s, cap, totalMana, damageCost, fxCost, deliveryCost, deliveryOptions, canCast };
+  }
+
+  async _renderHTML(context) {
+    const { s, cap, totalMana, damageCost, fxCost, deliveryOptions, canCast } = context;
+    const t = this.talent;
+
+    const deliverySelectOptions =
+      `<option value="">-- Select Delivery --</option>` +
+      deliveryOptions.map(o =>
+        `<option value="${o.value}" ${o.selected ? "selected" : ""}>${o.label}</option>`
+      ).join("");
+
+    // Damage section
+    let damageSection = "";
+    if (this._hasDamage) {
+      const diceHighlight = s.damageDice > 1 ? "vce-tcd-highlight" : "";
+      damageSection = `
+        <div class="vce-tcd-row">
+          <label>Damage Dice</label>
+          <div class="vce-tcd-controls">
+            <button type="button" class="vce-tcd-btn vce-tcd-dmg-down" ${(!s.includeDamage || s.damageDice <= 1) ? "disabled" : ""}>−</button>
+            <span class="vce-tcd-val ${diceHighlight}">${s.damageDice}d6</span>
+            <button type="button" class="vce-tcd-btn vce-tcd-dmg-up" ${!s.includeDamage ? "disabled" : ""}>+</button>
+          </div>
+          <span class="vce-tcd-badge">${damageCost > 0 ? `+${damageCost}` : "free"}</span>
+        </div>`;
+
+      if (this._hasEffect) {
+        damageSection += `
+        <div class="vce-tcd-row">
+          <label>Include Effect</label>
+          <button type="button" class="vce-tcd-btn vce-tcd-fx-toggle ${s.includeEffect ? "vce-tcd-active" : ""}">
+            <i class="fas fa-sparkles"></i> ${s.includeEffect ? "On" : "Off"}
+          </button>
+          <span class="vce-tcd-badge">${fxCost > 0 ? `+${fxCost}` : "free"}</span>
+        </div>`;
+      }
+    } else if (this._hasEffect) {
+      // Effect-only talent — always on, show as info row
+      damageSection = `
+        <div class="vce-tcd-row vce-tcd-muted">
+          <i class="fas fa-sparkles"></i>&nbsp;Effect-only talent: <em>${t.system.effect ?? ""}</em>
+        </div>`;
+    }
+
+    const manaClass = totalMana > cap ? "vce-tcd-error" : "";
+
+    const html = `
+      <div class="vce-tcd-header">
+        <img src="${t.img}" width="36" height="36" style="border-radius:4px; border:1px solid rgba(255,255,255,0.15);">
+        <div>
+          <strong>${t.name}</strong>
+          <div class="vce-tcd-muted">${t.system.effect ?? ""}</div>
+        </div>
+      </div>
+      <div class="vce-tcd-section">${damageSection}</div>
+      <div class="vce-tcd-section">
+        <div class="vce-tcd-row">
+          <label>Delivery</label>
+          <select class="vce-tcd-delivery-select">${deliverySelectOptions}</select>
+        </div>
+      </div>
+      <div class="vce-tcd-section vce-tcd-mana">
+        Cost: <strong class="${manaClass}">${totalMana}</strong> / ${cap}
+      </div>
+      <div class="vce-tcd-section">
+        <div class="vce-tcd-row vce-tcd-focus-row">
+          <label><i class="fas fa-eye"></i> Focus Spell</label>
+          <button type="button" class="vce-tcd-btn vce-tcd-focus-toggle ${s.focusAfterCast ? "vce-tcd-active" : ""}">
+            ${s.focusAfterCast ? "On" : "Off"}
+          </button>
+          <span class="vce-tcd-muted" style="font-size:10px">sustain after cast</span>
+        </div>
+      </div>
+      <div class="vce-tcd-footer">
+        <button type="button" class="vce-tcd-btn vce-tcd-cast-btn ${canCast ? "" : "vce-tcd-disabled"}" ${canCast ? "" : "disabled"}>
+          <i class="fas fa-brain"></i> Cast
+        </button>
+        <button type="button" class="vce-tcd-btn vce-tcd-cancel-btn">Cancel</button>
+      </div>`;
+
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    return div;
+  }
+
+  _replaceHTML(result, content) {
+    content.replaceChildren(result);
+  }
+
+  _attachFrameListeners() {
+    super._attachFrameListeners();
+
+    // Delivery dropdown change
+    this.element.addEventListener("change", e => {
+      if (!e.target.classList.contains("vce-tcd-delivery-select")) return;
+      this._state.deliveryType = e.target.value || null;
+      this.render();
+    });
+
+    // Button clicks
+    this.element.addEventListener("click", async e => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+
+      if (btn.classList.contains("vce-tcd-dmg-up")) {
+        if (!this._state.includeDamage) return;
+        const deliveryCost = DELIVERY_COSTS[this._state.deliveryType] ?? 0;
+        const fxSurcharge  = this._state.includeEffect ? 1 : 0;
+        const maxDice      = Math.max(1, this.cap - deliveryCost - fxSurcharge + 1);
+        if (this._state.damageDice < maxDice) this._state.damageDice++;
+      }
+      else if (btn.classList.contains("vce-tcd-dmg-down")) {
+        if (!this._state.includeDamage) return;
+        if (this._state.damageDice > 1) this._state.damageDice--;
+      }
+      else if (btn.classList.contains("vce-tcd-fx-toggle")) {
+        this._state.includeEffect = !this._state.includeEffect;
+        // Clamp damageDice if now over budget due to +1 surcharge
+        if (this._state.includeEffect && this._state.includeDamage) {
+          const deliveryCost  = DELIVERY_COSTS[this._state.deliveryType] ?? 0;
+          const remainingDice = Math.max(1, this.cap - deliveryCost - 1 + 1);
+          if (this._state.damageDice > remainingDice) this._state.damageDice = remainingDice;
+        }
+      }
+      else if (btn.classList.contains("vce-tcd-focus-toggle")) {
+        this._state.focusAfterCast = !this._state.focusAfterCast;
+      }
+      else if (btn.classList.contains("vce-tcd-cast-btn") && !btn.disabled) {
+        const s   = this._state;
+        const cfg = {
+          damageDice:     s.damageDice,
+          includeDamage:  s.includeDamage && this._hasDamage,
+          includeEffect:  s.includeEffect || (!this._hasDamage && this._hasEffect),
+          delivery:       s.deliveryType ?? this._allowedDeliveries[0],
+          isFocused:      s.focusAfterCast,
+        };
+        cfg.totalMana = computeTotalMana(cfg, this.talent);
+        this._finish(cfg);
+        await this.close();
         return;
       }
-      const targets = game.user.targets;
-      if (!targets.size) {
-        ui.notifications.warn("Select token targets to apply damage.");
+      else if (btn.classList.contains("vce-tcd-cancel-btn")) {
+        this._finish(null);
+        await this.close();
         return;
       }
-      for (const t of targets) {
-        const actor = t.actor;
-        if (!actor) continue;
-        const armor = actor.system?.armor?.value ?? 0;
-        const reduced = Math.max(0, amount - armor);
-        const currentHp = actor.system?.attributes?.hp?.value ?? 0;
-        await actor.update({ "system.attributes.hp.value": currentHp - reduced });
-      }
-      ui.notifications.info(`Applied ${amount} damage to ${targets.size} target(s).`);
-    });
-  });
+      else return;
 
-  // Save buttons — stub: prompts GM to call for the named save.
-  // Full automation (auto-rolling saves for targets) is out of scope for Task 8.
-  html.querySelectorAll(".vce-tc-save").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const saveType = btn.dataset.save ?? "will";
-      ui.notifications.info(
-        `Call for a ${saveType.charAt(0).toUpperCase() + saveType.slice(1)} save against the effect. Automated save rolling is not yet implemented.`
-      );
+      this.render();
     });
-  });
+  }
+
+  // When window X is clicked — resolve null so openDialog promise settles.
+  async close(options) {
+    if (!this._settled) this._finish(null);
+    return super.close(options);
+  }
 }
 
-// ── TalentCast object ─────────────────────────────────────────────────────
+// ── TalentCast object ─────────────────────────────────────────────────────────
 
 export const TalentCast = {
   /**
@@ -124,375 +325,193 @@ export const TalentCast = {
   },
 
   /**
-   * Open the cast configuration dialog for the given Talent.
+   * Open the crawler-style cast configuration dialog.
    *
-   * @param {Actor}    actor   — the Psychic actor casting
-   * @param {Item}     talent  — the Talent item being cast (must be TALENT_TYPE)
-   * @returns {Promise<{damageDice: number, includeDamage: boolean, includeEffect: boolean,
-   *                     delivery: string, isFocused: boolean, totalMana: number} | null>}
+   * @param {Actor}  actor   — the Psychic actor casting
+   * @param {Item}   talent  — the Talent item being cast
+   * @returns {Promise<object|null>} config or null on cancel
    */
   async openDialog(actor, talent) {
     if (!actor || !talent) return null;
 
-    const cap      = this.getCap(actor);
-    const hasDamage = !!talent.system.damage;
-    const hasEffect = !!talent.system.effect;
+    const cap = this.getCap(actor);
+    const allowed = (talent.system.delivery ?? []).filter(d => d in DELIVERY_COSTS);
 
-    // Build initial affordable delivery list (at cap=0 budget, only cost-0 deliveries)
-    // Re-filtering happens live via _wireListeners.
-    const allowedDeliveries = (talent.system.delivery ?? []).filter(d => d in DELIVERY_COSTS);
-    const initialDeliveries = allowedDeliveries.filter(d => (DELIVERY_COSTS[d] ?? 99) <= cap);
+    if (allowed.length === 0) {
+      ui.notifications.warn(`${talent.name}: no valid delivery options configured.`);
+      return null;
+    }
 
-    if (initialDeliveries.length === 0) {
-      // Edge case: even cap=0 should allow touch/remote/self for most Talents.
-      // If the talent's delivery list has only expensive options and cap is 0, warn.
+    const affordable = allowed.filter(d => (DELIVERY_COSTS[d] ?? 99) <= cap);
+    if (affordable.length === 0) {
       ui.notifications.warn(
         `${talent.name}: no affordable delivery options at current Mana cap (${cap}).`
       );
       return null;
     }
 
-    // Build per-delivery metadata for the template so we avoid relying on
-    // a potentially-unregistered Handlebars "includes" helper.
-    const initialDeliverySet = new Set(initialDeliveries);
-    const deliveryOptions = allowedDeliveries.map(d => ({
-      key: d,
-      cost: DELIVERY_COSTS[d] ?? 0,
-      disabled: !initialDeliverySet.has(d),
-    }));
-
-    // Compute initial slider max (first render will have effect unchecked, so no surcharge)
-    const initialDelivery = (talent.system.delivery ?? [])[0] ?? "touch";
-    const initialDeliveryCost = DELIVERY_COSTS[initialDelivery] ?? 0;
-    const initialSliderMax = Math.max(0, cap - initialDeliveryCost);
-
-    const templateData = {
-      talent,
-      cap,
-      hasDamage,
-      hasEffect,
-      allowedDeliveries,
-      deliveryOptions,
-      initialDeliveries,
-      initialSliderMax,
-    };
-
-    let content;
-    try {
-      content = await foundry.applications.handlebars.renderTemplate(
-        `modules/${MODULE_ID}/templates/talent-cast-dialog.hbs`,
-        templateData
-      );
-    } catch (err) {
-      console.error(`${MODULE_ID} | TalentCast: failed to render template`, err);
-      return null;
-    }
-
-    return new Promise((resolve) => {
-      // Idempotent finish — every exit path calls this; only the first call wins.
-      let settled = false;
-      const finish = (value) => {
-        if (settled) return;
-        settled = true;
-        resolve(value);
-      };
-
-      const dialog = new foundry.applications.api.DialogV2({
-        window: {
-          title: `Cast: ${talent.name}`,
-          resizable: true,
-        },
-        position: { width: 460, height: 420 },
-        classes: ["vce-creature-picker-app"],
-        content,
-        buttons: [
-          {
-            action: "confirm",
-            label: "Cast",
-            icon: "fas fa-brain",
-            default: true,
-            callback: () => {
-              const root = dialog.element;
-              const damageDice    = hasDamage
-                ? parseInt(root.querySelector("input[name='damageDice']")?.value ?? "0", 10)
-                : 0;
-              const includeDamage = hasDamage
-                ? (root.querySelector("input[name='includeDamage']")?.checked ?? true)
-                : false;
-              const includeEffect = hasEffect
-                ? (root.querySelector("input[name='includeEffect']")?.checked ?? false)
-                : false;
-              const delivery      = root.querySelector("select[name='delivery']")?.value
-                ?? initialDeliveries[0];
-              const isFocused     = root.querySelector("input[name='duration']:checked")?.value === "focus";
-
-              const cfg = { damageDice, includeDamage, includeEffect, delivery, isFocused };
-              const totalMana = computeTotalMana(cfg, talent);
-
-              if (totalMana > cap) {
-                ui.notifications.warn(
-                  `${talent.name}: Mana cost ${totalMana} exceeds cap ${cap}. Reduce your selection.`
-                );
-                // Throwing prevents DialogV2 from closing the dialog.
-                throw new Error(`vce-talent-cast: over cap (${totalMana}/${cap})`);
-              }
-
-              finish({ ...cfg, totalMana });
-            },
-          },
-          {
-            action: "cancel",
-            label: "Cancel",
-            icon: "fas fa-times",
-            callback: () => finish(null),
-          },
-        ],
-        rejectClose: false,
-      });
-
-      // Fallback: X button / Escape / external close all fire closeDialogV2.
-      Hooks.once("closeDialogV2", (app) => {
-        if (app === dialog) finish(null);
-      });
-
-      dialog.render({ force: true }).then(() => {
-        this._wireListeners(dialog, talent, cap, allowedDeliveries);
-      }).catch((err) => {
+    return new Promise(resolve => {
+      const dialog = new TalentCastDialog(actor, talent, cap, resolve);
+      dialog.render({ force: true }).catch(err => {
         console.error(`${MODULE_ID} | TalentCast: dialog render failed`, err);
-        finish(null);
+        resolve(null);
       });
     });
   },
 
   /**
-   * Register the renderChatMessage hook that wires talent card buttons.
-   * Call once on module ready (from vagabond-character-enhancer.mjs).
+   * Register hooks. Call once on module ready.
+   * The system chat card wires its own Apply Direct / save buttons, so we have
+   * no renderChatMessage handler to register here anymore.
    */
   registerHooks() {
-    Hooks.on("renderChatMessage", (message, [html]) => {
-      const card = html.querySelector?.(".vce-talent-card");
-      if (!card) return;
-      _wireCardButtons(html, message);
-    });
+    // No custom renderChatMessage hook needed — system card handles everything.
   },
 
   /**
-   * Execute a Talent cast: roll check + damage, create chat card.
+   * Execute a Talent cast using VagabondChatCard.spellCast for the chat card.
    *
    * @param {Actor}   actor   — the Psychic actor casting
    * @param {Item}    talent  — the Talent item being cast
-   * @param {object}  config  — result from openDialog: { damageDice, includeDamage,
-   *                             includeEffect, delivery, isFocused, totalMana }
+   * @param {object}  config  — result from openDialog:
+   *                           { damageDice, includeDamage, includeEffect,
+   *                             delivery, isFocused, totalMana }
    */
   async executeCast(actor, talent, config) {
     if (!actor || !talent || !config) return;
 
     const { damageDice, includeDamage, includeEffect, isFocused } = config;
 
-    // ── 1. Cast check (Mysticism / Awareness) ──────────────────────────────
-    // Skip if no hostile targets are selected (auto-success for self/willing targets).
-    // RAW: Cast Checks only required vs unwilling targets (hostile disposition).
-    const unwillingTargets = Array.from(game.user.targets).filter(t =>
-      t.document?.disposition === CONST.TOKEN_DISPOSITIONS.HOSTILE
+    // ── 1. Build duck-typed fake spell ──────────────────────────────────────
+    //
+    // causedStatuses shape mirrors a real Vagabond spell entry:
+    //   { statusId, requiresDamage, saveType, duration, tickDamageEnabled,
+    //     damageOnTick, damageType }
+    // For Talents, if effect is present we add a stub entry; the system uses
+    // this to highlight save buttons on the chat card.
+    //
+    // We use "will" as the default saveType for Psychic effects (mental origin).
+    // statusId is the effect string (lowercase, system-key form).
+    const effectName    = includeEffect && talent.system.effect ? talent.system.effect : null;
+    const causedStatuses = effectName
+      ? [{
+          statusId:          effectName.toLowerCase().replace(/\s+/g, "-"),
+          requiresDamage:    includeDamage,
+          saveType:          "will",
+          duration:          "",
+          tickDamageEnabled: false,
+          damageOnTick:      "",
+          damageType:        talent.system.damageType ?? "-",
+        }]
+      : [];
+
+    const fakeSpell = {
+      id:   talent.id,
+      name: talent.name,
+      img:  talent.img,
+      type: "spell",
+      system: {
+        damageType:      includeDamage ? (talent.system.damageType || "-") : "-",
+        damageDieSize:   null,    // use actor default (6) like real spells
+        description:     talent.system.description ?? "",
+        crit:            null,
+        formatDescription: (html) => html ?? "",
+        causedStatuses,
+        critCausedStatuses: [],
+        currentDamage:   null,   // not applicable
+      },
+    };
+
+    // ── 2. Cast check (Mysticism / Awareness) — only vs hostile targets ─────
+    const unwillingTargets = Array.from(game.user.targets).filter(
+      t => t.document?.disposition === CONST.TOKEN_DISPOSITIONS.HOSTILE
     );
     const requiresCastCheck = unwillingTargets.length > 0;
 
-    let castRoll = null;
-    let success = true;
-    let critical = false;
-    let difficulty = null;
+    let castRoll  = null;
+    let isSuccess = true;
+    let isCritical = false;
+    let difficulty = 0;
 
     if (requiresCastCheck) {
       const awarenessStat = actor.system?.stats?.awareness?.value ?? 2;
-      const trained = actor.system?.skills?.mysticism?.trained ?? false;
+      const trained       = actor.system?.skills?.mysticism?.trained ?? false;
       difficulty = 20 - (trained ? awarenessStat * 2 : awarenessStat);
 
-      castRoll = await new Roll("1d20").evaluate();
-      const natural = castRoll.terms?.[0]?.results?.[0]?.result ?? castRoll.total;
-      critical = natural === 20;
-      success = critical || castRoll.total >= difficulty;
+      castRoll   = await new Roll("1d20").evaluate();
+      const nat  = castRoll.terms?.[0]?.results?.[0]?.result ?? castRoll.total;
+      isCritical = nat === 20;
+      isSuccess  = isCritical || castRoll.total >= difficulty;
     }
 
-    // ── 2. Damage roll ──────────────────────────────────────────────────────
-    const hasDamage = !!talent.system.damage;
-    const doRollDamage = includeDamage && hasDamage;
-
+    // ── 3. Roll damage if applicable ────────────────────────────────────────
     let damageRoll = null;
-    if (doRollDamage) {
-      const baseDice = 1;
-      const extraDice = damageDice ?? 0;
-      let totalDice = baseDice + extraDice;
-
-      // Universal spell damage bonus dice (string like "1d6") — append to formula.
-      const universalDice = (actor.system?.universalSpellDamageDice ?? "").toString().trim();
-      let formula = `${totalDice}d6`;
-      if (universalDice) {
-        const normalized = /^d\d+/i.test(universalDice) ? `1${universalDice}` : universalDice;
-        formula += ` + ${normalized}`;
+    if (includeDamage && damageDice > 0) {
+      try {
+        const { VagabondDamageHelper } = await import(
+          "/systems/vagabond/module/helpers/damage-helper.mjs"
+        );
+        const targetsAtRollTime = Array.from(game.user.targets).map(t => ({
+          tokenId: t.id, actorId: t.actor?.id, name: t.actor?.name, img: t.actor?.img,
+        }));
+        damageRoll = await VagabondDamageHelper.rollSpellDamage(
+          actor,
+          fakeSpell,
+          { damageDice, deliveryType: config.delivery },
+          isCritical,
+          "awareness",
+          targetsAtRollTime
+        );
+      } catch (err) {
+        console.warn(`${MODULE_ID} | TalentCast: VagabondDamageHelper failed, falling back`, err);
+        const formula = `${damageDice}d6`;
+        damageRoll = await new Roll(formula).evaluate();
       }
-
-      // Universal flat damage bonus (number).
-      const universalBonus = actor.system?.universalSpellDamageBonus ?? 0;
-      if (universalBonus) {
-        formula += ` + ${universalBonus}`;
-      }
-
-      // On a critical, add the casting stat (Awareness) as bonus damage.
-      if (critical) {
-        const awarenessStat = actor.system?.stats?.awareness?.value ?? 2;
-        formula += ` + ${awarenessStat}`;
-      }
-
-      damageRoll = await new Roll(formula).evaluate();
     }
 
-    // ── 3. Effect determination ────────────────────────────────────────────
-    const hasEffect = !!talent.system.effect;
-    const doEffect = includeEffect && hasEffect;
-    const effectName = doEffect ? (talent.system.effect ?? null) : null;
+    // ── 4. Assemble spellCastResult + call spellCast ─────────────────────────
+    const targetsAtRollTime = Array.from(game.user.targets).map(t => ({
+      tokenId: t.id, actorId: t.actor?.id, name: t.actor?.name, img: t.actor?.img,
+    }));
 
-    // ── 4. Render the chat card ────────────────────────────────────────────
-    const templateData = {
-      talent: { name: talent.name, img: talent.img },
-      actorName: actor.name,
-      castRoll,
-      damageRoll,
+    const damageCost   = includeDamage ? Math.max(0, damageDice - 1) : 0;
+    const fxCost       = (includeDamage && includeEffect) ? 1 : 0;
+    const deliveryCost = DELIVERY_COSTS[config.delivery] ?? 0;
+
+    const spellCastResult = {
+      roll:         castRoll,
       difficulty,
-      success,
-      critical,
-      effectName,
-      damageType: talent.system.damageType || null,
-      hasDamage: !!damageRoll,
-      hasEffect: !!effectName,
+      isSuccess,
+      isCritical,
+      manaSkill:    { label: "Mysticism", stat: "awareness" },
+      manaSkillKey: "mysticism",
+      costs: {
+        totalCost:            config.totalMana,
+        damageCost,
+        fxCost,
+        deliveryBaseCost:     deliveryCost,
+        deliveryIncreaseCost: 0,
+      },
+      deliveryText: capitalize(config.delivery),
+      spellState: {
+        damageDice:   includeDamage ? damageDice : 0,
+        deliveryType: config.delivery,
+      },
     };
 
-    let content;
-    try {
-      content = await foundry.applications.handlebars.renderTemplate(
-        `modules/${MODULE_ID}/templates/talent-chat-card.hbs`,
-        templateData
-      );
-    } catch (err) {
-      console.error(`${MODULE_ID} | TalentCast.executeCast: template render failed`, err);
-      return;
-    }
+    const { VagabondChatCard } = await import(
+      "/systems/vagabond/module/helpers/chat-card.mjs"
+    );
 
-    const rolls = [castRoll, damageRoll].filter(Boolean);
+    await VagabondChatCard.spellCast(
+      actor, fakeSpell, spellCastResult, damageRoll, targetsAtRollTime
+    );
 
-    await ChatMessage.create({
-      user: game.user.id,
-      speaker: ChatMessage.getSpeaker({ actor }),
-      content,
-      rolls,
-      type: CONST.CHAT_MESSAGE_STYLES?.OTHER ?? 0,
-    });
-
-    // ── 5. Focus (Task 11 — not yet implemented) ───────────────────────────
-    // isFocused is captured from the dialog but focus toggling is deferred
-    // to Task 11 (TalentBuffs). No action taken here.
+    // ── 5. Focus (Task 11 — not yet implemented) ────────────────────────────
     if (isFocused) {
-      console.log(`${MODULE_ID} | TalentCast | ${talent.name}: isFocused=true — focus wiring pending Task 11.`);
+      console.log(
+        `${MODULE_ID} | TalentCast | ${talent.name}: isFocused=true — focus wiring pending Task 11.`
+      );
     }
-  },
-
-  /**
-   * Wire live interactivity: counter update + delivery re-filter.
-   * Called once after render. All changes flow through _update().
-   */
-  _wireListeners(dialog, talent, cap, allowedDeliveries) {
-    const root = dialog.element;
-    if (!root) return;
-
-    const hasDamage = !!talent.system.damage;
-    const hasEffect = !!talent.system.effect;
-
-    const counterEl      = root.querySelector(".vce-tc-counter");
-    const diceSlider     = root.querySelector("input[name='damageDice']");
-    const diceValDisplay = root.querySelector(".vce-tc-dice-val");
-    const includeDmgCb   = root.querySelector("input[name='includeDamage']");
-    const includeEffCb   = root.querySelector("input[name='includeEffect']");
-    const deliverySelect = root.querySelector("select[name='delivery']");
-
-    const update = () => {
-      const damageDice    = hasDamage && diceSlider    ? parseInt(diceSlider.value, 10) : 0;
-      const includeDamage = hasDamage && includeDmgCb  ? includeDmgCb.checked          : false;
-      const includeEffect = hasEffect && includeEffCb  ? includeEffCb.checked          : false;
-      const delivery      = deliverySelect             ? deliverySelect.value           : (allowedDeliveries[0] ?? "touch");
-
-      if (diceValDisplay) diceValDisplay.textContent = `+${damageDice}d6`;
-
-      const cfg = { damageDice, includeDamage, includeEffect, delivery };
-      const spent = computeTotalMana(cfg, talent);
-
-      if (counterEl) {
-        counterEl.textContent = `Spent: ${spent} / ${cap}`;
-        counterEl.classList.toggle("vce-tc-over-cap", spent > cap);
-      }
-
-      // Re-filter delivery dropdown options: grey out / disable those no longer affordable.
-      // Remaining budget for delivery = cap - (non-delivery costs).
-      if (deliverySelect) {
-        const nonDeliveryCost = spent - (DELIVERY_COSTS[delivery] ?? 0);
-        const deliveryBudget  = cap - nonDeliveryCost;
-        Array.from(deliverySelect.options).forEach(opt => {
-          const cost = DELIVERY_COSTS[opt.value] ?? 99;
-          opt.disabled = cost > deliveryBudget;
-          // If the currently-selected option became unaffordable, auto-select cheapest
-          if (opt.selected && cost > deliveryBudget) {
-            const cheapest = allowedDeliveries.find(d => (DELIVERY_COSTS[d] ?? 99) <= deliveryBudget);
-            if (cheapest) {
-              deliverySelect.value = cheapest;
-              // Re-trigger update synchronously with the corrected value
-              update();
-              return;
-            }
-          }
-        });
-      }
-
-      // Fix 1: Clamp dice slider max to the remaining budget after effect and delivery costs.
-      // nonDeliveryCost already accounts for surcharge+damageDice; remove damageDice from it
-      // to get the cost of everything except extra dice.
-      if (diceSlider) {
-        const effectSurcharge  = (includeDamage && includeEffect) ? 1 : 0;
-        const deliveryCost     = DELIVERY_COSTS[delivery] ?? 0;
-        const remainingForDice = Math.max(0, cap - effectSurcharge - deliveryCost);
-        diceSlider.max = String(remainingForDice);
-        if (parseInt(diceSlider.value, 10) > remainingForDice) {
-          diceSlider.value = String(remainingForDice);
-        }
-      }
-
-      // Fix 2: Disable effect checkbox when budget can't cover the +1 surcharge
-      // (surcharge fires only when BOTH damage and effect are included).
-      if (includeEffCb) {
-        const deliveryCost             = DELIVERY_COSTS[delivery] ?? 0;
-        const costWithoutEffSurcharge  = damageDice + deliveryCost; // no surcharge
-        const wouldCostExtra           = includeDamage;             // surcharge only when damage is on
-        const canAffordSurcharge       = !wouldCostExtra || (cap - costWithoutEffSurcharge >= 1);
-        if (!canAffordSurcharge) {
-          includeEffCb.checked  = false;
-          includeEffCb.disabled = true;
-        } else {
-          includeEffCb.disabled = false;
-        }
-      }
-
-      // Disable/grey the damage slider if includeDamage is unchecked
-      if (diceSlider) {
-        diceSlider.disabled = !includeDamage;
-        if (!includeDamage && diceSlider.value !== "0") {
-          diceSlider.value = "0";
-        }
-      }
-    };
-
-    // Initial sync
-    update();
-
-    // Wire all inputs
-    [includeDmgCb, includeEffCb].forEach(el => el?.addEventListener("change", update));
-    diceSlider?.addEventListener("input", update);
-    deliverySelect?.addEventListener("change", update);
   },
 };
