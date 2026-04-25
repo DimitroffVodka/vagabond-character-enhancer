@@ -1,0 +1,56 @@
+<div class="vce-talent-card">
+  <header class="vce-tc-card-header">
+    <img src="{{talent.img}}" alt="{{talent.name}}" class="vce-tc-card-img" />
+    <div class="vce-tc-card-header-text">
+      <h3 class="vce-tc-card-title">{{talent.name}}</h3>
+      <p class="vce-tc-card-sub">{{actorName}} casts {{talent.name}}</p>
+    </div>
+  </header>
+
+  {{#if castRoll}}
+  <div class="vce-tc-card-roll">
+    <span class="vce-tc-card-roll-label">Mysticism Check:</span>
+    <span class="vce-tc-card-roll-total{{#if critical}} critical{{else}}{{#if success}} success{{/if}}{{/if}}">{{castRoll.total}}</span>
+    <span class="vce-tc-card-roll-vs">vs {{difficulty}}</span>
+    {{#if critical}}
+      <span class="vce-tc-card-result critical">Critical!</span>
+    {{else if success}}
+      <span class="vce-tc-card-result success">Success</span>
+    {{else}}
+      <span class="vce-tc-card-result fail">Fail</span>
+    {{/if}}
+  </div>
+  {{/if}}
+
+  {{#if damageRoll}}
+  <div class="vce-tc-card-damage">
+    <i class="fas fa-burst"></i>
+    <strong class="vce-tc-card-damage-total" data-damage-amount="{{damageRoll.total}}">{{damageRoll.total}}</strong>
+    <span class="vce-tc-card-damage-formula">{{damageRoll.formula}}</span>
+    {{#if damageType}}<span class="vce-tc-card-damage-type">{{damageType}}</span>{{/if}}
+  </div>
+  {{/if}}
+
+  {{#if effectName}}
+  <div class="vce-tc-card-effect">
+    Effect: <strong>{{effectName}}</strong>
+  </div>
+  {{/if}}
+
+  {{#if hasDamage}}
+  <div class="vce-tc-card-actions">
+    <button type="button" class="vce-tc-apply-damage">
+      <i class="fas fa-swords"></i> Apply Damage
+    </button>
+  </div>
+  {{/if}}
+
+  {{#if hasEffect}}
+  <div class="vce-tc-saves">
+    <span class="vce-tc-saves-label">Trigger Save:</span>
+    <button type="button" class="vce-tc-save" data-save="reflex">Reflex</button>
+    <button type="button" class="vce-tc-save" data-save="endure">Endure</button>
+    <button type="button" class="vce-tc-save" data-save="will">Will</button>
+  </div>
+  {{/if}}
+</div>

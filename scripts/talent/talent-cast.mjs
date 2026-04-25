@@ -66,6 +66,53 @@ function computeTotalMana(config, talent) {
   return total;
 }
 
+// ── executeCast helpers ────────────────────────────────────────────────────
+
+/**
+ * Wire interactive buttons on a rendered talent chat card.
+ * Called from the renderChatMessage hook.
+ */
+function _wireCardButtons(html, message) {
+  // Apply Damage — deals the stored damage to selected tokens.
+  html.querySelectorAll(".vce-tc-apply-damage").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const totalEl = html.querySelector(".vce-tc-card-damage-total");
+      const amount = parseInt(totalEl?.dataset?.damageAmount ?? "0", 10);
+      if (!amount || amount <= 0) {
+        ui.notifications.warn("No damage to apply.");
+        return;
+      }
+      const targets = game.user.targets;
+      if (!targets.size) {
+        ui.notifications.warn("Select token targets to apply damage.");
+        return;
+      }
+      for (const t of targets) {
+        const actor = t.actor;
+        if (!actor) continue;
+        const armor = actor.system?.armor?.value ?? 0;
+        const reduced = Math.max(0, amount - armor);
+        const currentHp = actor.system?.attributes?.hp?.value ?? 0;
+        await actor.update({ "system.attributes.hp.value": currentHp - reduced });
+      }
+      ui.notifications.info(`Applied ${amount} damage to ${targets.size} target(s).`);
+    });
+  });
+
+  // Save buttons — stub: prompts GM to call for the named save.
+  // Full automation (auto-rolling saves for targets) is out of scope for Task 8.
+  html.querySelectorAll(".vce-tc-save").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const saveType = btn.dataset.save ?? "will";
+      ui.notifications.info(
+        `Call for a ${saveType.charAt(0).toUpperCase() + saveType.slice(1)} save against the effect. Automated save rolling is not yet implemented.`
+      );
+    });
+  });
+}
+
+// ── TalentCast object ─────────────────────────────────────────────────────
+
 export const TalentCast = {
   /**
    * Derive the virtual Mana cap for this actor's current Psychic level.
@@ -215,6 +262,137 @@ export const TalentCast = {
         finish(null);
       });
     });
+  },
+
+  /**
+   * Register the renderChatMessage hook that wires talent card buttons.
+   * Call once on module ready (from vagabond-character-enhancer.mjs).
+   */
+  registerHooks() {
+    Hooks.on("renderChatMessage", (message, [html]) => {
+      const card = html.querySelector?.(".vce-talent-card");
+      if (!card) return;
+      _wireCardButtons(html, message);
+    });
+  },
+
+  /**
+   * Execute a Talent cast: roll check + damage, create chat card.
+   *
+   * @param {Actor}   actor   — the Psychic actor casting
+   * @param {Item}    talent  — the Talent item being cast
+   * @param {object}  config  — result from openDialog: { damageDice, includeDamage,
+   *                             includeEffect, delivery, isFocused, totalMana }
+   */
+  async executeCast(actor, talent, config) {
+    if (!actor || !talent || !config) return;
+
+    const { damageDice, includeDamage, includeEffect, isFocused } = config;
+
+    // ── 1. Cast check (Mysticism / Awareness) ──────────────────────────────
+    // Skip if no hostile targets are selected (auto-success for self/willing targets).
+    // RAW: Cast Checks only required vs unwilling targets (hostile disposition).
+    const unwillingTargets = Array.from(game.user.targets).filter(t =>
+      t.document?.disposition === CONST.TOKEN_DISPOSITIONS.HOSTILE
+    );
+    const requiresCastCheck = unwillingTargets.length > 0;
+
+    let castRoll = null;
+    let success = true;
+    let critical = false;
+    let difficulty = null;
+
+    if (requiresCastCheck) {
+      const awarenessStat = actor.system?.stats?.awareness?.value ?? 2;
+      const trained = actor.system?.skills?.mysticism?.trained ?? false;
+      difficulty = 20 - (trained ? awarenessStat * 2 : awarenessStat);
+
+      castRoll = await new Roll("1d20").evaluate();
+      const natural = castRoll.terms?.[0]?.results?.[0]?.result ?? castRoll.total;
+      critical = natural === 20;
+      success = critical || castRoll.total >= difficulty;
+    }
+
+    // ── 2. Damage roll ──────────────────────────────────────────────────────
+    const hasDamage = !!talent.system.damage;
+    const doRollDamage = includeDamage && hasDamage;
+
+    let damageRoll = null;
+    if (doRollDamage) {
+      const baseDice = 1;
+      const extraDice = damageDice ?? 0;
+      let totalDice = baseDice + extraDice;
+
+      // Universal spell damage bonus dice (string like "1d6") — append to formula.
+      const universalDice = (actor.system?.universalSpellDamageDice ?? "").toString().trim();
+      let formula = `${totalDice}d6`;
+      if (universalDice) {
+        const normalized = /^d\d+/i.test(universalDice) ? `1${universalDice}` : universalDice;
+        formula += ` + ${normalized}`;
+      }
+
+      // Universal flat damage bonus (number).
+      const universalBonus = actor.system?.universalSpellDamageBonus ?? 0;
+      if (universalBonus) {
+        formula += ` + ${universalBonus}`;
+      }
+
+      // On a critical, add the casting stat (Awareness) as bonus damage.
+      if (critical) {
+        const awarenessStat = actor.system?.stats?.awareness?.value ?? 2;
+        formula += ` + ${awarenessStat}`;
+      }
+
+      damageRoll = await new Roll(formula).evaluate();
+    }
+
+    // ── 3. Effect determination ────────────────────────────────────────────
+    const hasEffect = !!talent.system.effect;
+    const doEffect = includeEffect && hasEffect;
+    const effectName = doEffect ? (talent.system.effect ?? null) : null;
+
+    // ── 4. Render the chat card ────────────────────────────────────────────
+    const templateData = {
+      talent: { name: talent.name, img: talent.img },
+      actorName: actor.name,
+      castRoll,
+      damageRoll,
+      difficulty,
+      success,
+      critical,
+      effectName,
+      damageType: talent.system.damageType || null,
+      hasDamage: !!damageRoll,
+      hasEffect: !!effectName,
+    };
+
+    let content;
+    try {
+      content = await foundry.applications.handlebars.renderTemplate(
+        `modules/${MODULE_ID}/templates/talent-chat-card.hbs`,
+        templateData
+      );
+    } catch (err) {
+      console.error(`${MODULE_ID} | TalentCast.executeCast: template render failed`, err);
+      return;
+    }
+
+    const rolls = [castRoll, damageRoll].filter(Boolean);
+
+    await ChatMessage.create({
+      user: game.user.id,
+      speaker: ChatMessage.getSpeaker({ actor }),
+      content,
+      rolls,
+      type: CONST.CHAT_MESSAGE_STYLES?.OTHER ?? 0,
+    });
+
+    // ── 5. Focus (Task 11 — not yet implemented) ───────────────────────────
+    // isFocused is captured from the dialog but focus toggling is deferred
+    // to Task 11 (TalentBuffs). No action taken here.
+    if (isFocused) {
+      console.log(`${MODULE_ID} | TalentCast | ${talent.name}: isFocused=true — focus wiring pending Task 11.`);
+    }
   },
 
   /**

@@ -11,6 +11,7 @@
 
 import { MODULE_ID, log } from "../utils.mjs";
 import { TALENT_TYPE } from "./talent-data-model.mjs";
+import { TalentCast } from "./talent-cast.mjs";
 
 export const TalentsTab = {
   init() {
@@ -165,8 +166,8 @@ export const TalentsTab = {
       t.addEventListener("click", () => { app._vceActiveTab = t.dataset.tab; });
     });
 
-    // Wire stub Cast / Focus buttons (Phase 5 + 6 replace these).
-    this._bindStubEvents(section);
+    // Wire Cast / Focus buttons.
+    this._bindEvents(section, actor);
     } finally {
       app._vceInjectingTalents = false;
     }
@@ -199,40 +200,44 @@ export const TalentsTab = {
       `modules/${MODULE_ID}/templates/talents-tab.hbs`, ctx
     );
     panel.innerHTML = html;
-    this._bindStubEvents(panel);
+    this._bindEvents(panel, actor);
   },
 
   // ── Event binding ─────────────────────────────────────────────────────────
 
-  _bindStubEvents(panel) {
-    // STUB: Cast button — Phase 5 (talent-cast.mjs) replaces this handler.
+  _bindEvents(panel, actor) {
+    // Cast button — opens the cast dialog then resolves the cast.
     panel.querySelectorAll("[data-action='cast-talent']").forEach(btn => {
-      btn.addEventListener("click", (e) => {
+      btn.addEventListener("click", async (e) => {
         const talentId = e.currentTarget.dataset.talentId;
-        log("TalentsTab", `[STUB] Cast clicked for talent ${talentId}`);
-        console.log(`VCE | TalentsTab | Cast stub — talentId: ${talentId}`);
+        const talent = actor.items.get(talentId);
+        if (!talent) {
+          log("TalentsTab", `Cast: talent ${talentId} not found on actor`);
+          return;
+        }
+        const config = await TalentCast.openDialog(actor, talent);
+        if (!config) return;
+        await TalentCast.executeCast(actor, talent, config);
       });
     });
 
-    // STUB: Focus toggle — Phase 6 (talent-buffs.mjs) replaces this handler.
+    // STUB: Focus toggle — Task 11 (talent-buffs.mjs) wires this.
     panel.querySelectorAll("[data-action='focus-talent']").forEach(btn => {
       btn.addEventListener("click", (e) => {
         const talentId = e.currentTarget.dataset.talentId;
-        log("TalentsTab", `[STUB] Focus clicked for talent ${talentId}`);
-        console.log(`VCE | TalentsTab | Focus stub — talentId: ${talentId}`);
+        log("TalentsTab", `[STUB] Focus clicked for talent ${talentId} — Task 11 pending`);
+        ui.notifications.info("Focus toggling not yet implemented (Task 11).");
       });
     });
 
-    // STUB: Pick Talents — Phase 5 wires this to TalentPickDialog.
+    // STUB: Pick Talents — Task 4 wires this to TalentPickDialog.
     panel.querySelector("[data-action='pick-talents']")?.addEventListener("click", () => {
-      log("TalentsTab", "[STUB] Pick Talents clicked");
-      console.log("VCE | TalentsTab | Pick Talents stub");
+      log("TalentsTab", "[STUB] Pick Talents clicked — Task 4 pending");
     });
 
-    // STUB: Transcendence — Phase 7 wires this to TalentTranscendenceDialog.
+    // STUB: Transcendence — Task 12 wires this to TalentTranscendenceDialog.
     panel.querySelector("[data-action='transcendence']")?.addEventListener("click", () => {
-      log("TalentsTab", "[STUB] Transcendence clicked");
-      console.log("VCE | TalentsTab | Transcendence stub");
+      log("TalentsTab", "[STUB] Transcendence clicked — Task 12 pending");
     });
   }
 };

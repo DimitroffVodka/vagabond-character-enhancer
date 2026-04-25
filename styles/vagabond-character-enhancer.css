@@ -2615,3 +2615,206 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   color: var(--vce-text, #e0e0e0);
   cursor: pointer;
 }
+
+/* -------------------------------------------- */
+/*  Talent Chat Card                             */
+/* -------------------------------------------- */
+
+.vce-talent-card {
+  font-family: "Paradigm", serif;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+.vce-tc-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--vce-border-subtle, rgba(255,255,255,0.1));
+  padding-bottom: 6px;
+}
+
+.vce-tc-card-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  border: 1px solid var(--vce-accent-dim, #a08030);
+  object-fit: cover;
+}
+
+.vce-tc-card-header-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.vce-tc-card-title {
+  margin: 0;
+  font-size: 14px;
+  color: var(--vce-accent, #d4a843);
+  font-weight: bold;
+}
+
+.vce-tc-card-sub {
+  margin: 0;
+  font-size: 11px;
+  color: var(--vce-text-dim, #aaa);
+}
+
+.vce-tc-card-roll {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--vce-text, #e0e0e0);
+  padding: 4px 6px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 3px;
+}
+
+.vce-tc-card-roll-label {
+  color: var(--vce-text-dim, #aaa);
+}
+
+.vce-tc-card-roll-total {
+  font-size: 16px;
+  font-weight: bold;
+  color: var(--vce-text, #e0e0e0);
+}
+
+.vce-tc-card-roll-total.success {
+  color: #7bcd7b;
+}
+
+.vce-tc-card-roll-total.critical {
+  color: var(--vce-accent, #d4a843);
+}
+
+.vce-tc-card-roll-vs {
+  color: var(--vce-text-dim, #aaa);
+  font-size: 11px;
+}
+
+.vce-tc-card-result {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.vce-tc-card-result.success {
+  background: rgba(80, 160, 80, 0.3);
+  color: #7bcd7b;
+}
+
+.vce-tc-card-result.critical {
+  background: rgba(180, 140, 0, 0.35);
+  color: var(--vce-accent, #d4a843);
+}
+
+.vce-tc-card-result.fail {
+  background: rgba(160, 50, 50, 0.3);
+  color: var(--vce-danger-text, #ff8888);
+}
+
+.vce-tc-card-damage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: rgba(180, 60, 60, 0.15);
+  border: 1px solid rgba(180, 60, 60, 0.3);
+  border-radius: 3px;
+  font-size: 13px;
+  color: var(--vce-text, #e0e0e0);
+}
+
+.vce-tc-card-damage i {
+  color: #e07070;
+  font-size: 12px;
+}
+
+.vce-tc-card-damage-total {
+  font-size: 18px;
+  color: #f0a0a0;
+}
+
+.vce-tc-card-damage-formula {
+  font-size: 11px;
+  color: var(--vce-text-dim, #aaa);
+}
+
+.vce-tc-card-damage-type {
+  margin-left: auto;
+  font-size: 10px;
+  background: rgba(0,0,0,0.5);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--vce-text-dim, #aaa);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vce-tc-card-effect {
+  font-size: 12px;
+  color: var(--vce-text, #e0e0e0);
+  padding: 3px 6px;
+  background: rgba(100, 60, 150, 0.2);
+  border: 1px solid rgba(100, 60, 150, 0.3);
+  border-radius: 3px;
+}
+
+.vce-tc-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.vce-tc-apply-damage {
+  flex: 1;
+  padding: 4px 8px;
+  font-family: "Paradigm", serif;
+  font-size: 12px;
+  background: rgba(160, 50, 50, 0.5);
+  border: 1px solid rgba(200, 80, 80, 0.5);
+  border-radius: 3px;
+  color: #ffd0d0;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.vce-tc-apply-damage:hover {
+  background: rgba(180, 60, 60, 0.75);
+}
+
+.vce-tc-saves {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.vce-tc-saves-label {
+  font-size: 11px;
+  color: var(--vce-text-dim, #aaa);
+  margin-right: 2px;
+}
+
+.vce-tc-save {
+  padding: 3px 10px;
+  font-family: "Paradigm", serif;
+  font-size: 11px;
+  background: rgba(60, 80, 140, 0.4);
+  border: 1px solid rgba(80, 110, 200, 0.4);
+  border-radius: 3px;
+  color: #b0c0ff;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.vce-tc-save:hover {
+  background: rgba(70, 100, 180, 0.65);
+}

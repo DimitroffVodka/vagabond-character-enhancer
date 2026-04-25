@@ -1522,6 +1522,7 @@ Hooks.once("ready", async () => {
   FamiliarFeatures.registerHooks();
   CompanionManagerTab.init();
   TalentsTab.init();
+  TalentCast.registerHooks();
   CompanionTerminationManager.init();
   GatherCompanions.init();
   // Phase 2: spell adapters
