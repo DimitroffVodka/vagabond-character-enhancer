@@ -129,6 +129,55 @@ const PSYCHIC_PICK_TIERS = [
 ];
 
 /**
+ * Defensive backfill: copies causedStatuses / critCausedStatuses /
+ * damageDieSize from each Talent's source spell onto the embedded talent
+ * item, so the system's status-application path can read them.
+ *
+ * Why this exists: Talent items can end up with empty status data in two
+ * cases:
+ *   1. They were created on the actor BEFORE the schema extension landed
+ *      (schema gained the fields later — old embedded items don't have
+ *      them populated).
+ *   2. The compendium migration ran before Foundry F5'd, so writes were
+ *      against an old schema and got silently stripped.
+ *
+ * Idempotent: only updates talents where aliasOf is set AND causedStatuses
+ * is currently empty.
+ *
+ * @param {Actor} actor
+ */
+async function _backfillTalentStatusData(actor) {
+  const TALENT_TYPE = `${MODULE_ID}.talent`;
+  const stale = actor.items.filter(i =>
+    i.type === TALENT_TYPE
+    && (i.system.aliasOf ?? "").trim() !== ""
+    && !(i.system.causedStatuses?.length > 0)
+  );
+  if (stale.length === 0) return;
+
+  const spellPack = game.packs.get("vagabond.spells");
+  if (!spellPack) return;
+  const sourceSpells = await spellPack.getDocuments();
+
+  for (const t of stale) {
+    const aliasName = t.system.aliasOf.trim().toLowerCase();
+    const src = sourceSpells.find(s => s.name.toLowerCase() === aliasName);
+    if (!src) continue;
+    const cs  = foundry.utils.deepClone(src.system.causedStatuses ?? []);
+    const ccs = foundry.utils.deepClone(src.system.critCausedStatuses ?? []);
+    // Only write if the source actually has data — avoids no-op writes
+    // for talents whose source spell carries no statuses (e.g., Levitate).
+    if (cs.length === 0 && ccs.length === 0 && src.system.damageDieSize == null) continue;
+    await t.update({
+      "system.causedStatuses":     cs,
+      "system.critCausedStatuses": ccs,
+      "system.damageDieSize":      src.system.damageDieSize ?? null,
+    });
+    log("TalentBackfill", `Backfilled status data for ${t.name} on ${actor.name} from ${src.name}`);
+  }
+}
+
+/**
  * Check whether the given actor needs to pick Talents for any outstanding
  * Psychic level tier, and if so open the pick dialog sequentially.
  *
@@ -143,6 +192,9 @@ async function _checkPsychicTalentPicks(actor) {
   // Guard: actor must have a Psychic class item.
   const psychic = actor.items.find(i => i.type === "class" && i.name === "Psychic");
   if (!psychic) return;
+
+  // Defensive backfill before any pick dialog or cast UX runs.
+  await _backfillTalentStatusData(actor);
 
   // Per-actor re-entrancy lock.
   if (_psychicPickLocks.has(actor.id)) return;
