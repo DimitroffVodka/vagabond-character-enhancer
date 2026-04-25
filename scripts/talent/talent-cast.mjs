@@ -527,13 +527,14 @@ export const TalentCast = {
     }
 
     // ── 4. Assemble spellCastResult + call spellCast ─────────────────────────
+    // Match the system's _resolveStoredTargets shape EXACTLY — see
+    // damage-helper.mjs:150-156. Source from the TOKEN, not the actor.
     const targetsAtRollTime = Array.from(game.user.targets).map(t => ({
-      sceneId: t.scene?.id ?? t.document?.parent?.id ?? canvas.scene?.id,
-      tokenId: t.id,
-      actorId: t.actor?.id,
-      actorName: t.actor?.name,
-      name: t.actor?.name,
-      img: t.actor?.img,
+      tokenId:   t.id,
+      sceneId:   t.scene?.id ?? t.document?.parent?.id ?? canvas.scene?.id,
+      actorId:   t.actor?.id,
+      actorName: t.name ?? t.document?.name ?? t.actor?.name,
+      actorImg:  t.document?.texture?.src ?? t.actor?.img,
     }));
 
     const damageCost   = includeDamage ? Math.max(0, damageDice - 1) : 0;
