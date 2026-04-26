@@ -2,7 +2,7 @@
   "id": "vagabond-character-enhancer",
   "title": "Vagabond Character Enhancer",
   "description": "Automates ancestry traits, class features, and perks for the Vagabond RPG system. Detects class features from compendium data and applies managed Active Effects for gameplay automation.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "authors": [
     {
       "name": "DimitroffVodka"

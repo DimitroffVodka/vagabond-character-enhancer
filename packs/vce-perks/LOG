@@ -1,3 +1,8 @@
 2026/04/25-09:07:48.781 3d1c Recovering log #260
 2026/04/25-09:07:48.783 3d1c Delete type=0 #260
 2026/04/25-09:07:48.783 3d1c Delete type=3 #258
+2026/04/25-22:20:09.531 aa3c Level-0 table #265: started
+2026/04/25-22:20:09.531 aa3c Level-0 table #265: 0 bytes OK
+2026/04/25-22:20:09.532 aa3c Delete type=0 #263
+2026/04/25-22:20:09.536 aa3c Manual compaction at level-0 from '!items!6D1YgIAqrN4EAPRf' @ 72057594037927935 : 1 .. '!items!6D1YgIAqrN4EAPRf' @ 0 : 0; will stop at (end)
+2026/04/25-22:20:09.537 aa3c Manual compaction at level-1 from '!items!6D1YgIAqrN4EAPRf' @ 72057594037927935 : 1 .. '!items!6D1YgIAqrN4EAPRf' @ 0 : 0; will stop at (end)

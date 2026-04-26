@@ -1,3 +1,8 @@
 2026/04/25-09:07:48.776 5b20 Recovering log #262
 2026/04/25-09:07:48.778 5b20 Delete type=0 #262
 2026/04/25-09:07:48.778 5b20 Delete type=3 #260
+2026/04/25-22:20:09.526 aa3c Level-0 table #269: started
+2026/04/25-22:20:09.526 aa3c Level-0 table #269: 0 bytes OK
+2026/04/25-22:20:09.527 aa3c Delete type=0 #267
+2026/04/25-22:20:09.527 aa3c Manual compaction at level-0 from '!items!0xeUWuj4Z7r1UZl7' @ 72057594037927935 : 1 .. '!items.effects!kZYvSdrdLYjhiO6q.xMW83wigY3ur6QFd' @ 0 : 0; will stop at (end)
+2026/04/25-22:20:09.527 aa3c Manual compaction at level-1 from '!items!0xeUWuj4Z7r1UZl7' @ 72057594037927935 : 1 .. '!items.effects!kZYvSdrdLYjhiO6q.xMW83wigY3ur6QFd' @ 0 : 0; will stop at (end)

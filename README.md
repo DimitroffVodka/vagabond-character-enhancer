@@ -240,9 +240,13 @@ The Gold Sink tab lets Merchants browse and buy from system compendiums (no Reli
 | Transcendent Duality | 8  | ✅ Module  | Focus on up to 3 Talents simultaneously                                                   |
 | Transcendence     | 10    | ✅ Module  | DialogV2 swap: drop one known Talent, learn another (1 Action, honor system)              |
 
-The Talents tab on the character sheet shows one card per known Talent with Cast / Focus / Manage Talents / Transcendence (L10) buttons. Cast opens a Crawler-style configuration dialog (-/Nd6/+ pill buttons, Effect toggle, Delivery dropdown, Mana row with cap), routes through the system's `VagabondChatCard.spellCast` and `VagabondDamageHelper.rollSpellDamage` for full polish (targets section, big damage numbers, Apply Direct, save buttons), and respects the v0.3.3 Effect (Fx) gating — casting Pyrokinesis with Effect: Off does fire damage but no Burning. Cast attacks bypass armor and the cast check uses Mysticism with favor/hinder applied.
+The Talents tab is a single scrollable list of all 14 Talents — picked entries on top, unpicked dimmed. **Right-click any row to pick or unpick** (the same favorite pattern used in the beast browser). Picked Talents get a Cast button and, when focused, a Drop Focus button. Header counter shows `Picked X / Y` for the level (turns amber when below the cap, red when over). Focused rows glow with the same accent treatment as focused spells, and a generic `_focus` Sequencer animation plays on the caster's token while focusing.
 
-The four self-buff Talents apply both their own focus-badge icon AND any registered canonical status (e.g. Absence's `invisible`) on the token. Evade adds a +1d4 to Reflex saves spliced into the save's chat card so DSN animates both dice together. Shield rolls a real DSN-animated 1d4 reducing damage on both the Apply Direct path and the save path (per RAW: Shield reduces damage that gets through, save or not), with the d4 calculated before saves resolve so it stacks with armor. Transvection's "you can fly" is a marker-icon AE — flying is descriptive in Vagabond RAW.
+Cast opens a Crawler-style configuration dialog (−/Nd6/+ pill buttons, Effect toggle, Delivery dropdown showing every standard delivery — unaffordable ones faded — Mana row with cap, live Targets row, Focus toggle). Casts route through the system's `VagabondChatCard.spellCast` and `VagabondDamageHelper.rollSpellDamage` for full polish (targets section, big damage numbers, Apply Direct, save buttons), and respect the v0.3.3 Effect (Fx) gating — casting Pyrokinesis with Effect: Off does fire damage but no Burning. Cast attacks bypass armor and the cast check uses Mysticism with favor/hinder applied. Multi-target Mana on Remote (`+1 per additional target`) is computed live from the selected token set.
+
+Buff Talents (Shield, Evade, Absence, Transvection) flow through the same Cast dialog as everything else — pick delivery, pick targets, fire. Shield-on-an-ally and Evade-on-an-ally work via Touch / Remote, with the d4 reductions correctly applying to the buffed actor (not the caster). Distributed buff AEs route through the GM relay when the caster doesn't own the target, so Shielding a hireling or summoned ally Just Works. Each focused Talent reserves a slot from the Psychic's focus pool (1/2/3 by Duality at L1/L4/L8); dropping focus tears down every distributed AE in the world via `casterActorId` flag matching.
+
+The Control Talent (Animate-spell logic) spawns a synthetic NPC controlled object via the unified Companion system — adds a Companions tab + a Control button to the Companions action bar, attacks route through the Psychic's Mysticism, HP-to-zero auto-dismisses, and dropping focus removes the object cleanly. A defensive round-tick reap catches the rare cases where focus state desyncs from spawned objects.
 
 ---
 
@@ -253,7 +257,7 @@ The four self-buff Talents apply both their own focus-badge icon AND any registe
 | Righteous      | 1     | ✅ System  | Casting handled by base system                            |
 | Selfless       | 1     | ✅ Module  | Prompt to redirect ally damage; raw pre-armor amount      |
 | Lay on Hands   | 2     | ✅ Module  | Sheet button + chat card heal (d6+Level), 2 uses/rest     |
-| Paragon's Aura | 4     | ⚠️ Partial | +1 Focus AE + AuraManager. Free Aura Mana not enforced   |
+| Paragon's Aura | 4     | ✅ Module  | +1 Focus AE + AuraManager. Free 10' Aura delivery (cost discount enforced via SpellHandler patch) |
 | Divine Resolve | 6     | ✅ AE      | statusImmunities: blinded, paralyzed, sickened            |
 | Holy Diver     | 8     | 🔲 Todo   | After Selfless → favor + Presence damage (no turn expiry) |
 | Sacrosanct     | 10    | ✅ AE      | saves.reflex/endure/will.bonus +2                         |
@@ -462,6 +466,7 @@ Spells in the Vagabond system have no built-in Active Effects. VCE automates sel
 - **Weapon Range Enforcement** — Blocks out-of-range attacks with distance warnings. Auto-hinders Ranged at Close (unless Akimbo Trigger) and Thrown at Far. World setting, on by default.
 - **Cleave Damage** — Cleave weapons deal half damage to all targets (ceil to first, floor to rest; minimum 1). Works with both direct damage and save-based damage paths.
 - **Target Count Enforcement** — Non-Cleave weapons limited to 1 target. Cleave weapons limited to 2 targets. Spin-to-Win perk removes the Cleave target cap.
+- **Aura Delivery System** — Casting any spell or Psychic Talent with `delivery: aura` activates a persistent template that follows the caster, ticks each combat round on hostiles in range, and fires entry ticks when a hostile walks into the radius mid-round. Containment uses Foundry's per-grid-square rule (matches the purple-square highlighting), so large monsters with a single tile inside are correctly affected. Works for damage spells (Burn cast as Aura), effect spells/talents (Befuddle), buff spells (Bless, Exalt, Ward), buff Talents (Shield, Evade), and one-shot Aura casts without focus. Revelator's L4 Paragon's Aura zeroes the base 10' Aura cost.
 - **Silver Weakness Die Fix** — Silver/metal weakness extra die now accounts for weapon skill die size bonuses (e.g., Marksmanship upgrades the weakness die from d6→d8 for Ranged weapons).
 - **Perk Detection** — Auto-detects perks from character items and applies relevant AEs
 - **Treads Lightly** — Nullifies walk-type region movement costs for characters with this perk

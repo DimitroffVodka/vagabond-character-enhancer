@@ -561,8 +561,14 @@ export const AuraManager = {
     const inRangeTokens = AuraManager._tokensInsideTemplate(
       templateForCheck, movedToken, templateCenterOverride
     );
+    // Friendly disposition is the right gate, not actor type — summoned
+    // allies (Animal Companion, Familiar, conjured creatures, hirelings,
+    // a Wizard's animated object) are NPC actors but functional allies
+    // and should be eligible for the buff. Hostiles and neutrals stay
+    // excluded.
+    const isFriendlyToken = t => t?.document?.disposition === CONST.TOKEN_DISPOSITIONS.FRIENDLY;
     const alliesInRange = new Set(
-      inRangeTokens.filter(t => t.actor?.type === "character").map(t => t.actor.id)
+      inRangeTokens.filter(isFriendlyToken).map(t => t.actor.id)
     );
     // Caster is always in range of their own aura, even if their token
     // somehow tests outside the radius (shouldn't happen, but defensive).
@@ -571,7 +577,7 @@ export const AuraManager = {
     // Apply buffs to allies in range, remove from those out of range
     for (const token of canvas.tokens.placeables) {
       if (!token.actor) continue;
-      if (token.actor.type !== "character") continue;
+      if (!isFriendlyToken(token) && token.actor.id !== casterActor.id) continue;
 
       const actorId = token.actor.id;
       const hasAuraBuff = token.actor.effects.find(e =>

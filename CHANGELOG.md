@@ -1,30 +1,66 @@
 # Changelog
 
-## Unreleased — Talents Tab Refactor + Buff Talents Through Cast Pipeline
+## v0.4.2 — Aura Delivery System + Talents Tab Refactor
+
+### AuraManager → Generalized Delivery System
+
+AuraManager is now the unified handler for **every** Aura-delivery cast — Psychic Talents, system spells, and Revelator's buff spells all share one pipeline. Decoupled from `RevelatorFeatures` and registered at module-ready time. Worlds with no Revelator still get full aura support (Wizard casting Burn-as-Aura, Psychic talents, etc.).
+
+- **Generic damage / effect spell auras** route through `activateGeneric` → `_fireSpellTickAtTarget`. The system's first cast resolves normally, AuraManager picks it up via `_detectAuraCast` (`createChatMessage` hook), and pre-seeds `tickedThisRound` with the system's first-cast targets so they don't get double-hit on round 1.
+- **Behavior selection by cast intent**: `damageTick` (re-rolls damage each round + on hostile entry), `effectTick` (re-applies status with save), `buff` (existing Exalt/Bless/Ward path), or `instant` (one-shot, template lasts 1 round).
+- **Per-grid-square containment** matches Foundry's purple-square highlighting. Large monsters with a corner clipping the geometric circle but no cell-center inside are correctly NOT detected. The bounding-box overlap rule was wrong — the visual a player reads as "the aura" is the highlighted squares, and the math now matches.
+- **Movement-driven entry tick** fires when a hostile walks into the radius mid-round. `tickedThisRound` zigzag guard prevents re-hits within the same round; clears on round transition.
+- **v13 stale-coordinate fix.** During animated movement, `tokenDoc.x`/`tokenDoc.y` still report the old position when `updateToken` fires — only `changes.x`/`changes.y` carry the new values. Override params plumbed through `_tokensInsideTemplate` so containment uses the post-move coords. Without this, entry/exit detection inverts (hostiles "leaving" the aura still test as inside, "entering" tests as outside). A second override handles the caster-moves-template-lags race when `template.update({x,y})` hasn't committed.
+- **Apply Direct works on aura tick cards** — both `targetsAtRollTime` builds in `TalentCast.executeCast` now use the unified `userTargets` (= `explicitTargets || game.user.targets`), so the chat card's `data-targets` is populated with the actual hostile in range. Without this, Apply Direct silently bailed with "No tokens targeted."
+- **Buff aura on summoned allies**: `_applyBuffsInRange` filters by `disposition: FRIENDLY` instead of `actor.type === "character"`. Hirelings, summons, animated objects, and any friendly NPC ally now correctly receive Bless / Exalt / Ward buffs.
+- **Spell focus drop tears down the aura** via `_checkFocusDrop` on `updateActor` — no more "stuck aura" if the caster un-focuses the spell mid-encounter without ending combat.
+- **Combat-end teardown skips talent-focused auras** so a Psychic's Pyrokinesis-as-Aura survives `deleteCombat` as long as the talent is still focused (parallels the existing `focusSpellId` skip).
+
+### Revelator Paragon's Aura (L4) — Free Aura Cost Enforced
+
+`SpellHandler.prototype._calculateSpellCost` patched so a Revelator with `revelator_paragonsAura` pays **0 Mana** for base 10' Aura delivery. The system's flat `bonuses.deliveryManaCostReduction` is too broad (it'd drop Cone, Sphere, etc. costs too); the new patch is delivery-aware. Enlarged Auras still pay the `deliveryIncreaseCost` per RAW.
+
+> **Crawler caveat:** the `CrawlerSpellDialog` has its own cost calc that bypasses `SpellHandler._calculateSpellCost`. The discount won't apply when casting from the crawler strip until the parallel patch lands there. Briefing for that work: [`docs/aura-manager-crawler-port.md`](docs/aura-manager-crawler-port.md).
 
 ### Buff Talents Now Cast Like Spells
+
 - **Shield, Evade, Absence, Transvection** all flow through the standard Cast dialog now. Pick delivery, pick targets, fire — same UX as Pyrokinesis or any other Talent. The standalone Focus toggle on the Talent card is gone; Cast handles focus, and a context-aware "Drop Focus" button appears on currently-focused rows.
 - **Delivery list expanded** on those four Talents to `["self", "touch", "remote"]` via a one-shot world migration (`talentDeliveryV2Migrated` setting). Both the compendium pack and embedded actor copies are updated. RAW lets a Psychic Shield an ally — implementation now matches.
 - **Buff AE distributed to chosen targets**, not the caster. Tagged with `flags.vce.casterActorId + talentId` so dropping focus finds every distributed copy across the world and removes it cleanly. Legacy self-applied AEs (pre-migration) still drop correctly via a fallback match path.
 - **Cross-owner buffing** — a Psychic player can Shield an ally PC or NPC they don't directly own. Status toggling and AE create/delete route through `gmRequest` (new `toggleActorStatus` and `deleteActorAE` socket ops) when the caster isn't the target's owner. Existing Shield/Evade detection paths (which check `actor.effects` directly) work unchanged because they look at the host actor's own effects, regardless of who placed them.
+- **NPC schema safety** — Shield's AE has a `system.armor.bonusDie` change which is a character-only field. NPCs have a flat NumberField for armor, so applying that change would corrupt their armor into an object (`damage - {object}` → NaN, HP validation throws). The buff-AE distribution now strips character-only changes when the target is an NPC; the d4 reduction is driven by AE-existence checks elsewhere, so the mechanic still works.
 
 ### Cast Dialog Polish
+
 - **All allowed deliveries shown, unaffordable ones disabled** — `<option disabled>` with italic faded styling so a low-Mana Psychic can see Aura/Sphere as future possibilities without being able to pick them. The dialog no longer refuses to open at low Mana caps.
 - **Multi-target Mana on Remote** — `+1 Mana per additional target` (RAW), computed from `game.user.targets` at cast time. The Mana row shows a `(+N extra targets)` hint when applicable.
 - **Live target count display** — new "Targets: …" row under the Mana row, updates as the player retargets via a `targetToken` hook. Shows `Self`, `1 target`, `3 targets`, or an error message ("Touch needs 1 target", "Remote needs ≥1 target") that disables the Cast button until satisfied.
-- **Focus toggle defaults `On` for buff Talents and focus-duration Talents** so the common case is one click. Pre-flight validation runs again on click in case targets changed mid-dialog.
+- **Focus toggle defaults `On` for buff Talents, focus-duration Talents, AND Aura delivery** so the common case is one click. Pre-flight validation runs again on click in case targets changed mid-dialog. (Aura without focus is "single-shot, lasts 1 round" — opt-in by toggling Focus off.)
 
 ### Talents Tab UX
+
 - **Picking is now inline** — the Talents tab lists all 14 Talents in a single scrollable view with picked entries on top. Right-click any row to pick or unpick (same favorite pattern used in the beast browser). The "Manage Talents" popup, the "Pick Talents" button, and the auto-firing pick dialog on class-detect / level-up are gone.
 - **Header counter** shows `Picked X / Y` for the level — turns amber when below the cap, red when over. Damage / Delivery / Duration columns dropped from the row view; that detail belongs in the Cast dialog.
 - **Damage type pill** added to the row name line (fire / cold / poison styled accents). Buff badge stays.
 - **Focused rows glow** — the focus-active card now mirrors the spell-focus visual on the system character sheet (accent border + soft outer glow), and toggling focus now plays the same generic `_focus` Sequencer animation on the caster's token that spell focus plays.
 - **Unpicked rows dim** to ~45% opacity with a dashed border so the picked loadout reads at a glance.
+- **Level detection fixed** — Mana Cap, Focus N/M, and Picked X/Y now read `actor.system.attributes.level.value` (the actor's level) instead of the Psychic class item's own `system.level` field. Levels 4+ now correctly show the higher Mana Cap and Duality focus capacity.
+
+### Control Talent — Animate-Spell Logic Through the Companion System
+
+- New `ControlTalent` adapter in `scripts/talent/control-talent.mjs`. Mirrors `AnimateSpell` structure but listens to `psychicTalents.focusedIds` instead of `system.focus.spellIds`.
+- New `talent-control` source in `scripts/companion/companion-sources.mjs` (purple badge), so HP-to-zero auto-dismiss, replace-on-recast, and the Companions tab badge route correctly without per-call branches.
+- Companions tab shows a Control button when the actor has Control picked. Clicking it opens the inventory picker, spawns the synthetic NPC, applies focus state on the caster.
+- NPC action attacks on the controlled object route through the caster's Mysticism via the existing `npcAction` patch (`talent-control` added to the routing list).
+- Defensive **round-tick reap** dismisses any controlled object whose caster isn't focusing Control — covers edge cases where focus state and spawned-object existence diverge (e.g., focus broken externally).
 
 ### Internals
+
 - `TalentBuffs.toggleFocus` now drives `FocusManager.playFeatureFX(actor, "_focus")` / `stopFeatureFX(actor.id, "_focus")` on focus add/remove. Stops only when nothing is focused across psychic talents, system spells, and feature focus pools combined, so a Psychic with both a focused Talent and a focused spell keeps the glow until both clear.
 - `TalentsTab._buildContext` loads the full Talent compendium (cached at module level — packs are immutable at runtime) and merges it with the actor's owned set so unpicked entries can render with the same row layout as picked ones.
+- New socket ops in `scripts/socket-relay.mjs`: `deleteActorAE` and `toggleActorStatus` for cross-owner buff distribution.
 - Removed: `scripts/talent/talent-pick-dialog.mjs`, the `talentPicker` API entry, the `psychicTalentsPicked` flag tracker and `PSYCHIC_PICK_TIERS` table, and `_checkPsychicTalentPicks` in `feature-detector.mjs`. The defensive Talent backfill that ran inside it is preserved as `_ensurePsychicTalentBackfill` so old talents still get their status data populated on scan.
+- New: `scripts/talent/control-talent.mjs`, `scripts/talent/talent-migration.mjs`, `docs/aura-manager-crawler-port.md` (briefing for the eventual crawler-side port of AuraManager + NPC aura support).
 
 ## v0.4.1 — Psychic Class + Polish + Animate Picker Fixes
 
