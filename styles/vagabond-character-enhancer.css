@@ -2389,6 +2389,19 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   gap: 8px;
 }
 
+/* Hint line under the header. Calm, not shouty. */
+.vce-talents-tab .vce-talents-hint {
+  margin: 0 0 8px 0;
+  font-size: 11px;
+  font-style: italic;
+  color: #BDC1C6;
+  opacity: 0.7;
+}
+
+/* Pick counter badge — turns red when over the level cap, amber when under. */
+.vce-talents-pick-counter.vce-pick-over strong { color: #e07070; }
+.vce-talents-pick-counter.vce-pick-under strong { color: #d4a843; }
+
 /* Force flex row + dark surface so the card reads correctly regardless of
    parent theme (light-mode parchment was washing out the gold accents). */
 .vce-talents-tab .vce-talent-card {
@@ -2400,12 +2413,28 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   background: rgba(23, 25, 29, 0.85);
   border: 1px solid var(--vagabond-c-tan, #706d65);
   border-radius: 4px;
+  cursor: context-menu;
+  transition: opacity 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
 }
 
+/* Unpicked rows: dimmed and inert. Right-click to pick. */
+.vce-talents-tab .vce-talent-unpicked {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.vce-talents-tab .vce-talent-unpicked:hover {
+  opacity: 0.75;
+}
+
+/* Focused rows: accent border + soft glow that mirrors the spell-focus
+   visual on the system character sheet. */
 .vce-talents-tab .vce-talent-focused {
   border-color: var(--vce-accent, #d4a843);
   background: rgba(23, 25, 29, 0.95);
-  box-shadow: inset 0 0 0 1px rgba(212, 168, 67, 0.25);
+  box-shadow:
+    inset 0 0 0 1px rgba(212, 168, 67, 0.35),
+    0 0 12px rgba(212, 168, 67, 0.35);
 }
 
 .vce-talent-img {
@@ -2423,6 +2452,13 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   flex-direction: column;
   gap: 2px;
   line-height: 1.3;
+}
+
+.vce-talent-name-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .vce-talent-name {
@@ -2449,23 +2485,40 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 
 /* Filled (not outlined) buttons read clearly on the dark card surface */
 .vce-talent-btn-cast,
-.vce-talent-btn-focus {
+.vce-talent-btn-focus,
+.vce-talent-btn-drop {
   padding: 4px 10px;
   font-size: 11px;
   font-family: "Germania", serif;
   font-weight: bold;
-  background: var(--vce-accent, #d4a843);
-  border: 1px solid var(--vce-accent-dim, #a08030);
-  color: #000;
   border-radius: 3px;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.vce-talent-btn-cast,
+.vce-talent-btn-focus {
+  background: var(--vce-accent, #d4a843);
+  border: 1px solid var(--vce-accent-dim, #a08030);
+  color: #000;
 }
 
 .vce-talent-btn-cast:hover,
 .vce-talent-btn-focus:hover {
   background: var(--vce-accent-dim, #a08030);
   color: #fff;
+}
+
+/* Drop Focus uses a muted red so it reads as "stop" without being alarming. */
+.vce-talent-btn-drop {
+  background: rgba(180, 80, 80, 0.85);
+  border: 1px solid rgba(140, 60, 60, 0.9);
+  color: #fff;
+}
+
+.vce-talent-btn-drop:hover {
+  background: rgba(140, 60, 60, 1);
+  filter: brightness(1.1);
 }
 
 .vce-talent-buff-badge {
@@ -2479,34 +2532,41 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   border-radius: 3px;
 }
 
+/* Damage type pill — small, neutral, sits next to the Buff badge. */
+.vce-talent-dtype-pill {
+  padding: 2px 6px;
+  font-size: 10px;
+  font-family: "Manofa", sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.08);
+  color: #BDC1C6;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Per-element accents for damage types Vagabond actually uses on Talents. */
+.vce-talent-dtype-pill.vce-dtype-fire   { color: #ffb070; border-color: rgba(255, 140, 60, 0.4); }
+.vce-talent-dtype-pill.vce-dtype-cold   { color: #8fd0ff; border-color: rgba(120, 190, 255, 0.4); }
+.vce-talent-dtype-pill.vce-dtype-poison { color: #b0e070; border-color: rgba(150, 220, 100, 0.4); }
+
+/* Pick-state star (right edge of every row). Active = solid gold. */
+.vce-talent-pick-star {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.25);
+}
+.vce-talent-pick-star.vce-talent-pick-active {
+  color: var(--vce-accent, #d4a843);
+}
+
 .vce-talents-empty {
   padding: 24px;
   text-align: center;
   opacity: 0.7;
   color: #BDC1C6;
 }
-
-/* Talent pick dialog — name + description column layout */
-.vce-talent-pick-dialog .vce-tpd-name-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.vce-talent-pick-dialog .vce-tpd-desc {
-  font-size: 11px;
-  font-style: italic;
-  color: var(--vagabond-c-text-primary);
-  opacity: 0.75;
-  margin-top: 2px;
-  line-height: 1.35;
-}
-/* Slightly tighter image in the pick dialog (rows are denser than the creature picker) */
-.vce-talent-pick-dialog .vce-bd-beast-img {
-  width: 36px;
-  height: 36px;
-  object-fit: cover;
-}
-.vce-talent-pick-dialog .vce-bd-cell-img { width: 44px; }
 
 /* ─────────────────────────────────────────────────────────────────────
  * Talent Pick / Manage dialog scroll constraint
@@ -2544,22 +2604,6 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
   min-height: 0 !important;
   overflow: hidden !important;
 }
-.vce-talent-pick-dialog {
-  display: flex !important;
-  flex-direction: column !important;
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-}
-.vce-talent-pick-dialog .vce-cp-scroll,
-.vce-talent-pick-dialog .vce-bd-scroll {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  max-height: none !important;     /* let flex compute the height */
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-}
-
 /* -------------------------------------------- */
 /*  Talent Cast Dialog (vce-tcd-*)              */
 /*  ApplicationV2 — mirrors CrawlerSpellDialog  */
@@ -2723,3 +2767,25 @@ nav.sheet-tabs [data-tab="vce-gold-sink"] {
 /* Utility modifiers */
 .vce-tcd-muted  { color: var(--vce-text-dim, #aaa); font-size: 11px; }
 .vce-tcd-error  { color: var(--vce-danger-text, #ff8888); }
+
+/* Delivery options that exceed the current Mana cap render as disabled +
+   faded. They stay visible so the player can see what's possible later. */
+.vce-tcd-delivery-select option:disabled,
+.vce-tcd-delivery-select option.vce-tcd-unaffordable {
+  color: rgba(160, 160, 160, 0.5);
+  font-style: italic;
+}
+
+/* Target-state row — neutral when valid, red-tinted when invalid. */
+.vce-tcd-targets {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  gap: 4px;
+}
+.vce-tcd-targets.vce-tcd-target-error {
+  color: var(--vce-danger-text, #ff8888);
+}
+.vce-tcd-targets.vce-tcd-target-error strong {
+  color: var(--vce-danger-text, #ff8888);
+}

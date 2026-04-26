@@ -26,6 +26,7 @@ import { FamiliarFeatures } from "../perk-features/familiar.mjs";
 import { BeastSpell } from "../spell-features/beast-spell.mjs";
 import { RaiseSpell } from "../spell-features/raise-spell.mjs";
 import { AnimateSpell } from "../spell-features/animate-spell.mjs";
+import { ControlTalent } from "../talent/control-talent.mjs";
 import { AnimalCompanion } from "../perk-features/animal-companion.mjs";
 import { ReanimatorPerk } from "../perk-features/reanimator.mjs";
 import { ConjurerPerk } from "../perk-features/conjurer.mjs";
@@ -61,6 +62,15 @@ const ACTION_BAR_ENTRIES = [
     id: "animate", label: "Animate", icon: "fas fa-hat-wizard",
     available: (pc, features, spells) => spells.has("animate"),
     onClick: (pc) => AnimateSpell.trigger(pc),
+  },
+  // Psychic Control Talent — same Animate-spell logic, surfaced when a
+  // Psychic has the Control Talent picked.
+  {
+    id: "talent-control", label: "Control", icon: "fas fa-hand-sparkles",
+    available: (pc) => pc.items.some(i =>
+      i.type === `${MODULE_ID}.talent` && i.name === "Control"
+    ),
+    onClick: (pc) => ControlTalent.trigger(pc),
   },
   // Perks
   {

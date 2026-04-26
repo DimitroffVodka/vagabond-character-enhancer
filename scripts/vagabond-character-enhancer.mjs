@@ -49,6 +49,15 @@ let _currentApplySpellId = null;
 // Uses an async Roll() so Dice So Nice animates the d4 as a real roll.
 let _pendingShieldD4Reduction = 0;
 
+// Pending Evade defender for the current save flow. Resolved from the save
+// button's targets payload BEFORE the system's _rollSave runs, so the Evade
+// d4 splice (inside _rollSave) can find the AE on the original defender
+// rather than the saveRoller — which becomes the controller PC after save
+// routing for unlinked-token NPC companions.
+//
+// Cleared in the handleSaveRoll / handleSaveReminderRoll finally blocks.
+let _pendingEvadeDefender = null;
+
 // Cast-time useFx tracking. Keyed by `${actorId}:${spellId}`. Value is the
 // boolean useFx state at the moment castSpell ran. Entries auto-expire after
 // 5 minutes — long enough for a normal apply flow but bounded so stale records
@@ -102,8 +111,14 @@ async function _preRollShieldD4FromTargets(button) {
 
   const shieldedActors = [];
   for (const t of targets) {
-    const a = game.actors.get(t.actorId)
-      ?? game.scenes.get(t.sceneId)?.tokens.get(t.tokenId)?.actor;
+    // Prefer the token's merged actor over the world actor. For unlinked
+    // tokens (actorLink:false — which our synthetic Animated/Controlled
+    // objects use), buff AEs created via `target.createEmbeddedDocuments`
+    // land on the ActorDelta, not the world actor. Reading `world.effects`
+    // misses them entirely. The token-merged actor sees both world AEs
+    // and delta AEs, so Shield works on both linked and unlinked targets.
+    const a = game.scenes.get(t.sceneId)?.tokens.get(t.tokenId)?.actor
+      ?? game.actors.get(t.actorId);
     if (!a) continue;
     const hasShield = a.effects?.some(e =>
       !e.disabled && e.name?.startsWith("Shield") && e.getFlag(MODULE_ID, "talentId")
@@ -148,6 +163,40 @@ async function _preRollShieldD4FromTargets(button) {
       rollMode: "publicroll",
     });
   }
+}
+
+/**
+ * Resolve the Evade-bearing defender from a save button's targets payload.
+ * Parallel to `_preRollShieldD4FromTargets` but for Evade — the d4 splice
+ * happens inside the patched `_rollSave`, which only sees the saveRoller.
+ * After save routing, the saveRoller is the controller PC, not the actual
+ * defender, so we have to surface the original defender out-of-band.
+ *
+ * Token-merged actor first (handles unlinked tokens whose AEs live on the
+ * ActorDelta), world actor as fallback.
+ *
+ * @param {HTMLElement|{dataset:Object}} button — the save chat-card button
+ * @returns {Actor|null} the first targeted actor with a focused Evade AE
+ */
+function _detectEvadeDefenderFromTargets(button) {
+  let targets;
+  try {
+    targets = JSON.parse((button.dataset.targets || '[]').replace(/&quot;/g, '"'));
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(targets) || targets.length === 0) return null;
+
+  for (const t of targets) {
+    const a = game.scenes.get(t.sceneId)?.tokens.get(t.tokenId)?.actor
+      ?? game.actors.get(t.actorId);
+    if (!a) continue;
+    const hasEvade = a.effects?.some(e =>
+      !e.disabled && e.name?.startsWith("Evade") && e.getFlag(MODULE_ID, "talentId")
+    );
+    if (hasEvade) return a;
+  }
+  return null;
 }
 
 // Range hinder. Set by rollAttack patch when RangeValidator applies hinder
@@ -198,9 +247,10 @@ import { RangeValidator } from "./range-validator.mjs";
 import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companion/save-routing-patch.mjs";
 import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
 import { TalentsTab } from "./talent/talents-tab.mjs";
-import { TalentPickDialog } from "./talent/talent-pick-dialog.mjs";
 import { TalentCast } from "./talent/talent-cast.mjs";
 import { TalentBuffs } from "./talent/talent-buffs.mjs";
+import { ControlTalent } from "./talent/control-talent.mjs";
+import { runTalentMigrations } from "./talent/talent-migration.mjs";
 import { CompanionTerminationManager } from "./companion/companion-termination.mjs";
 import { GatherCompanions } from "./companion/gather-companions.mjs";
 // Phase 2 spell adapters
@@ -337,6 +387,17 @@ Hooks.once("init", () => {
 
   // Hidden setting for one-time flag migration tracking
   game.settings.register(MODULE_ID, "alchemyFlagsMigrated", {
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: false
+  });
+
+  // One-time talent delivery migration. v0.4.2 expands the four self-buff
+  // Talents (Shield / Evade / Absence / Transvection) from delivery: ["self"]
+  // to ["self", "touch", "remote"] so they can be cast on allies via the
+  // standard cast pipeline. Tracked here so the migration only runs once.
+  game.settings.register(MODULE_ID, "talentDeliveryV2Migrated", {
     scope: "world",
     config: false,
     type: Boolean,
@@ -1041,6 +1102,16 @@ Hooks.once("ready", async () => {
         log("Psychic", `Shield d4 pre-roll (save path) failed: ${e.message}`);
       }
 
+      // Stash the Evade-bearing defender (if any) so the _rollSave splice
+      // can find it after routing replaces the saveRoller with the
+      // controller PC. Cleared in the finally below.
+      try {
+        _pendingEvadeDefender = _detectEvadeDefenderFromTargets(button);
+      } catch (e) {
+        log("Psychic", `Evade defender resolve (save path) failed: ${e.message}`);
+        _pendingEvadeDefender = null;
+      }
+
       try {
         // Fix Cleave save path: all targets take half damage (RAW: "half damage to two targets")
         const cleaveSaveSource = game.actors.get(button.dataset.actorId);
@@ -1089,6 +1160,7 @@ Hooks.once("ready", async () => {
         _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
         _currentApplySpellId = null;
         _pendingShieldD4Reduction = 0;
+        _pendingEvadeDefender = null;
         VagabondDamageHelper._vceRemoveDiceCount = 0;
       }
     };
@@ -1103,8 +1175,20 @@ Hooks.once("ready", async () => {
       const saveReminderAction = (saveReminderIdx !== '' && saveReminderIdx != null)
         ? saveReminderActor?.system?.actions?.[parseInt(saveReminderIdx)] : null;
       if (saveReminderAction?.attackType?.startsWith('cast')) _saveSourceAttackType = saveReminderAction.attackType;
+      // Same Evade-defender resolution as the damage-bearing save path —
+      // reminder saves still want the d4 to apply to the right actor.
+      try {
+        _pendingEvadeDefender = _detectEvadeDefenderFromTargets(button);
+      } catch (e) {
+        log("Psychic", `Evade defender resolve (reminder path) failed: ${e.message}`);
+        _pendingEvadeDefender = null;
+      }
       try { return await origHandleSaveReminderRoll.call(this, button, event); }
-      finally { _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null; _currentApplySpellId = null; }
+      finally {
+        _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
+        _currentApplySpellId = null;
+        _pendingEvadeDefender = null;
+      }
     };
     console.log(`${MODULE_ID} | Patched handleSaveRoll + handleSaveReminderRoll.`);
 
@@ -1268,7 +1352,13 @@ Hooks.once("ready", async () => {
         // formatRollWithDice, which iterates roll.terms). DSN animates all
         // dice on the resulting chat message, so both d20 and d4 fly together.
         if (saveType === "reflex") {
-          const hasEvade = actor.effects?.some(e =>
+          // Prefer the original defender stashed by the handleSaveRoll
+          // wrapper — after save routing, `actor` here is the controller
+          // PC, not the NPC the spell hit. Falls back to `actor` for the
+          // unrouted case (PC saving for themselves) and for any path
+          // that calls _rollSave outside the wrapped save flow.
+          const evadeBearer = _pendingEvadeDefender ?? actor;
+          const hasEvade = evadeBearer.effects?.some(e =>
             !e.disabled && e.name?.startsWith("Evade") && e.getFlag(MODULE_ID, "talentId")
           );
           if (hasEvade && result) {
@@ -1640,10 +1730,7 @@ Hooks.once("ready", async () => {
         buyItem: (uuid) => buyFavoriteItem(actor, uuid),
       };
     },
-    /** Talent pick dialog — fire manually for testing (Task 6 wires auto-fire).
-     *  Usage: await game.vagabondCharacterEnhancer.talentPicker.show(actor, 3) */
-    talentPicker: TalentPickDialog,
-    /** Talent cast dialog — fire manually for testing (Task 8 wires from the tab Cast button).
+    /** Talent cast dialog — fire manually for testing (wired from the Talents tab Cast button).
      *  Usage: await game.vagabondCharacterEnhancer.talentCast.openDialog(actor, talentItem) */
     talentCast: TalentCast,
     /** API for Vagabond Crawler: get Talent menu data for a Psychic actor. */
@@ -1736,6 +1823,12 @@ Hooks.once("ready", async () => {
   FocusManager.registerHooks();
   DrakenFeatures.registerHooks();
   ImbueManager.registerHooks();
+  // AuraManager is a delivery system, not a class feature — register it
+  // at module-level so any class casting Aura-delivery spells (or VCE
+  // talents cast as Aura) gets the persistent template / per-round tick
+  // / per-cell containment behavior. BlessManager + WardManager depend
+  // on AuraManager being live, so it must run before them.
+  AuraManager.registerHooks();
   BlessManager.registerHooks();
   WardManager.registerHooks();
   EffectOnlyHandler.registerHooks();
@@ -1744,6 +1837,11 @@ Hooks.once("ready", async () => {
   CompanionManagerTab.init();
   TalentsTab.init();
   TalentCast.registerHooks();
+  // One-shot data migrations on the Talent compendium / embedded items.
+  // Idempotent — gated by a hidden world setting.
+  runTalentMigrations().catch(err =>
+    console.error(`${MODULE_ID} | Talent migration failed:`, err)
+  );
   PsychicFeatures.init();
   CompanionTerminationManager.init();
   GatherCompanions.init();
@@ -1751,6 +1849,7 @@ Hooks.once("ready", async () => {
   BeastSpell.init();
   RaiseSpell.init();
   AnimateSpell.init();
+  ControlTalent.init();
   // Phase 2: perk adapters
   AnimalCompanion.init();
   ReanimatorPerk.init();
@@ -1797,9 +1896,9 @@ Hooks.once("ready", async () => {
                     ?? { summonActorId: actor.id, summonName: actor.name, summonImg: actor.img, summonHD: 1, familiarSkill: "mysticism" };
                   return await FamiliarFeatures.rollFamiliarAction(controller, familiar, actionIndex);
                 }
-                // Generic Mana-Skill companions (Beast, Raise, Animate, Conjurer perk):
+                // Generic Mana-Skill companions (Beast, Raise, Animate, Control, Conjurer perk):
                 // reuse the Summoner's rollSummonAction with a synthetic conjure object.
-                if (["spell-beast", "spell-raise", "spell-animate", "perk-conjurer"].includes(meta.sourceId)) {
+                if (["spell-beast", "spell-raise", "spell-animate", "talent-control", "perk-conjurer"].includes(meta.sourceId)) {
                   const synthetic = {
                     summonActorId: actor.id,
                     summonName: actor.name,

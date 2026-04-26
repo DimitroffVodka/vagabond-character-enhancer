@@ -19,8 +19,7 @@
  * Exalt buffs to allies who enter the radius.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor } from "../utils.mjs";
-import { AuraManager } from "../aura/aura-manager.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, getFeatures } from "../utils.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
@@ -155,9 +154,88 @@ export const RevelatorFeatures = {
   /** Track Selfless usage per turn */
   _selflessUsedThisTurn: new Map(),
 
+  /** Idempotency guard so multiple calls to registerHooks don't double-patch. */
+  _paragonAuraPatched: false,
+
+  /**
+   * Monkey-patch the system's `SpellHandler._calculateSpellCost` so that a
+   * Revelator with Paragon's Aura (L4) pays 0 Mana for a base 10' Aura
+   * delivery. The system applies a flat `bonuses.deliveryManaCostReduction`
+   * to all deliveries, which is too broad — RAW only frees Aura
+   * specifically, only at base radius (not enlarged). We patch the cost
+   * method so the discount is delivery-aware.
+   *
+   * Original method shape (system v5.x):
+   *   _calculateSpellCost(spellId) → { damageCost, fxCost, deliveryBaseCost,
+   *                                    deliveryIncreaseCost, totalCost }
+   *
+   * We let the system compute the full cost first, then strip the Aura
+   * base cost for qualifying casters. `deliveryIncreaseCost` (cost of
+   * enlarging the radius beyond 10') still applies — Paragon's Aura
+   * only frees the BASE delivery cost.
+   */
+  _patchParagonAuraCost() {
+    if (RevelatorFeatures._paragonAuraPatched) return;
+    try {
+      // Async import so module load order doesn't matter — Vagabond's
+      // own ready hook may run before/after ours.
+      import("/systems/vagabond/module/sheets/handlers/spell-handler.mjs").then(({ SpellHandler }) => {
+        if (!SpellHandler?.prototype?._calculateSpellCost) {
+          log("Revelator", "Paragon's Aura: SpellHandler._calculateSpellCost not found; skipping patch");
+          return;
+        }
+        const orig = SpellHandler.prototype._calculateSpellCost;
+        SpellHandler.prototype._calculateSpellCost = function(spellId) {
+          const result = orig.call(this, spellId);
+
+          // Only Revelators with the L4 feature get the discount.
+          const features = getFeatures(this.actor);
+          if (!features?.revelator_paragonsAura) return result;
+
+          const state = this._getSpellState(spellId);
+          if (state?.deliveryType !== "aura") return result;
+          // Enlarged auras still pay the increase cost; only the BASE
+          // delivery cost is free.
+          const auraBaseCost = result.deliveryBaseCost ?? 0;
+          if (auraBaseCost === 0) return result;
+
+          return {
+            ...result,
+            deliveryBaseCost: 0,
+            totalCost: Math.max(0, (result.totalCost ?? 0) - auraBaseCost),
+          };
+        };
+        RevelatorFeatures._paragonAuraPatched = true;
+        log("Revelator", "Patched SpellHandler._calculateSpellCost for Paragon's Aura free-Aura discount");
+      }).catch(err => {
+        log("Revelator", `Paragon's Aura cost patch failed: ${err.message}`);
+      });
+    } catch (err) {
+      log("Revelator", `Paragon's Aura cost patch threw: ${err.message}`);
+    }
+  },
+
   registerHooks() {
-    // Initialize AuraManager
-    AuraManager.registerHooks();
+    // AuraManager is now initialized at module level (it's a delivery
+    // system, not a class-specific subsystem). Revelator just hooks in
+    // its class-specific behaviors below.
+
+    // Paragon's Aura (L4): zero out the base 10' Aura delivery cost for
+    // Revelators. The system's `_calculateSpellCost` applies a flat
+    // `bonuses.deliveryManaCostReduction` to ALL deliveries, which is
+    // too broad — the L4 feature only frees Aura specifically (and only
+    // at base 10' radius, not enlarged). Patch the per-spell cost calc
+    // to drop the Aura base cost when the caster qualifies.
+    //
+    // Prototype patch: `_calculateSpellCost` is called via
+    // `this._calculateSpellCost(...)` (instance dispatch), so prototype
+    // mutation reaches every SpellHandler instance.
+    //
+    // Crawler caveat: vagabond-crawler's `CrawlerSpellDialog` has its
+    // own cost calc and bypasses this method. If the discount needs to
+    // apply when casting from the crawler strip, that side needs a
+    // parallel patch (see CLAUDE.md Dual-Patch Required note).
+    this._patchParagonAuraCost();
 
     // Lay on Hands button clicks
     Hooks.on("renderChatMessage", (message, html) => {

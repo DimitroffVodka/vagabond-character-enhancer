@@ -135,12 +135,38 @@ async function _handleRequest(data) {
 
     case "createActorAE": {
       // Player-triggered AE create on a world actor (e.g., Undead template
-      // applied by Raise/Reanimator when the caster doesn't own the target).
+      // applied by Raise/Reanimator when the caster doesn't own the target,
+      // or a focus-buff Talent like Shield distributed to an ally).
       const actor = game.actors.get(data.actorId);
       if (!actor) return { error: `createActorAE: actor "${data.actorId}" not found` };
       if (!data.aeData) return { error: "createActorAE: aeData required" };
       const [ae] = await actor.createEmbeddedDocuments("ActiveEffect", [data.aeData]);
       return { ok: true, aeId: ae?.id };
+    }
+
+    case "deleteActorAE": {
+      // Player-triggered AE delete on a non-owned actor — used by TalentBuffs
+      // when a Psychic drops focus on a buff Talent distributed to ally PCs
+      // or NPCs they don't directly own.
+      const actor = game.actors.get(data.actorId);
+      if (!actor) return { error: `deleteActorAE: actor "${data.actorId}" not found` };
+      if (!data.aeId) return { error: "deleteActorAE: aeId required" };
+      const ae = actor.effects.get(data.aeId);
+      if (!ae) return { ok: true, deleted: false }; // already gone, idempotent
+      await actor.deleteEmbeddedDocuments("ActiveEffect", [data.aeId]);
+      return { ok: true, deleted: true };
+    }
+
+    case "toggleActorStatus": {
+      // Player-triggered status toggle on a non-owned actor. The canonical
+      // path (actor.toggleStatusEffect) requires OWNER permission, so a
+      // Psychic Shielding an ally needs the GM to proxy when applying or
+      // removing the linked status (e.g. Absence's `invisible`).
+      const actor = game.actors.get(data.actorId);
+      if (!actor) return { error: `toggleActorStatus: actor "${data.actorId}" not found` };
+      if (!data.statusId) return { error: "toggleActorStatus: statusId required" };
+      await actor.toggleStatusEffect(data.statusId, { active: !!data.active });
+      return { ok: true };
     }
 
     case "createTokens": {

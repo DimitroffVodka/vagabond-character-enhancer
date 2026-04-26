@@ -1,20 +1,25 @@
 /**
  * TalentsTab — renders the Talents tab on Psychic character sheets.
  *
- * Injection pattern mirrors CompanionManagerTab (renderApplicationV2 hook,
- * nav.sheet-tabs link + section insertion). Only shown for actors whose
- * items collection contains a class item named "Psychic".
+ * Lists all 14 Talents from the compendium in a single scrollable view.
+ * Right-click a row to pick/unpick (the favorite pattern from creature-picker
+ * and beast browser). Picked Talents get Cast/Focus action buttons; unpicked
+ * rows are dimmed and inert. The "X / Y picked" header shows whether the
+ * player is at the level-appropriate count.
  *
- * Cast and Focus buttons are stubs in this phase — they log to console only.
- * Later tasks wire them to TalentCast and TalentBuffs respectively.
+ * Injection mirrors CompanionManagerTab (renderApplicationV2 hook,
+ * nav.sheet-tabs link + section insertion). Only shown on actors whose
+ * items collection contains a class item named "Psychic".
  */
 
 import { MODULE_ID, log } from "../utils.mjs";
 import { TALENT_TYPE } from "./talent-data-model.mjs";
 import { TalentCast } from "./talent-cast.mjs";
-import { TalentPickDialog } from "./talent-pick-dialog.mjs";
 import { TalentBuffs } from "./talent-buffs.mjs";
 import { TalentTranscendence } from "./talent-transcendence.mjs";
+
+/** Module-level cache of all 14 Talent compendium docs (immutable at runtime). */
+let _allTalentsCache = null;
 
 export const TalentsTab = {
   init() {
@@ -42,13 +47,36 @@ export const TalentsTab = {
   },
 
   _getLevel(actor) {
-    const psychicItem = actor.items.find(i => i.type === "class" && i.name === "Psychic");
-    return psychicItem?.system?.level ?? 1;
+    // Vagabond stores character level on the actor itself; the class item's
+    // own `level` field is not the source of truth (FeatureDetector reads
+    // it the same way at scripts/feature-detector.mjs:256).
+    return actor.system?.attributes?.level?.value ?? 1;
+  },
+
+  /**
+   * Per-RAW Psychic Talent count progression: 3 / 3 / 4 / 4 / 5 / 5 / 6 / 6 / 7 / 7
+   * = 3 + floor((level - 1) / 2). Level 1 starts with 3; levels 3/5/7/9 each grant +1.
+   */
+  _expectedPicks(level) {
+    return 3 + Math.floor(Math.max(0, level - 1) / 2);
   },
 
   _excerpt(html, len) {
-    const text = (html ?? "").replace(/<[^>]+>/g, "");
-    return text.length > len ? text.slice(0, len) + "\u2026" : text;
+    const text = (html ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    return text.length > len ? text.slice(0, len) + "…" : text;
+  },
+
+  /** Load all 14 Talent docs from the compendium, sorted alphabetically. Cached. */
+  async _loadAllTalents() {
+    if (_allTalentsCache) return _allTalentsCache;
+    const pack = game.packs.get(`${MODULE_ID}.vce-talents`);
+    if (!pack) {
+      log("TalentsTab", `Talent pack ${MODULE_ID}.vce-talents not found`);
+      return [];
+    }
+    const docs = await pack.getDocuments();
+    _allTalentsCache = [...docs].sort((a, b) => a.name.localeCompare(b.name));
+    return _allTalentsCache;
   },
 
   // ── Hook handler ─────────────────────────────────────────────────────────
@@ -74,131 +102,153 @@ export const TalentsTab = {
     if (app._vceInjectingTalents) return;
     app._vceInjectingTalents = true;
     try {
-    const actor = app.document;
-    const sheetEl = app.element;
-    const windowContent = sheetEl.querySelector(".window-content");
-    if (!windowContent) return;
+      const actor = app.document;
+      const sheetEl = app.element;
+      const windowContent = sheetEl.querySelector(".window-content");
+      if (!windowContent) return;
 
-    const nav = windowContent.querySelector("nav.sheet-tabs");
-    if (!nav) return;
+      const nav = windowContent.querySelector("nav.sheet-tabs");
+      if (!nav) return;
 
-    // Remove any stale panel from a prior render cycle.
-    const stale = windowContent.querySelector('section[data-tab="vce-talents"]');
-    if (stale) stale.remove();
+      // Remove any stale panel from a prior render cycle.
+      const stale = windowContent.querySelector('section[data-tab="vce-talents"]');
+      if (stale) stale.remove();
 
-    // Build template context
-    const level = this._getLevel(actor);
-    const cap = Math.floor(level / 2);
-    const talents = this._getKnownTalents(actor);
+      const ctx = await this._buildContext(actor);
 
-    const psychicFlags = actor.getFlag(MODULE_ID, "psychicTalents") ?? {};
-    const focusedIds = psychicFlags.focusedIds ?? [];
-    const maxFocus = psychicFlags.maxFocus ?? 1;
+      const tabContent = await foundry.applications.handlebars.renderTemplate(
+        `modules/${MODULE_ID}/templates/talents-tab.hbs`,
+        ctx
+      );
 
-    const ctx = {
-      cap,
-      maxFocus,
-      focusedCount: focusedIds.length,
-      level,
-      talents: talents.map(t => ({
-        id: t.id,
-        name: t.name,
-        img: t.img,
-        descExcerpt: this._excerpt(t.system.description, 100),
-        isBuff: t.system.focusBuffAE !== null && t.system.focusBuffAE !== undefined,
-        isFocused: focusedIds.includes(t.id)
-      }))
-    };
+      // Inject tab nav link — place immediately to the LEFT of the Features tab
+      // so the bar reads (Companions if present) → Talents → Features → ...
+      const tabLink = document.createElement("a");
+      tabLink.setAttribute("data-action", "tab");
+      tabLink.setAttribute("data-tab", "vce-talents");
+      tabLink.setAttribute("data-group", "primary");
+      tabLink.innerHTML = `<span>Talents</span>`;
+      const featuresLink = nav.querySelector('[data-tab="features"]');
+      if (featuresLink) {
+        nav.insertBefore(tabLink, featuresLink);
+      } else {
+        nav.appendChild(tabLink);
+      }
 
-    const tabContent = await foundry.applications.handlebars.renderTemplate(
-      `modules/${MODULE_ID}/templates/talents-tab.hbs`,
-      ctx
-    );
+      // Inject panel section before the first existing tab section.
+      const section = document.createElement("section");
+      section.className = "tab vce-talents-tab scrollable";
+      section.setAttribute("data-tab", "vce-talents");
+      section.setAttribute("data-group", "primary");
+      section.innerHTML = tabContent;
 
-    // Inject tab nav link — place immediately to the LEFT of the Features tab
-    // so the bar reads (Companions if present) → Talents → Features → ...
-    const tabLink = document.createElement("a");
-    tabLink.setAttribute("data-action", "tab");
-    tabLink.setAttribute("data-tab", "vce-talents");
-    tabLink.setAttribute("data-group", "primary");
-    tabLink.innerHTML = `<span>Talents</span>`;
-    const featuresLink = nav.querySelector('[data-tab="features"]');
-    if (featuresLink) {
-      nav.insertBefore(tabLink, featuresLink);
-    } else {
-      nav.appendChild(tabLink);
-    }
+      const firstTab = windowContent.querySelector("section.tab");
+      if (firstTab) {
+        windowContent.insertBefore(section, firstTab);
+      } else {
+        windowContent.appendChild(section);
+      }
 
-    // Inject panel section before the first existing tab section.
-    const section = document.createElement("section");
-    section.className = "tab vce-talents-tab scrollable";
-    section.setAttribute("data-tab", "vce-talents");
-    section.setAttribute("data-group", "primary");
-    section.innerHTML = tabContent;
+      // Tab click handler (mirrors CompanionManagerTab pattern).
+      tabLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        nav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
+        windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+        tabLink.classList.add("active");
+        section.classList.add("active");
+        app._vceActiveTab = "vce-talents";
+        if (app.tabGroups) app.tabGroups.primary = "vce-talents";
+      });
 
-    const firstTab = windowContent.querySelector("section.tab");
-    if (firstTab) {
-      windowContent.insertBefore(section, firstTab);
-    } else {
-      windowContent.appendChild(section);
-    }
+      // Restore active tab if user was on Talents tab before a re-render.
+      if (app._vceActiveTab === "vce-talents") {
+        nav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
+        windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
+        tabLink.classList.add("active");
+        section.classList.add("active");
+        if (app.tabGroups) app.tabGroups.primary = "vce-talents";
+      }
 
-    // Tab click handler (mirrors CompanionManagerTab pattern).
-    tabLink.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      nav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
-      windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
-      tabLink.classList.add("active");
-      section.classList.add("active");
-      app._vceActiveTab = "vce-talents";
-      if (app.tabGroups) app.tabGroups.primary = "vce-talents";
-    });
+      // Track other tab clicks so _vceActiveTab stays accurate.
+      nav.querySelectorAll("[data-tab]:not([data-tab='vce-talents'])").forEach(t => {
+        t.addEventListener("click", () => { app._vceActiveTab = t.dataset.tab; });
+      });
 
-    // Restore active tab if user was on Talents tab before a re-render.
-    if (app._vceActiveTab === "vce-talents") {
-      nav.querySelectorAll("[data-tab]").forEach(t => t.classList.remove("active"));
-      windowContent.querySelectorAll("section.tab").forEach(s => s.classList.remove("active"));
-      tabLink.classList.add("active");
-      section.classList.add("active");
-      if (app.tabGroups) app.tabGroups.primary = "vce-talents";
-    }
-
-    // Track other tab clicks so _vceActiveTab stays accurate.
-    nav.querySelectorAll("[data-tab]:not([data-tab='vce-talents'])").forEach(t => {
-      t.addEventListener("click", () => { app._vceActiveTab = t.dataset.tab; });
-    });
-
-    // Wire Cast / Focus buttons.
-    this._bindEvents(section, actor);
+      // Wire Cast / Focus / right-click pick handlers.
+      this._bindEvents(section, actor);
     } finally {
       app._vceInjectingTalents = false;
     }
   },
 
-  // ── Rebuild (for future use by data-change hooks) ─────────────────────────
+  // ── Template context ─────────────────────────────────────────────────────
+
+  /**
+   * Build the Handlebars context: header stats + 14 talent rows merging the
+   * compendium with the actor's owned set. Picked rows on top (alpha asc),
+   * unpicked below (alpha asc).
+   */
+  async _buildContext(actor) {
+    const level = this._getLevel(actor);
+    const cap = Math.floor(level / 2);
+    const expectedPicks = this._expectedPicks(level);
+
+    const allTalents = await this._loadAllTalents();
+    const owned = this._getKnownTalents(actor);
+    const ownedByName = new Map(owned.map(t => [t.name, t]));
+
+    const psychicFlags = actor.getFlag(MODULE_ID, "psychicTalents") ?? {};
+    const focusedIds = psychicFlags.focusedIds ?? [];
+    const maxFocus = psychicFlags.maxFocus ?? TalentBuffs.getMaxFocus(actor);
+
+    const rows = allTalents.map(t => {
+      const ownedItem = ownedByName.get(t.name);
+      const isPicked = !!ownedItem;
+      const isFocused = isPicked && focusedIds.includes(ownedItem.id);
+      const isBuff = t.system.focusBuffAE !== null && t.system.focusBuffAE !== undefined;
+      const damageType = (t.system.damageType ?? "").trim();
+      const damageTypeLabel = damageType && damageType !== "-" ? damageType : "";
+      return {
+        name: t.name,
+        img: t.img,
+        descExcerpt: this._excerpt(t.system.description, 140),
+        isBuff,
+        isPicked,
+        isFocused,
+        damageType,
+        damageTypeLabel,
+        rowTitle: isPicked ? "Right-click to unpick" : "Right-click to pick",
+      };
+    });
+
+    // Sort: picked first (alpha), then unpicked (alpha). allTalents is already alpha.
+    rows.sort((a, b) => {
+      if (a.isPicked !== b.isPicked) return a.isPicked ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    const pickedCount = owned.length;
+    return {
+      cap,
+      maxFocus,
+      focusedCount: focusedIds.length,
+      level,
+      pickedCount,
+      expectedPicks,
+      isOverPicked: pickedCount > expectedPicks,
+      isUnderPicked: pickedCount < expectedPicks,
+      talents: rows,
+    };
+  },
+
+  // ── Rebuild (used by data-change hooks if needed) ────────────────────────
 
   async _rebuildPanel(app) {
     const panel = app.element?.querySelector('section[data-tab="vce-talents"]');
     if (!panel) return;
     const actor = app.document;
-    const level = this._getLevel(actor);
-    const cap = Math.floor(level / 2);
-    const talents = this._getKnownTalents(actor);
-    const psychicFlags = actor.getFlag(MODULE_ID, "psychicTalents") ?? {};
-    const focusedIds = psychicFlags.focusedIds ?? [];
-    const maxFocus = psychicFlags.maxFocus ?? 1;
-
-    const ctx = {
-      cap, maxFocus, focusedCount: focusedIds.length, level,
-      talents: talents.map(t => ({
-        id: t.id, name: t.name, img: t.img,
-        descExcerpt: this._excerpt(t.system.description, 100),
-        isBuff: t.system.focusBuffAE !== null && t.system.focusBuffAE !== undefined,
-        isFocused: focusedIds.includes(t.id)
-      }))
-    };
-
+    const ctx = await this._buildContext(actor);
     const html = await foundry.applications.handlebars.renderTemplate(
       `modules/${MODULE_ID}/templates/talents-tab.hbs`, ctx
     );
@@ -212,10 +262,13 @@ export const TalentsTab = {
     // Cast button — opens the cast dialog then resolves the cast.
     panel.querySelectorAll("[data-action='cast-talent']").forEach(btn => {
       btn.addEventListener("click", async (e) => {
-        const talentId = e.currentTarget.dataset.talentId;
-        const talent = actor.items.get(talentId);
+        e.stopPropagation();
+        const card = e.currentTarget.closest("[data-talent-name]");
+        const name = card?.dataset.talentName;
+        if (!name) return;
+        const talent = actor.items.find(i => i.type === TALENT_TYPE && i.name === name);
         if (!talent) {
-          log("TalentsTab", `Cast: talent ${talentId} not found on actor`);
+          log("TalentsTab", `Cast: talent "${name}" not found on actor`);
           return;
         }
         const config = await TalentCast.openDialog(actor, talent);
@@ -224,44 +277,85 @@ export const TalentsTab = {
       });
     });
 
-    // Focus toggle — adds/removes the talent from psychicTalents.focusedIds
-    // and applies/removes the focusBuffAE on the actor. Capacity is enforced
-    // by Duality (1 / 2 at L4 / 3 at L8).
-    panel.querySelectorAll("[data-action='focus-talent']").forEach(btn => {
+    // Drop Focus button — only shown on currently-focused Talents. Clears
+    // the focus state and removes any distributed buff AE from every target.
+    // Re-targeting requires Drop → Cast (RAW: one focused spell at a time).
+    panel.querySelectorAll("[data-action='drop-focus']").forEach(btn => {
       btn.addEventListener("click", async (e) => {
-        const talentId = e.currentTarget.dataset.talentId;
-        const talent = actor.items.get(talentId);
+        e.stopPropagation();
+        const card = e.currentTarget.closest("[data-talent-name]");
+        const name = card?.dataset.talentName;
+        if (!name) return;
+        const talent = actor.items.find(i => i.type === TALENT_TYPE && i.name === name);
         if (!talent) return;
-        await TalentBuffs.toggleFocus(actor, talent);
+        await TalentBuffs.dropFocus(actor, talent);
         // Foundry auto-rerenders the actor sheet on flag/effect change,
         // which redraws the tab with updated focused state + counter.
       });
     });
 
-    // Pick Talents — open a manage dialog where the player can freely
-    // check/uncheck which Talents are in their loadout. Per RAW, downtime
-    // study allows retraining any character choice; this is the in-game UX
-    // for that. Saves a diff (delete the unchecked, add the newly checked).
-    panel.querySelector("[data-action='pick-talents']")?.addEventListener("click", async () => {
-      const psychic = actor.items.find(i => i.type === "class" && i.name === "Psychic");
-      const level = psychic?.system?.level ?? 1;
-      // Talent count progression: 3 / 3 / 4 / 4 / 5 / 5 / 6 / 6 / 7 / 7
-      const expected = 3 + Math.floor(Math.max(0, level - 1) / 2);
-      // Foundry auto-rerenders the actor sheet when items are added/removed,
-      // so we don't need to manually trigger a re-render here.
-      await TalentPickDialog.manage(actor, expected);
+    // Right-click any row — toggle picked. Mirrors the favorite pattern in
+    // polymorph-sheet (right-click a beast row to favorite). Capacity enforced
+    // against the level's expected pick count: blocks adds beyond the cap,
+    // always allows removes.
+    panel.querySelectorAll(".vce-talent-card").forEach(card => {
+      card.addEventListener("contextmenu", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const name = card.dataset.talentName;
+        if (!name) return;
+        await this._togglePick(actor, name);
+      });
     });
 
     // Transcendence (L10) — open the Talent swap dialog. Hidden on pre-L10
     // sheets via the same level gate the template uses.
     panel.querySelector("[data-action='transcendence']")?.addEventListener("click", async () => {
-      const psychic = actor.items.find(i => i.type === "class" && i.name === "Psychic");
-      const level = psychic?.system?.level ?? 1;
+      const level = this._getLevel(actor);
       if (level < 10) {
         ui.notifications.warn("Transcendence requires Psychic level 10.");
         return;
       }
       await TalentTranscendence.show(actor);
     });
-  }
+  },
+
+  /**
+   * Toggle picked state for a Talent. Adds the compendium doc to the actor
+   * (capacity-checked) or removes the actor's owned copy. If the talent is
+   * currently focused, drops focus first to clean up the buff AE.
+   */
+  async _togglePick(actor, talentName) {
+    const owned = actor.items.find(i => i.type === TALENT_TYPE && i.name === talentName);
+
+    if (owned) {
+      // Drop focus first so the buff AE is cleaned up properly.
+      const state = TalentBuffs.getState(actor);
+      if (state.focusedIds.includes(owned.id)) {
+        await TalentBuffs.toggleFocus(actor, owned);
+      }
+      await actor.deleteEmbeddedDocuments("Item", [owned.id]);
+      return;
+    }
+
+    // Add — capacity check against expected count for level.
+    const level = this._getLevel(actor);
+    const expected = this._expectedPicks(level);
+    const currentCount = this._getKnownTalents(actor).length;
+    if (currentCount >= expected) {
+      ui.notifications.warn(
+        `You already have ${expected} Talent${expected !== 1 ? "s" : ""} for level ${level}. ` +
+        `Right-click an existing Talent to drop it before picking another.`
+      );
+      return;
+    }
+
+    const all = await this._loadAllTalents();
+    const src = all.find(t => t.name === talentName);
+    if (!src) {
+      ui.notifications.error(`Talent "${talentName}" not found in compendium.`);
+      return;
+    }
+    await actor.createEmbeddedDocuments("Item", [src.toObject()]);
+  },
 };

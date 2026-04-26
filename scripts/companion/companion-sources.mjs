@@ -34,6 +34,17 @@ export const COMPANION_SOURCES = Object.freeze({
     controllerType: "companion",
     terminateOn: ["zeroHP", "duration"],
   },
+  "talent-control": {
+    // Psychic Control Talent — same Animate-spell logic, but driven by the
+    // Talent focus pool instead of system spell focus. Distinct sourceId so
+    // HP-to-zero auto-dismiss, replace-on-recast, and the Companions-tab
+    // badge route correctly without per-call branches.
+    label: "Controlled",
+    badgeColor: "#5a3a8e",
+    skill: "mana",
+    controllerType: "companion",
+    terminateOn: ["zeroHP", "duration"],
+  },
   "spell-raise": {
     label: "Raised",
     badgeColor: "#5e1a1a",

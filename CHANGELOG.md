@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased — Talents Tab Refactor + Buff Talents Through Cast Pipeline
+
+### Buff Talents Now Cast Like Spells
+- **Shield, Evade, Absence, Transvection** all flow through the standard Cast dialog now. Pick delivery, pick targets, fire — same UX as Pyrokinesis or any other Talent. The standalone Focus toggle on the Talent card is gone; Cast handles focus, and a context-aware "Drop Focus" button appears on currently-focused rows.
+- **Delivery list expanded** on those four Talents to `["self", "touch", "remote"]` via a one-shot world migration (`talentDeliveryV2Migrated` setting). Both the compendium pack and embedded actor copies are updated. RAW lets a Psychic Shield an ally — implementation now matches.
+- **Buff AE distributed to chosen targets**, not the caster. Tagged with `flags.vce.casterActorId + talentId` so dropping focus finds every distributed copy across the world and removes it cleanly. Legacy self-applied AEs (pre-migration) still drop correctly via a fallback match path.
+- **Cross-owner buffing** — a Psychic player can Shield an ally PC or NPC they don't directly own. Status toggling and AE create/delete route through `gmRequest` (new `toggleActorStatus` and `deleteActorAE` socket ops) when the caster isn't the target's owner. Existing Shield/Evade detection paths (which check `actor.effects` directly) work unchanged because they look at the host actor's own effects, regardless of who placed them.
+
+### Cast Dialog Polish
+- **All allowed deliveries shown, unaffordable ones disabled** — `<option disabled>` with italic faded styling so a low-Mana Psychic can see Aura/Sphere as future possibilities without being able to pick them. The dialog no longer refuses to open at low Mana caps.
+- **Multi-target Mana on Remote** — `+1 Mana per additional target` (RAW), computed from `game.user.targets` at cast time. The Mana row shows a `(+N extra targets)` hint when applicable.
+- **Live target count display** — new "Targets: …" row under the Mana row, updates as the player retargets via a `targetToken` hook. Shows `Self`, `1 target`, `3 targets`, or an error message ("Touch needs 1 target", "Remote needs ≥1 target") that disables the Cast button until satisfied.
+- **Focus toggle defaults `On` for buff Talents and focus-duration Talents** so the common case is one click. Pre-flight validation runs again on click in case targets changed mid-dialog.
+
+### Talents Tab UX
+- **Picking is now inline** — the Talents tab lists all 14 Talents in a single scrollable view with picked entries on top. Right-click any row to pick or unpick (same favorite pattern used in the beast browser). The "Manage Talents" popup, the "Pick Talents" button, and the auto-firing pick dialog on class-detect / level-up are gone.
+- **Header counter** shows `Picked X / Y` for the level — turns amber when below the cap, red when over. Damage / Delivery / Duration columns dropped from the row view; that detail belongs in the Cast dialog.
+- **Damage type pill** added to the row name line (fire / cold / poison styled accents). Buff badge stays.
+- **Focused rows glow** — the focus-active card now mirrors the spell-focus visual on the system character sheet (accent border + soft outer glow), and toggling focus now plays the same generic `_focus` Sequencer animation on the caster's token that spell focus plays.
+- **Unpicked rows dim** to ~45% opacity with a dashed border so the picked loadout reads at a glance.
+
+### Internals
+- `TalentBuffs.toggleFocus` now drives `FocusManager.playFeatureFX(actor, "_focus")` / `stopFeatureFX(actor.id, "_focus")` on focus add/remove. Stops only when nothing is focused across psychic talents, system spells, and feature focus pools combined, so a Psychic with both a focused Talent and a focused spell keeps the glow until both clear.
+- `TalentsTab._buildContext` loads the full Talent compendium (cached at module level — packs are immutable at runtime) and merges it with the actor's owned set so unpicked entries can render with the same row layout as picked ones.
+- Removed: `scripts/talent/talent-pick-dialog.mjs`, the `talentPicker` API entry, the `psychicTalentsPicked` flag tracker and `PSYCHIC_PICK_TIERS` table, and `_checkPsychicTalentPicks` in `feature-detector.mjs`. The defensive Talent backfill that ran inside it is preserved as `_ensurePsychicTalentBackfill` so old talents still get their status data populated on scan.
+
 ## v0.4.1 — Psychic Class + Polish + Animate Picker Fixes
 
 ### New Class — Psychic (RAW)

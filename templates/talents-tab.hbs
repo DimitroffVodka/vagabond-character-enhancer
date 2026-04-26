@@ -2,33 +2,44 @@
   <header class="vce-talents-header">
     <span class="vce-talents-stat">Mana Cap: <strong>{{cap}}</strong></span>
     <span class="vce-talents-stat">Focus: <strong>{{focusedCount}}/{{maxFocus}}</strong></span>
-    <button type="button" data-action="pick-talents" class="vce-talents-btn">Pick Talents</button>
+    <span class="vce-talents-stat vce-talents-pick-counter{{#if isOverPicked}} vce-pick-over{{/if}}{{#if isUnderPicked}} vce-pick-under{{/if}}">
+      Picked: <strong>{{pickedCount}}/{{expectedPicks}}</strong>
+    </span>
     {{#if (gte level 10)}}
       <button type="button" data-action="transcendence" class="vce-talents-btn">Transcendence</button>
     {{/if}}
   </header>
 
+  <p class="vce-talents-hint">Right-click a Talent to {{#if hint}}{{hint}}{{else}}pick or unpick{{/if}}.</p>
+
   <div class="vce-talents-cards">
     {{#each talents}}
-      <div class="vce-talent-card{{#if isFocused}} vce-talent-focused{{/if}}" data-talent-id="{{id}}">
+      <div class="vce-talent-card{{#unless isPicked}} vce-talent-unpicked{{/unless}}{{#if isFocused}} vce-talent-focused{{/if}}"
+           data-talent-name="{{name}}"
+           data-is-picked="{{isPicked}}"
+           title="{{rowTitle}}">
         <img src="{{img}}" class="vce-talent-img" alt=""/>
         <div class="vce-talent-info">
-          <div class="vce-talent-name">{{name}}</div>
+          <div class="vce-talent-name-line">
+            <span class="vce-talent-name">{{name}}</span>
+            {{#if isBuff}}<span class="vce-talent-buff-badge" title="Focus buff — applies its AE to chosen targets">Buff</span>{{/if}}
+            {{#if damageTypeLabel}}<span class="vce-talent-dtype-pill vce-dtype-{{damageType}}" title="Damage type">{{damageTypeLabel}}</span>{{/if}}
+          </div>
           <div class="vce-talent-desc">{{descExcerpt}}</div>
         </div>
         <div class="vce-talent-actions">
-          {{#unless isBuff}}
-            <button type="button" data-action="cast-talent" data-talent-id="{{id}}" class="vce-talent-btn-cast">Cast</button>
-          {{else}}
-            <span class="vce-talent-buff-badge">Buff</span>
-          {{/unless}}
-          <button type="button" data-action="focus-talent" data-talent-id="{{id}}" class="vce-talent-btn-focus">
-            {{#if isFocused}}Unfocus{{else}}Focus{{/if}}
-          </button>
+          {{#if isPicked}}
+            {{#if isFocused}}
+              <button type="button" data-action="drop-focus" class="vce-talent-btn-drop">Drop Focus</button>
+            {{else}}
+              <button type="button" data-action="cast-talent" class="vce-talent-btn-cast">Cast</button>
+            {{/if}}
+          {{/if}}
+          <i class="vce-talent-pick-star {{#if isPicked}}fas fa-star vce-talent-pick-active{{else}}far fa-star{{/if}}" aria-hidden="true"></i>
         </div>
       </div>
     {{else}}
-      <div class="vce-talents-empty">No Talents known. Click "Pick Talents" to choose your starting set.</div>
+      <div class="vce-talents-empty">No Talents found in compendium.</div>
     {{/each}}
   </div>
 </div>

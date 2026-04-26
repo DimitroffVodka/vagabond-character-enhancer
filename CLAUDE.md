@@ -286,9 +286,30 @@ Full Vagabond rulebook in Obsidian markdown: `F:/Obsidian/Vagabond/Vagabond/`
 - FoundryVTT v13.351, Vagabond system v5.0.0+, module v0.4.0 (per module.json)
 - Module runs as ES modules (`.mjs`), no build step
 - System methods are patched via monkey-patching on `ready` hook (no libWrapper currently)
-- MCP bridge available for live testing via `foundry-mcp-bridge` module
 - The `status` field in registry entries tracks implementation state: check it before working on a feature
+
+### Testing via the foundry-mcp-bridge
+
+A live FoundryVTT instance is reachable through the `foundry-mcp-bridge` module's MCP tools. **Use it.** When you make a change that touches runtime behavior — a hook, a patched system method, an AE distribution path, an aura, anything that only matters at runtime — drive it through the live game and verify the actual chat messages, flag state, and console output before reporting "done." Don't ask the user to F5 and report results back unless you genuinely have no MCP access; reload it yourself and test.
+
+Common tools (load via `ToolSearch` with `select:mcp__foundry-vtt__<name>`):
+
+- **`evaluate`** — runs JS in the live `game`/`canvas`/`ui` context. Use for: confirming flag state, reading actor/token data, calling module methods directly to bypass UI dialogs, reloading the page (`window.location.reload()`).
+- **`get_actor` / `list_actors`** — fetch actor data without manually grepping JSON.
+- **`use_item`** — trigger a weapon/spell/feature on an actor and capture the resulting chat messages.
+- **`get_console_errors`** — pull recent client errors. Critical for catching the silent failures that don't surface in chat.
+- **`screenshot`** — capture the canvas (tokens + scene only; not sheets or HUD).
+- **`trace_hook`** — temporarily listens for hook firings to discover what arguments a hook actually receives at runtime.
+- **`roll`** with `rig` — deterministic dice for testing pass/fail branches without re-rolling.
+
+**Standard test loop after a runtime change:**
+1. `evaluate { window.location.reload() }` to F5 (then wait ~3-5 seconds for the world to come back).
+2. Read flag/state via `evaluate` or `get_actor` to confirm the change registered.
+3. Trigger the affected feature (`use_item`, direct method call via `evaluate`, or token movement via `evaluate`).
+4. Read recent chat messages and console errors to verify the resulting roll/card/AE landed correctly.
+
+If MCP testing isn't possible (server down, no connection), explicitly say so rather than just claiming the work is done off-disk.
 
 ### Build & Release
 - **Package release zip:** `pwsh ./build-zip.ps1` — produces `module.zip` at repo root containing `module.json`, `scripts/`, `styles/`, `languages/`, `packs/`, and docs. Upload both `module.json` + `module.zip` as GitHub release assets (Foundry manifest points at `releases/latest/download/`).
-- **Live reload in Foundry:** no hot reload. After editing a `.mjs`, either F5-refresh the Foundry tab or use the MCP bridge's `evaluate` for quick validation.
+- **Live reload in Foundry:** no hot reload — F5 the tab or `window.location.reload()` via the MCP bridge after editing a `.mjs`.

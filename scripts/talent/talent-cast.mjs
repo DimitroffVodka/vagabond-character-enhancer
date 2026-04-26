@@ -26,7 +26,8 @@
  *   - focus/duration:            FREE for Talents
  */
 
-import { MODULE_ID } from "../utils.mjs";
+import { MODULE_ID, log } from "../utils.mjs";
+import { TalentBuffs } from "./talent-buffs.mjs";
 
 // Verified RAW delivery base costs (Vagabond Core Rulebook — 05 Magic, Delivery table)
 const DELIVERY_COSTS = {
@@ -41,6 +42,14 @@ const DELIVERY_COSTS = {
   line:   2,
   sphere: 2,
 };
+
+// Per RAW: Remote scales +1 Mana per additional target. Touch is bounded
+// to 1 close target. Self is always 1 (the caster). Area deliveries
+// (cone/sphere/cube/aura/glyph/line) hit everything in the area at no
+// extra per-target cost — the area itself is the unit of cost.
+const EXTRA_TARGET_DELIVERIES = new Set(["remote"]);
+const SINGLE_TARGET_DELIVERIES = new Set(["touch"]);
+const SELF_DELIVERIES = new Set(["self"]);
 
 /**
  * Capitalize first letter of a string.
@@ -59,9 +68,10 @@ function capitalize(s) {
  * @param {boolean} config.includeEffect — whether effect component is included
  * @param {string}  config.delivery      — chosen delivery key
  * @param {object}  talent               — Talent item document
+ * @param {number}  [targetCount=1]      — resolved target count (Remote scales)
  * @returns {number} total Mana cost
  */
-function computeTotalMana(config, talent) {
+function computeTotalMana(config, talent, targetCount = 1) {
   const hasDamage = !!talent.system.damage;
   const hasEffect = !!talent.system.effect;
 
@@ -71,12 +81,50 @@ function computeTotalMana(config, talent) {
   // Extra dice beyond the free base 1d6
   const extraDice = dmgIncluded ? Math.max(0, (config.damageDice ?? 1) - 1) : 0;
 
+  // Remote +1 per additional target beyond the first.
+  const extraTargets = EXTRA_TARGET_DELIVERIES.has(config.delivery)
+    ? Math.max(0, (targetCount ?? 1) - 1)
+    : 0;
+
   let total = 0;
   total += extraDice;                                    // each extra die = +1 Mana
   total += (dmgIncluded && fxIncluded) ? 1 : 0;         // both components = +1 surcharge
   total += DELIVERY_COSTS[config.delivery] ?? 0;         // delivery base cost
+  total += extraTargets;                                 // each extra target on Remote = +1 Mana
   // focus / duration always free for Talents
   return total;
+}
+
+/**
+ * Resolve recipients for buff-AE distribution given the chosen delivery.
+ *
+ * - Self            → [caster]
+ * - Touch           → first user.target (close ally)
+ * - Remote          → all user.targets
+ * - Area deliveries → all user.targets (system handles area templating)
+ *
+ * Returns null if the delivery has unmet target requirements (Touch with 0
+ * or >1, Remote with 0). The cast button's pre-flight validation surfaces a
+ * notification before this is called.
+ *
+ * @param {Actor}  caster
+ * @param {string} delivery
+ * @returns {Actor[] | null}
+ */
+function resolveTargetsForBuff(caster, delivery) {
+  if (SELF_DELIVERIES.has(delivery)) return [caster];
+
+  const tokenTargets = Array.from(game.user.targets);
+  const actorTargets = tokenTargets.map(t => t.actor).filter(Boolean);
+
+  if (SINGLE_TARGET_DELIVERIES.has(delivery)) {
+    return actorTargets.length === 1 ? actorTargets : null;
+  }
+  if (EXTRA_TARGET_DELIVERIES.has(delivery)) {
+    return actorTargets.length >= 1 ? actorTargets : null;
+  }
+  // Area deliveries — anyone caught in the template counts.
+  return actorTargets;
 }
 
 // ── TalentCastDialog (ApplicationV2) ──────────────────────────────────────────
@@ -100,24 +148,47 @@ class TalentCastDialog extends foundry.applications.api.ApplicationV2 {
 
     const hasDamage = !!talent.system.damage;
     const hasEffect = !!talent.system.effect;
+    const isBuff    = !!talent.system.focusBuffAE;
 
-    // Build allowed delivery list (intersect talent's delivery with known costs)
-    const allowed = (talent.system.delivery ?? []).filter(d => d in DELIVERY_COSTS);
+    // Show every standard delivery in the dropdown — Talents can be cast
+    // with any of them at the player's discretion. Imbue is excluded
+    // because RAW Imbue specifically requires Mana to use (it's the
+    // weapon-imbuement delivery, distinct from the Talent flow).
+    // Unaffordable rows render as disabled options.
+    const allowed = Object.keys(DELIVERY_COSTS).filter(d => d !== "imbue");
     const affordable0 = allowed.filter(d => (DELIVERY_COSTS[d] ?? 99) <= cap);
     const initialDelivery = affordable0[0] ?? allowed[0] ?? "touch";
 
-    // State mirrors CrawlerSpellDialog.spellState pattern
+    // State mirrors CrawlerSpellDialog.spellState pattern. Default focus
+    // toggle on for:
+    //   - Buff Talents (their whole point is the focused buff)
+    //   - Focus-duration talents (RAW: focus needed to sustain)
+    //   - Aura delivery (RAW Aura is overwhelmingly focus-based — without
+    //     focus the player gets a one-shot that auto-deactivates immediately,
+    //     which surprises everyone)
     this._state = {
       damageDice:     hasDamage ? 1 : 0,  // total dice count (1 = 1d6 free)
       includeDamage:  hasDamage,
       includeEffect:  !hasDamage && hasEffect,  // default on if effect-only
       deliveryType:   initialDelivery,
-      focusAfterCast: false,
+      focusAfterCast: isBuff
+        || talent.system.duration === "focus"
+        || initialDelivery === "aura",
     };
 
     this._allowedDeliveries = allowed;
     this._hasDamage = hasDamage;
     this._hasEffect = hasEffect;
+    this._isBuff    = isBuff;
+
+    // Re-render when the user's target set changes so the Mana row + target
+    // count stay live. The hook stays bound for the dialog's lifetime; we
+    // unhook in close().
+    this._targetHookId = Hooks.on("targetToken", (user, _token, _state) => {
+      if (user?.id !== game.user?.id) return;
+      if (this._settled) return;
+      this.render();
+    });
   }
 
   get title() {
@@ -134,34 +205,85 @@ class TalentCastDialog extends foundry.applications.api.ApplicationV2 {
     const s   = this._state;
     const cap = this.cap;
 
+    // Live target count from the player's current selection.
+    const targetCount = SELF_DELIVERIES.has(s.deliveryType)
+      ? 1
+      : Math.max(1, game.user?.targets?.size ?? 0);
+
     const totalMana    = computeTotalMana({
       damageDice:     s.damageDice,
       includeDamage:  s.includeDamage,
       includeEffect:  s.includeEffect,
       delivery:       s.deliveryType,
-    }, this.talent);
+    }, this.talent, targetCount);
     const damageCost   = s.includeDamage ? Math.max(0, s.damageDice - 1) : 0;
     const fxCost       = (s.includeDamage && s.includeEffect) ? 1 : 0;
     const deliveryCost = DELIVERY_COSTS[s.deliveryType] ?? 0;
+    const extraTargetCost = EXTRA_TARGET_DELIVERIES.has(s.deliveryType)
+      ? Math.max(0, targetCount - 1)
+      : 0;
 
+    // Render every allowed delivery — disable the unaffordable ones rather
+    // than hiding them so the player sees what's possible later. Affordability
+    // here means the delivery's BASE cost alone fits the cap; multi-target
+    // overhead is reflected in the live Mana row.
     const deliveryOptions = this._allowedDeliveries.map(d => {
-      const label = CONFIG.VAGABOND?.deliveryTypes?.[d] ?? capitalize(d);
-      return { value: d, label: `${label} (${DELIVERY_COSTS[d] === 0 ? "free" : `+${DELIVERY_COSTS[d]}`})`, selected: d === s.deliveryType };
+      const label    = CONFIG.VAGABOND?.deliveryTypes?.[d] ?? capitalize(d);
+      const baseCost = DELIVERY_COSTS[d] ?? 99;
+      const costSuffix = baseCost === 0 ? "free" : `+${baseCost}`;
+      return {
+        value:       d,
+        label:       `${label} (${costSuffix})`,
+        selected:    d === s.deliveryType,
+        unaffordable: baseCost > cap,
+      };
     });
 
-    const canCast = s.deliveryType !== null && totalMana <= cap;
+    // Target-state for the dialog footer — drives both the Mana row hint
+    // and the Cast-button enable/disable.
+    const targetState = this._evalTargetState(s.deliveryType, targetCount);
 
-    return { s, cap, totalMana, damageCost, fxCost, deliveryCost, deliveryOptions, canCast };
+    const canCast = s.deliveryType !== null
+      && totalMana <= cap
+      && targetState.valid;
+
+    return {
+      s, cap, totalMana, damageCost, fxCost, deliveryCost, extraTargetCost,
+      deliveryOptions, canCast, targetCount, targetState,
+    };
+  }
+
+  /**
+   * Validate the target-set for the chosen delivery. Used by both the live
+   * Mana row hint and the pre-flight check on the Cast button.
+   */
+  _evalTargetState(delivery, targetCount) {
+    if (SELF_DELIVERIES.has(delivery)) {
+      return { valid: true, label: "Self", note: "" };
+    }
+    const userTargets = game.user?.targets?.size ?? 0;
+    if (SINGLE_TARGET_DELIVERIES.has(delivery)) {
+      if (userTargets === 1) return { valid: true,  label: `1 target`,  note: "" };
+      if (userTargets === 0) return { valid: false, label: "no target", note: "Touch needs 1 target" };
+      return { valid: false, label: `${userTargets} targets`, note: "Touch allows 1 target" };
+    }
+    if (EXTRA_TARGET_DELIVERIES.has(delivery)) {
+      if (userTargets === 0) return { valid: false, label: "no targets", note: "Remote needs ≥1 target" };
+      return { valid: true, label: `${userTargets} target${userTargets === 1 ? "" : "s"}`, note: "" };
+    }
+    // Area deliveries — anything goes; the system places the template.
+    return { valid: true, label: `${userTargets} in area`, note: "" };
   }
 
   async _renderHTML(context) {
-    const { s, cap, totalMana, damageCost, fxCost, deliveryOptions, canCast } = context;
+    const { s, cap, totalMana, damageCost, fxCost, extraTargetCost,
+            deliveryOptions, canCast, targetState } = context;
     const t = this.talent;
 
     const deliverySelectOptions =
       `<option value="">-- Select Delivery --</option>` +
       deliveryOptions.map(o =>
-        `<option value="${o.value}" ${o.selected ? "selected" : ""}>${o.label}</option>`
+        `<option value="${o.value}" ${o.selected ? "selected" : ""} ${o.unaffordable ? "disabled" : ""} class="${o.unaffordable ? "vce-tcd-unaffordable" : ""}">${o.label}${o.unaffordable ? " — over cap" : ""}</option>`
       ).join("");
 
     // Damage section
@@ -219,6 +341,11 @@ class TalentCastDialog extends foundry.applications.api.ApplicationV2 {
       </div>
       <div class="vce-tcd-section vce-tcd-mana">
         Cost: <strong class="${manaClass}">${totalMana}</strong> / ${cap}
+        ${extraTargetCost > 0 ? `<span class="vce-tcd-muted" style="font-size:10px">&nbsp;(+${extraTargetCost} extra targets)</span>` : ""}
+      </div>
+      <div class="vce-tcd-section vce-tcd-targets ${targetState.valid ? "" : "vce-tcd-target-error"}">
+        <i class="fas fa-bullseye"></i>&nbsp;Targets: <strong>${targetState.label}</strong>
+        ${targetState.note ? `<span class="vce-tcd-muted" style="font-size:10px">&nbsp;— ${targetState.note}</span>` : ""}
       </div>
       <div class="vce-tcd-section">
         <div class="vce-tcd-row vce-tcd-focus-row">
@@ -252,6 +379,12 @@ class TalentCastDialog extends foundry.applications.api.ApplicationV2 {
     this.element.addEventListener("change", e => {
       if (!e.target.classList.contains("vce-tcd-delivery-select")) return;
       this._state.deliveryType = e.target.value || null;
+      // Auto-enable Focus when switching TO aura (focus-tick is the
+      // expected behavior; one-shot instant aura is the rare case and
+      // can still be opted into by toggling Focus off after).
+      if (this._state.deliveryType === "aura" && !this._state.focusAfterCast) {
+        this._state.focusAfterCast = true;
+      }
       this.render();
     });
 
@@ -300,15 +433,35 @@ class TalentCastDialog extends foundry.applications.api.ApplicationV2 {
         this._state.focusAfterCast = !this._state.focusAfterCast;
       }
       else if (btn.classList.contains("vce-tcd-cast-btn") && !btn.disabled) {
-        const s   = this._state;
+        const s = this._state;
+        const targetCount = SELF_DELIVERIES.has(s.deliveryType)
+          ? 1
+          : Math.max(1, game.user?.targets?.size ?? 0);
+
+        // Defensive re-validation in case targets changed between render
+        // and click. The disabled-state on the button handles the common
+        // case; this catches the race.
+        const targetState = this._evalTargetState(s.deliveryType, targetCount);
+        if (!targetState.valid) {
+          ui.notifications.warn(`${this.talent.name}: ${targetState.note}.`);
+          return;
+        }
+
         const cfg = {
           damageDice:     s.damageDice,
           includeDamage:  s.includeDamage && this._hasDamage,
           includeEffect:  s.includeEffect || (!this._hasDamage && this._hasEffect),
           delivery:       s.deliveryType ?? this._allowedDeliveries[0],
           isFocused:      s.focusAfterCast,
+          targetCount,
         };
-        cfg.totalMana = computeTotalMana(cfg, this.talent);
+        cfg.totalMana = computeTotalMana(cfg, this.talent, targetCount);
+        if (cfg.totalMana > this.cap) {
+          ui.notifications.warn(
+            `${this.talent.name}: cost ${cfg.totalMana} exceeds Mana cap ${this.cap}.`
+          );
+          return;
+        }
         this._finish(cfg);
         await this.close();
         return;
@@ -327,6 +480,10 @@ class TalentCastDialog extends foundry.applications.api.ApplicationV2 {
   // When window X is clicked — resolve null so openDialog promise settles.
   async close(options) {
     if (!this._settled) this._finish(null);
+    if (this._targetHookId) {
+      Hooks.off("targetToken", this._targetHookId);
+      this._targetHookId = null;
+    }
     return super.close(options);
   }
 }
@@ -339,8 +496,10 @@ export const TalentCast = {
    * cap = floor(level / 2). Returns 0 if actor is not Psychic or level < 2.
    */
   getCap(actor) {
-    const psy = actor.items.find(i => i.type === "class" && i.name === "Psychic");
-    return Math.floor((psy?.system?.level ?? 1) / 2);
+    // Character level lives on the actor (matches feature-detector.mjs:256);
+    // the Psychic class item's own `level` field is not the source of truth.
+    const level = actor.system?.attributes?.level?.value ?? 1;
+    return Math.floor(level / 2);
   },
 
   /**
@@ -354,20 +513,9 @@ export const TalentCast = {
     if (!actor || !talent) return null;
 
     const cap = this.getCap(actor);
-    const allowed = (talent.system.delivery ?? []).filter(d => d in DELIVERY_COSTS);
-
-    if (allowed.length === 0) {
-      ui.notifications.warn(`${talent.name}: no valid delivery options configured.`);
-      return null;
-    }
-
-    const affordable = allowed.filter(d => (DELIVERY_COSTS[d] ?? 99) <= cap);
-    if (affordable.length === 0) {
-      ui.notifications.warn(
-        `${talent.name}: no affordable delivery options at current Mana cap (${cap}).`
-      );
-      return null;
-    }
+    // The dialog itself populates the dropdown with every standard delivery
+    // (minus imbue) — see TalentCastDialog constructor. No talent-specific
+    // pre-flight needed.
 
     return new Promise(resolve => {
       const dialog = new TalentCastDialog(actor, talent, cap, resolve);
@@ -395,11 +543,89 @@ export const TalentCast = {
    * @param {object}  config  — result from openDialog:
    *                           { damageDice, includeDamage, includeEffect,
    *                             delivery, isFocused, totalMana }
+   * @param {object}  [options]
+   * @param {Token[]} [options.explicitTargets]  — override `game.user.targets`
+   *   for the cast resolution. Used by `AuraManager._tickAura` so each per-
+   *   round tick can run the cast against a specific in-range hostile
+   *   without mutating the player's UI selection. Defaults to the player's
+   *   current targets, preserving the prior call-shape.
+   * @param {boolean} [options.skipFocus=false] — skip the post-cast focus
+   *   acquisition step (used by aura ticks: focus is already held by the
+   *   caster on the first cast, subsequent ticks shouldn't re-apply).
    */
-  async executeCast(actor, talent, config) {
+  async executeCast(actor, talent, config, options = {}) {
     if (!actor || !talent || !config) return;
 
     const { damageDice, includeDamage, includeEffect, isFocused } = config;
+    const { explicitTargets = null, skipFocus = false } = options;
+    // Resolve the active target set once, so cast-check + damage-targets +
+    // focus-target all see the same list. Overrideable via explicitTargets
+    // for aura ticks.
+    const userTargets = explicitTargets ?? Array.from(game.user.targets);
+
+    // Aura delivery → hand off to AuraManager for template placement +
+    // (when focused) per-round ticks. AuraManager calls back into this
+    // method per-target with `explicitTargets + skipFocus` so aura ticks
+    // reuse the full cast pipeline (cast check, damage roll, save card,
+    // status processing).
+    //
+    // Behavior selection comes from the cast dialog's Focus toggle, NOT
+    // the talent's base duration:
+    //   - isFocused + has damage   → "damageTick"   (re-rolls each round)
+    //   - isFocused + effect-only  → "effectTick"   (re-applies each round)
+    //   - !isFocused               → "instant"      (one-shot, then deactivate)
+    //
+    // RAW: any Spell/Talent's duration can be upgraded to Focus or Continual
+    // by paying extra Mana — the dialog's Focus toggle drives that. So a
+    // "instant" Pyrokinesis cast as Aura with Focus on becomes a damageTick
+    // aura.
+    //
+    // Conditions:
+    //   - explicitTargets NOT set (initial cast, not an aura tick re-entering)
+    //   - delivery === "aura"
+    //   - talent has damage or effect (buff Talents cast as Aura aren't
+    //     wired through AuraManager yet — known gap, see follow-up)
+    if (!explicitTargets
+        && config.delivery === "aura"
+        && (talent.system.damage || talent.system.effect)
+        && !talent.system.focusBuffAE) {
+      const { AuraManager } = await import("../aura/aura-manager.mjs");
+
+      let behavior;
+      if (isFocused) {
+        behavior = talent.system.damage ? "damageTick" : "effectTick";
+      } else {
+        behavior = "instant";
+      }
+
+      // Caster's focus pool tracks the talent first — AuraManager's
+      // focus-drop hook reads `focusTalentId` from activeAura and
+      // deactivates when this id leaves the focusedIds list.
+      if (isFocused) {
+        await TalentBuffs.applyFocus(actor, talent, [actor]);
+      }
+
+      const result = await AuraManager.activateGeneric(actor, {
+        sourceItemId:    talent.id,
+        itemName:        talent.name,
+        itemImg:         talent.img,
+        behavior,
+        castConfig:      config,
+        focusTalentId:   isFocused ? talent.id : null,
+        radius:          10,
+        templateColor:   "#9b6bff",
+        templateBorder:  "#5e3a8e",
+      });
+
+      // If the aura activation failed (e.g. caster already has an aura),
+      // roll back the focus state so the talent card doesn't get stuck
+      // focused with no actual aura.
+      if (!result.success && isFocused) {
+        try { await TalentBuffs.dropFocus(actor, talent); }
+        catch (e) { log("TalentCast", `Aura rollback dropFocus failed: ${e.message}`); }
+      }
+      return;
+    }
 
     // ── 1. Build a duck-typed spell from the talent's own data ─────────────
     //
@@ -446,7 +672,7 @@ export const TalentCast = {
     };
 
     // ── 2. Cast check (Mysticism / Awareness) — only vs hostile targets ─────
-    const unwillingTargets = Array.from(game.user.targets).filter(
+    const unwillingTargets = userTargets.filter(
       t => t.document?.disposition === CONST.TOKEN_DISPOSITIONS.HOSTILE
     );
     const requiresCastCheck = unwillingTargets.length > 0;
@@ -487,7 +713,7 @@ export const TalentCast = {
         const { VagabondDamageHelper } = await import(
           "/systems/vagabond/module/helpers/damage-helper.mjs"
         );
-        const targetsAtRollTime = Array.from(game.user.targets).map(t => ({
+        const targetsAtRollTime = userTargets.map(t => ({
           // Match the system's _resolveStoredTargets shape EXACTLY (see
           // damage-helper.mjs:150-156). Using `name`/`img` (without the
           // actor- prefix) is wrong; the system reads `actorName`/`actorImg`.
@@ -517,7 +743,10 @@ export const TalentCast = {
     // ── 4. Assemble spellCastResult + call spellCast ─────────────────────────
     // Match the system's _resolveStoredTargets shape EXACTLY — see
     // damage-helper.mjs:150-156. Source from the TOKEN, not the actor.
-    const targetsAtRollTime = Array.from(game.user.targets).map(t => ({
+    // Use userTargets (= explicitTargets || game.user.targets) so aura ticks
+    // populate the chat card's data-targets with the actual hostile in
+    // range. Without this, Apply Direct fails with "No tokens targeted".
+    const targetsAtRollTime = userTargets.map(t => ({
       tokenId:   t.id,
       sceneId:   t.scene?.id ?? t.document?.parent?.id ?? canvas.scene?.id,
       actorId:   t.actor?.id,
@@ -558,11 +787,39 @@ export const TalentCast = {
       actor, castSpell, spellCastResult, damageRoll, targetsAtRollTime
     );
 
-    // ── 5. Focus (Task 11 — not yet implemented) ────────────────────────────
-    if (isFocused) {
-      console.log(
-        `${MODULE_ID} | TalentCast | ${talent.name}: isFocused=true — focus wiring pending Task 11.`
-      );
+    // ── 5. Apply focus state + distribute focus-buff AE to targets ──────────
+    //
+    // Per RAW: a focus-duration spell stays active while the caster focuses;
+    // dropping focus ends it. For buff Talents (Shield, Evade, Absence,
+    // Transvection), the focusBuffAE goes on the *target*, not the caster.
+    // The caster holds the focus slot.
+    //
+    // Target resolution by delivery:
+    //   Self            → [caster]
+    //   Touch           → 1 close target
+    //   Remote          → all selected targets (each extra costs +1 Mana,
+    //                     already paid via the cost computation above)
+    //   Area deliveries → all caught in the area template (system-handled)
+    // Aura ticks reuse executeCast for the per-target damage/effect roll —
+    // they pass skipFocus:true so subsequent ticks don't re-acquire the
+    // caster's focus slot (focus was already applied on the initial cast,
+    // which is what the AuraManager is now sustaining).
+    if (skipFocus) return;
+
+    if (isFocused && talent.system.focusBuffAE) {
+      const recipients = resolveTargetsForBuff(actor, config.delivery);
+      if (recipients && recipients.length > 0) {
+        await TalentBuffs.applyFocus(actor, talent, recipients);
+      } else {
+        ui.notifications.warn(
+          `${talent.name}: no valid targets for ${config.delivery} delivery — focus not applied.`
+        );
+      }
+    } else if (isFocused) {
+      // Focus-duration Talent without a buff AE (e.g. Control, Seize). Track
+      // focus state on the caster so the focus pool gates correctly and the
+      // generic _focus FX plays. No AE distribution.
+      await TalentBuffs.applyFocus(actor, talent, [actor]);
     }
   },
 };
