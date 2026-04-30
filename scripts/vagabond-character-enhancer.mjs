@@ -262,6 +262,7 @@ import { AnimalCompanion } from "./perk-features/animal-companion.mjs";
 import { ReanimatorPerk } from "./perk-features/reanimator.mjs";
 import { ConjurerPerk } from "./perk-features/conjurer.mjs";
 import { RaisePerks } from "./perk-features/raise-perks.mjs";
+import { BriarHealerManager } from "./perk-features/briar-healer.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -556,6 +557,10 @@ Hooks.once("ready", async () => {
       const widdCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
       WitchFeatures.onCalculateFinalDamage(widdCtx);
       result = widdCtx.result;
+
+      // Briar Healer (perk): if buffed actor takes melee damage, fire d6 reactive at attacker
+      const briarCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
+      BriarHealerManager.onCalculateFinalDamage(briarCtx);
 
       const needsRageDR = actor.system?.incomingDamageReductionPerDie > 0
         && actor.statuses?.has("berserk")
@@ -1832,6 +1837,7 @@ Hooks.once("ready", async () => {
   BlessManager.registerHooks();
   WardManager.registerHooks();
   EffectOnlyHandler.registerHooks();
+  BriarHealerManager.registerHooks();
   SummonerFeatures.registerHooks();
   FamiliarFeatures.registerHooks();
   CompanionManagerTab.init();

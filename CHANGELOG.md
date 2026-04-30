@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.4 — Briar Healer perk automation
+
+Briar Healer (perk requiring the Life spell) is now fully automated.
+
+- On Life cast by a perk holder, a managed AE applies `+1 system.armorBonus` to the spell's first target. The AE is tagged with the caster's id and persists only while the caster keeps Life in `system.focus.spellIds` — round-tick + `updateActor` watchers tear it down the moment Focus drops.
+- When a buffed actor takes damage from a melee attack (`attackType === "melee"` from either the direct-apply or save-routed flow), a d6 thorn reaction rolls and auto-applies to the attacker. Damage is GM-relayed via the new `applyDamage` socket op so player clients can fire it on NPCs they don't own. Bypasses armor by design — reactive thorn damage, not an attack roll.
+- Detection routes through the existing `calculateFinalDamage` dispatcher next to Apex Predator / Widdershins. Single-target only (RAW: "the Target"); covers Touch / Remote / Aura targets equally — whichever the cast resolved against.
+
+Files: new `scripts/perk-features/briar-healer.mjs`; new `applyDamage` case in `scripts/socket-relay.mjs`; wiring in `scripts/vagabond-character-enhancer.mjs`. Reference doc updated in `docs/perk-automation-reference.md`.
+
 ## v0.4.3 — Hotfix: Missing templates in release zip
 
 `build-zip.ps1` was never copying the `templates/` directory into the release archive, so v0.4.x deployments from the GitHub release (rather than a local copy) silently failed on every feature that opens an ApplicationV2 dialog: the companion creature picker, corpse picker, controller dialog, alchemy cookbook, and Feature FX config. Local installs worked because Foundry reads templates straight from disk; only users on the released build hit `ENOENT … templates/creature-picker.hbs` and saw companion buttons do nothing.

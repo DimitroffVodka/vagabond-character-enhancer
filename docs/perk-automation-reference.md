@@ -36,7 +36,7 @@ Reference for all 104 Vagabond RPG perks and their automation status in the `vag
 | Athame | 📝 Flavor | 10-minute Ritual to make a dagger your athame (Relic with Loyalty Power). | Ritual; item property is manual |
 | Bookworm | 📝 Flavor | Gain an extra Studied die when you Study. Can take multiple times. | Studied die economy; no combat hook |
 | Botanical Mediciner | 📝 Flavor | Restore d6 HP during a Breather with herbs; can remove Blinded, Paralyzed, or Sickened. | Breather healing; manual application |
-| Briar Healer | 📝 Flavor | Life Spell Target gains +1 Armor and deals d6 to melee attackers while you Focus. | Complex Focus + reactive damage interaction |
+| Briar Healer | ✅ Module | Life Spell Target gains +1 Armor and deals d6 to melee attackers while you Focus. | On Life cast → +1 armorBonus AE on first target, gated on caster's focus.spellIds. calculateFinalDamage hook fires d6 thorn reaction at melee attackers (perk-features/briar-healer.mjs) |
 | Bully | ✅ Module | Grapple/Shove Checks against smaller Targets are Favored; can use grappled Targets as a greatclub. | Runtime check: favor on Grapple/Shove vs smaller targets (brawl-intent.mjs) |
 | Cardistry | 📝 Flavor | Use deck of cards as Trinket and 2H Thrown/Finesse weapon (d4 damage). | Item property; manual weapon setup |
 | Cat-Like Reflexes | 🔲 Automatable | Reduce fall damage by half; while Prone, stand up using only 5' of Speed. | AE: could halve fall damage via hook; Prone stand-up is harder |

@@ -227,6 +227,19 @@ async function _handleRequest(data) {
       return { ok: true };
     }
 
+    case "applyDamage": {
+      // Direct HP reduction. Used by reactive perk damage (e.g. Briar Healer's
+      // d6 thorn damage to a melee attacker). Bypasses armor by design — these
+      // are reactive effects, not attack rolls.
+      const target = game.actors.get(data.targetActorId);
+      if (!target) return { error: `applyDamage: actor "${data.targetActorId}" not found` };
+      const dmg = Math.max(0, parseInt(data.damage) || 0);
+      const cur = target.system?.health?.value ?? 0;
+      const newHp = Math.max(0, cur - dmg);
+      await target.update({ "system.health.value": newHp });
+      return { ok: true, oldHp: cur, newHp };
+    }
+
     case "selflessTransfer": {
       // Revelator's Selfless: revelator takes raw damage, ally's HP restored
       // by the post-armor amount they actually lost. Routed through GM because
