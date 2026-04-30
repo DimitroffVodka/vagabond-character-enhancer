@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.3 — Hotfix: Missing templates in release zip
+
+`build-zip.ps1` was never copying the `templates/` directory into the release archive, so v0.4.x deployments from the GitHub release (rather than a local copy) silently failed on every feature that opens an ApplicationV2 dialog: the companion creature picker, corpse picker, controller dialog, alchemy cookbook, and Feature FX config. Local installs worked because Foundry reads templates straight from disk; only users on the released build hit `ENOENT … templates/creature-picker.hbs` and saw companion buttons do nothing.
+
+Fix: `build-zip.ps1` now bundles `templates/`. No code changes — purely a packaging fix.
+
 ## v0.4.2 — Aura Delivery System + Talents Tab Refactor
 
 ### AuraManager → Generalized Delivery System
