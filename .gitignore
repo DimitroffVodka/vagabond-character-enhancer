@@ -6,4 +6,3 @@ PLAN.md
 
 # LevelDB lock files
 packs/*/LOCK
-build-zip.ps1
