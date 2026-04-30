@@ -33,11 +33,11 @@ ALL spells with `causedStatuses` configured in the system compendium when cast w
 
 | Category | Count |
 |----------|-------|
-| ✅ Module (VCE custom) | 4 |
+| ✅ Module (VCE custom) | 5 |
 | ✅ System (causedStatuses) | 19 |
 | 🟢 AE (easy automation) | 5 |
 | 🟡 Status Removal | 2 |
-| 🟡 Complex | 12 |
+| 🟡 Complex | 11 |
 | 🔴 Narrative | 17 |
 | **Total** | **60** |
 
@@ -51,6 +51,7 @@ ALL spells with `causedStatuses` configured in the system compendium when cast w
 | Exalt | -- | Class feature (Revelator) | +1 per damage die AE, +1 Will vs Frightened |
 | Imbue | -- | `imbue-manager.mjs` | Spell damage dice added to weapon, consumed on attack. 1 Mana minimum; friendly-target resolves wielder (self/ally/multi-target with picker); cross-owner writes via socket relay |
 | Polymorph | -- | `polymorph/` system | Full beast form transformation (Druid) |
+| Ward | -- | `ward-manager.mjs` | Reactive damage interception. Applies "Warded" AE to target on cast; on incoming damage, prompts caster for Cast Check → d6 reduction per (1 + extra Mana). Crit = full negate. Auto-cleans up when caster drops focus. Wired into both save-flow and direct-apply damage paths. |
 
 ### System causedStatuses (handled by effect-only handler + system damage flow)
 
@@ -107,7 +108,6 @@ These remove existing statuses and grant temporary immunity.
 
 | Spell | Damage | What it does | Challenge |
 |-------|--------|--------------|-----------|
-| Ward | -- | Reduce damage by d6 per mana on Cast Check pass | Intercept incoming damage reactively + roll Cast Check. Crit: negate all damage. |
 | Enchant | -- | Item becomes Relic + optional +1/+2/+3 Bonus | AE on item with Relic flag + bonus. Needs mana cost dialog. |
 | Animate | -- | Animate Item: 30' Fly, obeys commands, attacks with Cast Skill | Create temporary actor from item. Very complex. |
 | Beast | -- | Summon Beast(s) with cumulative HD <= half Level | Summon actors with HD budget. Could reuse polymorph beast cache. |
