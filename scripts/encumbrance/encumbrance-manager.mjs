@@ -22,28 +22,60 @@ const ENCUMBERED_AE_FLAG = "encumberedAE";
 const STATUS_ID = "encumbered";
 
 /**
- * Quantity-aware occupied-slot count.
+ * Effective occupied-slot count matching the Vagabond rulebook + the
+ * vagabond-crawler module's slot display.
  *
- * The Vagabond system's `system.inventory.occupiedSlots` does NOT multiply by
- * `system.quantity` — a Battleaxe with `quantity: 2, slots: 2` only contributes
- * 2 slots, not 4. The rulebook (and the inventory grid's "×N" stack badge)
- * imply each instance occupies its full slot footprint, so we recompute here
- * by summing `slots × quantity` per item. Mirrors the system's filtering
- * (skip non-inventory types, items inside containers, slot-0 items).
+ * The Vagabond system's `system.inventory.occupiedSlots` does NOT account for:
+ *   1. Item quantity — a Battleaxe with `quantity: 2, slots: 2` is counted
+ *      as 2 slots, not 4. We recompute as `slots × quantity` per item.
+ *   2. Zero-slot pooling — small items with `slots: 0` (rations, scrolls,
+ *      coins, etc.) are weightless individually but the rulebook still
+ *      wants them to take up some space in bulk. Group by `gearCategory`
+ *      (or item name when no category is set) and add `ceil(total / 10)`
+ *      slots per group.
+ *
+ * The vagabond-crawler module post-processes the sheet's `.slot-value`
+ * display with the same formula. We mirror it here so the encumbrance
+ * speed penalty fires when the displayed slot count crosses the cap,
+ * regardless of whether the user has the crawler installed.
+ *
+ * Items can opt out of the zero-slot pool via the `trueZeroSlot` flag
+ * (set on the item, namespaced to vagabond-crawler).
+ *
+ * Algorithm reference: `modules/vagabond-crawler/scripts/vagabond-crawler.mjs`
+ * — `_patchInventory` function.
  *
  * @param {Actor} actor
  * @returns {number}
  */
 export function computeQuantityAwareOccupiedSlots(actor) {
   let total = 0;
+  const zeroSlotGroups = new Map();
+
   for (const item of actor?.items ?? []) {
     if (!["equipment", "weapon", "armor", "gear", "container"].includes(item.type)) continue;
     if (item.system?.containerId) continue;
+
     const itemSlots = item.system?.slots || item.system?.baseSlots || 0;
-    if (itemSlots <= 0) continue;
     const quantity = item.system?.quantity ?? 1;
-    total += itemSlots * quantity;
+    if (quantity <= 0) continue;
+
+    if (itemSlots > 0) {
+      total += itemSlots * quantity;
+    } else {
+      // Zero-slot item: pool by gearCategory (or name if no category)
+      // unless flagged as trueZeroSlot (opt-out, set by crawler module).
+      if (item.getFlag?.("vagabond-crawler", "trueZeroSlot")) continue;
+      const group = item.system?.gearCategory || item.name;
+      zeroSlotGroups.set(group, (zeroSlotGroups.get(group) ?? 0) + quantity);
+    }
   }
+
+  // Each zero-slot group contributes ceil(total / 10) slots.
+  for (const groupTotal of zeroSlotGroups.values()) {
+    total += Math.ceil(groupTotal / 10);
+  }
+
   return total;
 }
 
@@ -93,42 +125,59 @@ export const EncumbranceManager = {
   },
 
   /**
-   * Compute the current encumbered state and create/delete the managed AE
-   * to match. GM-only — non-GM clients no-op (the GM's refresh call writes
-   * for everyone via the world database).
+   * Compute the current encumbered state and reconcile actor + sheet:
+   *   - GM clients: create/delete the managed encumbered AE so the icon
+   *     reflects current slot delta.
+   *   - All clients: force a local sheet re-render so the slot-count
+   *     header and overload-warning panel catch up to current actor data.
+   *
+   * The sheet re-render is a workaround for a Vagabond v5.3.0 character-sheet
+   * caching bug — the slot field doesn't refresh on every item update, so
+   * the displayed `{{system.inventory.occupiedSlots}} / {{maxSlots}}` can
+   * lag what the patch is actually reading. Re-rendering on every refresh
+   * keeps the visible numbers in sync with reality.
    */
   async refresh(actor) {
-    if (!game.user.isGM) return;
     if (actor.type !== "character") return;
 
-    const enabled = game.settings.get(MODULE_ID, "homebrewEncumbranceSpeedPenalty");
-    const occupied = computeQuantityAwareOccupiedSlots(actor);
-    const max = actor.system.inventory?.maxSlots ?? 0;
-    const over = enabled ? Math.max(0, occupied - max) : 0;
-    const wantStatus = over > 0;
+    // GM-only: actor-data writes for the encumbered AE
+    if (game.user.isGM) {
+      const enabled = game.settings.get(MODULE_ID, "homebrewEncumbranceSpeedPenalty");
+      const occupied = computeQuantityAwareOccupiedSlots(actor);
+      const max = actor.system.inventory?.maxSlots ?? 0;
+      const over = enabled ? Math.max(0, occupied - max) : 0;
+      const wantStatus = over > 0;
 
-    const existingAE = actor.effects.find(e =>
-      e.getFlag(MODULE_ID, ENCUMBERED_AE_FLAG) === true
-    );
+      const existingAE = actor.effects.find(e =>
+        e.getFlag(MODULE_ID, ENCUMBERED_AE_FLAG) === true
+      );
 
-    if (wantStatus && !existingAE) {
-      await actor.createEmbeddedDocuments("ActiveEffect", [{
-        name: game.i18n.localize("VCE.Status.Encumbered"),
-        img: "icons/svg/anchor.svg",
-        statuses: [STATUS_ID],
-        changes: [],
-        disabled: false,
-        transfer: false,
-        flags: {
-          [MODULE_ID]: {
-            [ENCUMBERED_AE_FLAG]: true,
+      if (wantStatus && !existingAE) {
+        await actor.createEmbeddedDocuments("ActiveEffect", [{
+          name: game.i18n.localize("VCE.Status.Encumbered"),
+          img: "icons/svg/anchor.svg",
+          statuses: [STATUS_ID],
+          changes: [],
+          disabled: false,
+          transfer: false,
+          flags: {
+            [MODULE_ID]: {
+              [ENCUMBERED_AE_FLAG]: true,
+            },
           },
-        },
-      }]);
-      log("EncumbranceManager", `${actor.name}: encumbered ON (${over} slots over)`);
-    } else if (!wantStatus && existingAE) {
-      await existingAE.delete();
-      log("EncumbranceManager", `${actor.name}: encumbered OFF`);
+        }]);
+        log("EncumbranceManager", `${actor.name}: encumbered ON (${over} slots over)`);
+      } else if (!wantStatus && existingAE) {
+        await existingAE.delete();
+        log("EncumbranceManager", `${actor.name}: encumbered OFF`);
+      }
+    }
+
+    // Per-client: force a local sheet re-render so the slot-count display
+    // catches up. This runs on EVERY connected client (GM and players),
+    // each flushing their own open sheet view of this actor.
+    if (actor.sheet?.rendered) {
+      try { actor.sheet.render(true); } catch (e) { /* non-fatal */ }
     }
   },
 

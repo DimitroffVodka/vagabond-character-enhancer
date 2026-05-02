@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.4.10 — fix: encumbrance matches vagabond-crawler slot display
+
+The encumbrance speed penalty was using a slot count that disagreed with the displayed slot total on the character sheet whenever the **vagabond-crawler** module was active. The crawler post-processes the sheet's `.slot-value` field with two extra rules the system itself doesn't apply:
+
+1. **Quantity multiplication** for stacked items (already handled by VCE since v0.4.8).
+2. **Zero-slot pooling** — small items with `slots: 0` (rations, scrolls, coins) get grouped by `gearCategory` (or item name) and every 10 in a group contributes 1 slot.
+
+VCE only had rule 1. So a witch with 3 Rations + 1 Backpack (both 0-slot items) was visibly over capacity on the sheet ("16/14, +2 over"), but VCE's read of `system.inventory.occupiedSlots = 14` matched the cap exactly — no penalty applied, and players reported "encumbrance not working."
+
+`computeQuantityAwareOccupiedSlots` now also pools zero-slot items the same way the crawler does. Items can opt out via the crawler's `trueZeroSlot` flag.
+
+The patch's algorithm is documented inline alongside the crawler's reference (`vagabond-crawler/scripts/vagabond-crawler.mjs` `_patchInventory`).
+
+### Bonus: sheet force-render workaround
+
+The Vagabond v5.3.0 character sheet's slot field doesn't always re-render on item add/remove, leaving a stale displayed count even though the underlying data is fresh. `EncumbranceManager.refresh` now force-renders any open sheet (every connected client, not just the GM) after each refresh fires. Cheap workaround that keeps the visible numbers in sync with reality.
+
 ## v0.4.9 — Vagabond v5.3.0 compat
 
 Tested against Vagabond system v5.3.0 (`module.json` verified field bumped from 5.0.0 → 5.3.0). Smoke pass: focus-cap patch, encumbrance speed/icon pipeline, weapon `rollAttack` wrapper, status icon migration, auto-activate, hex panel — all working with zero new console errors.
