@@ -537,7 +537,9 @@ Hooks.once("ready", async () => {
               }
             }
           } catch (e) {
-            // Setting may not be registered during init-time prepares; non-fatal.
+            // Setting may not be registered during init-time prepares — non-fatal,
+            // intentionally silent. Do NOT add logging here: this catch is on the
+            // hot path of every actor's prepareDerivedData and would spam the log.
           }
           return ret;
         };
