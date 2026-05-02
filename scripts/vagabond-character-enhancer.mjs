@@ -500,6 +500,62 @@ Hooks.once("ready", async () => {
       log("Focus", `Could not patch focus.max default: ${e.message}`);
     }
 
+    // ── Encumbrance speed penalty (homebrew, opt-in) ──────────────────────
+    // Chain a second patch onto prepareDerivedData. After the focus-cap
+    // adjustment runs, reduce speed.base by 5 ft per inventory slot over
+    // max and recompute crawl/travel from the reduced base. Setting off
+    // → no-op.
+    //
+    // Why post-prepare: the system computes speed.base at line ~1062
+    // BEFORE inventory.maxSlots/occupiedSlots at line ~1100. An AE
+    // targeting system.speed.bonus that referenced @inventory.* would
+    // read stale data. By the time prepareDerivedData returns, both
+    // fields are settled.
+    try {
+      const CharCls = CONFIG.Actor.dataModels?.character;
+      if (CharCls && !CharCls.prototype._vceEncumbranceSpeedPatched) {
+        const prePrepare = CharCls.prototype.prepareDerivedData;
+        CharCls.prototype.prepareDerivedData = function() {
+          const ret = prePrepare.apply(this, arguments);
+          try {
+            if (game.settings.get(MODULE_ID, "homebrewEncumbranceSpeedPenalty")) {
+              const occupied = this.inventory?.occupiedSlots ?? 0;
+              const max = this.inventory?.maxSlots ?? 0;
+              const over = Math.max(0, occupied - max);
+              if (over > 0 && this.speed?.base != null) {
+                const penalty = over * 5;
+                const reducedBase = Math.max(0, this.speed.base - penalty);
+                this.speed.base = reducedBase;
+                // Recompute crawl/travel from the homebrew-aware formulas
+                // using the reduced base. Mirrors the system's logic at
+                // actor-character.mjs:1071-1080.
+                const speedRollData = { ...this.parent.getRollData(), speed: { base: reducedBase } };
+                const crawlFormula  = CONFIG.VAGABOND?.homebrew?.derivations?.crawl  ?? '@speed.base * 3';
+                const travelFormula = CONFIG.VAGABOND?.homebrew?.derivations?.travel ?? 'floor(@speed.base / 5)';
+                this.speed.crawl  = Math.max(0, this._evaluateSingleFormula(crawlFormula,  speedRollData));
+                this.speed.travel = Math.max(0, this._evaluateSingleFormula(travelFormula, speedRollData));
+              }
+            }
+          } catch (e) {
+            // Setting may not be registered during init-time prepares; non-fatal.
+          }
+          return ret;
+        };
+        CharCls.prototype._vceEncumbranceSpeedPatched = true;
+        log("Encumbrance", "Patched character prepareDerivedData for homebrew speed penalty");
+        // Re-derive existing PCs so the patch takes effect on world load
+        // (same reason as the focus-cap sweep — actors prepared before this
+        // point cache the un-penalized speed).
+        for (const a of game.actors) {
+          if (a.type === "character") {
+            try { a.prepareData(); } catch (e) { /* per-actor failure non-fatal */ }
+          }
+        }
+      }
+    } catch (e) {
+      log("Encumbrance", `Could not patch prepareDerivedData for speed penalty: ${e.message}`);
+    }
+
     const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
 
     // Route friendly NPC saves through their controller PC.
