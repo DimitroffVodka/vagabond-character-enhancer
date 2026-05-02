@@ -328,5 +328,27 @@ export const STATUS_EFFECTS_REGISTRY = {
     icon: "icons/svg/skull.svg",
     automation: "fully_automated",
     description: "Same as Incapacitated but automatically fails ALL rolls (stats, skills, saves, attacks)."
+  },
+
+  // ──────────────────────────────────────────────
+  // Encumbered (homebrew, opt-in)
+  // ──────────────────────────────────────────────
+  // Marker for PCs carrying more inventory slots than their max.
+  // Applied/removed by EncumbranceManager when the
+  // "homebrewEncumbranceSpeedPenalty" world setting is enabled.
+  //
+  // AUTOMATION: fully_automated (when setting is on)
+  // SYSTEM: Not registered in CONFIG.statusEffects — applied via a managed
+  //   AE on the actor with statuses: ["encumbered"] so the icon renders on
+  //   the token effect bar.
+  // MODULE HANDLES (encumbrance-manager.mjs):
+  //   - Reactively creates/deletes the AE on inventory changes.
+  //   - Mechanical penalty (-5 ft / slot over) lives in prepareDerivedData
+  //     patch in vagabond-character-enhancer.mjs.
+  "encumbered": {
+    id: "encumbered",
+    icon: "icons/svg/anchor.svg",
+    automation: "fully_automated",
+    description: "Carrying more inventory slots than max. Base speed reduced by 5 ft per slot over (homebrew, opt-in)."
   }
 };

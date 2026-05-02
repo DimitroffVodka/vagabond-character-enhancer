@@ -434,6 +434,16 @@ Hooks.once("init", () => {
     default: true
   });
 
+  game.settings.register(MODULE_ID, "homebrewEncumbranceSpeedPenalty", {
+    name: "VCE.Settings.HomebrewEncumbranceSpeed",
+    hint: "VCE.Settings.HomebrewEncumbranceSpeedHint",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false,
+    // onChange wired in Task 3 once EncumbranceManager exists. For now, no-op.
+  });
+
   // ---- Psychic / Talent item type ----------------------------------------
   // The Vagabond system registers CONFIG.Item.dataModels in its own init hook.
   // We extend (not replace) that object so existing item types are unaffected.
