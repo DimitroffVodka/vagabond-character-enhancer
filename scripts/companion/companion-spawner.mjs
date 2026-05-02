@@ -134,12 +134,25 @@ export const CompanionSpawner = {
       actorId = doc.id;
     }
 
-    // Place token on caster's scene
-    const scene = game.scenes.active;
-    if (!scene) return { success: false, error: "No active scene" };
+    // Place token on the caster's actual scene. Prefer the scene the user is
+    // currently viewing (canvas.scene) IF the caster has a token there; else
+    // pick any scene that has the caster's token; only as a last resort fall
+    // back to game.scenes.active. Using game.scenes.active alone is wrong —
+    // it's the GM's "navigation default" pointer, not necessarily where the
+    // caster is, which causes familiars/summons to land on the wrong scene.
+    let scene = null;
+    let casterToken = canvas.scene?.tokens?.find(t => t.actorId === caster.id) ?? null;
+    if (casterToken) {
+      scene = canvas.scene;
+    } else {
+      for (const s of game.scenes) {
+        const t = s.tokens.find(t => t.actorId === caster.id);
+        if (t) { scene = s; casterToken = t; break; }
+      }
+    }
+    if (!scene) scene = canvas.scene ?? game.scenes.active;
+    if (!scene) return { success: false, error: "No scene available for spawn" };
 
-    // Find the caster's token on the active scene; fall back to scene center if not placed.
-    const casterToken = scene.tokens.find(t => t.actorId === caster.id);
     const casterPos = casterToken
       ? { x: casterToken.x, y: casterToken.y }
       : { x: scene.width / 2, y: scene.height / 2 };
@@ -239,7 +252,7 @@ export const CompanionSpawner = {
     }
 
     log("CompanionSpawner", `Spawned ${sourceId} ${worldActor?.name ?? actorId} for ${caster.name}`);
-    return { tokenId, actorId, success: true };
+    return { tokenId, actorId, sceneId: scene.id, success: true };
   },
 
   /**

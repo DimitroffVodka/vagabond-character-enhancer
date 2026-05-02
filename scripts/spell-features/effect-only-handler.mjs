@@ -315,6 +315,7 @@ export const EffectOnlyHandler = {
       byCaster.get(key).push(entry);
     }
 
+    const { WitchFeatures } = await import("../class-features/witch.mjs");
     const removals = [];
     for (const [casterActorId, entries] of byCaster) {
       const casterActor = game.actors.get(casterActorId);
@@ -328,6 +329,11 @@ export const EffectOnlyHandler = {
         // Effect must have survived at least 1 full round
         const appliedRound = entry.flagData.appliedRound;
         if (appliedRound !== null && combat.round <= appliedRound) continue;
+
+        // Hex continuality: any module-managed spell effect on a witch's
+        // hex target is continual per Hex's "until you use this Feature on a
+        // different Target" clause.
+        if (WitchFeatures.isHexContinual(entry.actor, casterActor)) continue;
 
         removals.push(entry);
       }

@@ -502,11 +502,12 @@ export const PolymorphManager = {
 
     await actor.createEmbeddedDocuments("ActiveEffect", [{
       name: `Polymorph: ${beastData.beastName}`,
-      icon: beastData.beastImg || "icons/magic/nature/root-vine-thorns-poison-green.webp",
+      img: beastData.beastImg || "icons/magic/nature/root-vine-thorns-poison-green.webp",
       origin: classUuid || `${MODULE_ID}.polymorph`,
       changes,
       disabled: false,
       transfer: true,
+      statuses: ["polymorphed"],
       flags: {
         [MODULE_ID]: {
           managed: true,

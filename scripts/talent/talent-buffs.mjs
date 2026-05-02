@@ -299,6 +299,7 @@ export const TalentBuffs = {
       disabled: false,
       transfer: false,
       duration: { seconds: 1_000_000 },
+      statuses: ["talent-buff"],
       changes,
       flags: {
         ...(buff.flags ?? {}),

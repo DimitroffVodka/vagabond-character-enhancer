@@ -732,7 +732,7 @@ export const CompanionManagerTab = {
         critStatBonus: isCritical ? (controllerPC.system.stats?.[skill?.stat]?.value || 0) : 0
       } : null;
 
-      await VagabondChatCard.createActionCard({
+      const msg = await VagabondChatCard.createActionCard({
         actor: controllerPC,
         item: fakeItem,
         title: `${action.name} (${companionActor.name})`,
@@ -749,6 +749,13 @@ export const CompanionManagerTab = {
         targetsAtRollTime: targets,
         actionIndex: actionIdx
       });
+
+      // Tag for AutoActivate so the companion's combatant gets decremented
+      // instead of the controller PC's.
+      try {
+        const { AutoActivate } = await import("../combat-tracker/auto-activate.mjs");
+        await AutoActivate.tagCompanionAction(msg, companionActor.id);
+      } catch { /* non-fatal */ }
     } catch (err) {
       log("CompanionManagerTab", `Chat card error: ${err.message}`);
       ui.notifications.warn("VCE: Could not create action chat card.");

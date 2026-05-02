@@ -74,6 +74,16 @@ export const WitchFeatures = {
       }, 50);
     });
 
+    // Inject Hex panel into the Witch's character sheet.
+    // Deferred to next macrotask: the system re-renders the spell-list area
+    // after the renderApplicationV2 hook fires, which would clobber any DOM
+    // we appended synchronously. setTimeout(0) lets the system finish first.
+    Hooks.on("renderApplicationV2", (app) => {
+      if (app.document?.type === "character") {
+        setTimeout(() => this._injectHexUI(app), 0);
+      }
+    });
+
     // Things Betwixt cleanup: remove invisible on round change
     Hooks.on("updateCombat", async (combat, changes) => {
       if (!("round" in changes)) return;
@@ -115,7 +125,11 @@ export const WitchFeatures = {
   /* -------------------------------------------- */
 
   /**
-   * Apply Hex to a target. Manages max slot count, removes oldest if over cap.
+   * Apply Hex to a target. Per Vagabond rulebook: Hex binds a single target
+   * "until you use this Feature on a different Target" — so any prior hex is
+   * replaced on a new use. The "⌈level/2⌉" capacity in the rule refers to
+   * how many SPELLS the witch can have continual on the hexed target at
+   * once, not how many targets — that's tracked separately if/when needed.
    * @param {Actor} witch - The witch actor
    * @param {string} targetId - Target actor ID
    * @param {string} targetName - Target display name
@@ -125,25 +139,23 @@ export const WitchFeatures = {
     const features = getFeatures(witch);
     if (!features?.witch_hex) return;
 
-    const classLevel = features._classLevel ?? 1;
-    const maxHexes = Math.ceil(classLevel / 2);
-    let hexTargets = witch.getFlag(MODULE_ID, FLAG_HEX_TARGETS) || [];
+    const existing = witch.getFlag(MODULE_ID, FLAG_HEX_TARGETS) || [];
 
-    // Already hexed?
-    if (hexTargets.some(h => h.targetId === targetId)) {
+    // Same target already hexed — no-op.
+    if (existing.some(h => h.targetId === targetId)) {
       ui.notifications.info(`${targetName} is already hexed.`);
       return;
     }
 
-    // Over capacity — remove oldest
-    while (hexTargets.length >= maxHexes) {
-      const removed = hexTargets.shift();
-      await this._removeHexAE(removed.targetId, witch);
-      log("Witch", `Hex removed from ${removed.targetName} (over capacity)`);
+    // Replace any prior hex(es). Multiple stored entries can exist from a
+    // pre-1.0 build that allowed multi-target hex; clean them all out.
+    for (const prior of existing) {
+      await this._removeHexAE(prior.targetId, witch);
+      log("Witch", `Hex transferred from ${prior.targetName} to ${targetName}`);
     }
 
-    // Add new hex
-    hexTargets.push({ targetId, targetName, targetImg: targetImg || "icons/svg/mystery-man.svg" });
+    // Set the new single hex
+    const hexTargets = [{ targetId, targetName, targetImg: targetImg || "icons/svg/mystery-man.svg" }];
     await witch.setFlag(MODULE_ID, FLAG_HEX_TARGETS, hexTargets);
 
     // Create display AE on target
@@ -151,11 +163,12 @@ export const WitchFeatures = {
     if (targetActor) {
       await targetActor.createEmbeddedDocuments("ActiveEffect", [{
         name: `Hexed (${witch.name})`,
-        icon: "icons/magic/unholy/strike-body-explode-disintegrate.webp",
+        img: "icons/magic/unholy/strike-body-explode-disintegrate.webp",
         origin: `Actor.${witch.id}`,
         changes: [],
         disabled: false,
         transfer: true,
+        statuses: ["hexed"],
         flags: {
           [MODULE_ID]: {
             managed: true,
@@ -172,14 +185,14 @@ export const WitchFeatures = {
           <div class="card-description" style="text-align:center;">
             <i class="fas fa-eye" style="color:#9b59b6;"></i>
             <strong>${witch.name}</strong> hexes <strong>${targetName}</strong>
-            <br><span style="font-size:0.8em; opacity:0.7;">(${hexTargets.length}/${maxHexes} hex slots)</span>
+            ${existing.length ? `<br><span style="font-size:0.8em; opacity:0.7;">(replaced hex on ${existing.map(h => h.targetName).join(", ")})</span>` : ""}
           </div>
         </section></div>
       </div>`,
       speaker: ChatMessage.getSpeaker({ actor: witch })
     });
 
-    log("Witch", `${witch.name} hexed ${targetName} (${hexTargets.length}/${maxHexes})`);
+    log("Witch", `${witch.name} hexed ${targetName}${existing.length ? ` (replaced ${existing.length} prior)` : ""}`);
   },
 
   /**
@@ -229,6 +242,32 @@ export const WitchFeatures = {
   },
 
   /**
+   * Hex makes a spell's effects continual on the hexed target per the rule:
+   * "You can choose for the effects of a Spell you Cast (not the damage) to
+   * become continual ... for one of the Targets until you use this Feature
+   * on a different Target." So if the spell's caster is a witch and the
+   * spell's target is currently this witch's hex target, the effect is
+   * continual and survives focus drops / round-based cleanup.
+   *
+   * Both the witch_hex feature flag AND the active hex pointing at the
+   * target are required — a witch with no active hex (e.g. just acquired the
+   * feature) doesn't get continual effects yet.
+   *
+   * Spell-cleanup hooks should call this BEFORE removing an AE that's
+   * losing its focus claim.
+   *
+   * @param {Actor} targetActor - actor that owns the spell AE
+   * @param {Actor} casterActor - actor that cast the spell
+   * @returns {boolean} true if the spell effect is continual via this witch's Hex
+   */
+  isHexContinual(targetActor, casterActor) {
+    if (!targetActor || !casterActor) return false;
+    const features = casterActor.getFlag?.(MODULE_ID, "features") ?? {};
+    if (!features.witch_hex) return false;
+    return this.isHexedBy(targetActor, casterActor);
+  },
+
+  /**
    * Remove the Hex AE from a target actor.
    */
   async _removeHexAE(targetId, witch) {
@@ -240,6 +279,80 @@ export const WitchFeatures = {
     if (hexAE) {
       await targetActor.deleteEmbeddedDocuments("ActiveEffect", [hexAE.id]);
     }
+  },
+
+  /* -------------------------------------------- */
+  /*  Witch sheet — Hex panel                      */
+  /* -------------------------------------------- */
+
+  /**
+   * Inject a "Hex" panel into the Witch's character sheet showing the current
+   * hexed target (if any) with a release button. Only renders for actors
+   * with the witch_hex feature.
+   *
+   * Mirrors FocusManager._injectFocusUI — same DOM hook, same CSS classes,
+   * inserts immediately below the focus panel.
+   */
+  _injectHexUI(sheet) {
+    const actor = sheet.document;
+    const features = getFeatures(actor);
+    if (!features?.witch_hex) return;
+
+    const el = sheet.element;
+    if (!el) return;
+
+    // Remove stale injection
+    el.querySelectorAll(".vce-witch-hex-section").forEach(e => e.remove());
+
+    const hexTargets = actor.getFlag(MODULE_ID, FLAG_HEX_TARGETS) || [];
+
+    // Find the same insertion point the focus panel uses; if not found, bail.
+    const spellList = el.querySelector(".favorited-spells-list");
+    if (!spellList) return;
+
+    const section = document.createElement("div");
+    section.classList.add("vce-feature-focus-section", "vce-witch-hex-section");
+
+    const header = document.createElement("div");
+    header.classList.add("vce-feature-focus-header");
+    header.innerHTML = `<i class="fas fa-eye" style="color:#9b59b6;"></i> <span>Hex</span>`;
+    section.appendChild(header);
+
+    if (hexTargets.length === 0) {
+      const empty = document.createElement("div");
+      empty.classList.add("vce-feature-focus-row");
+      empty.style.opacity = "0.6";
+      empty.innerHTML = `<span class="vce-feature-focus-label"><em>No active hex</em></span>`;
+      section.appendChild(empty);
+    } else {
+      for (const entry of hexTargets) {
+        const row = document.createElement("div");
+        row.classList.add("vce-feature-focus-row");
+        row.innerHTML = `
+          <img src="${entry.targetImg || "icons/svg/mystery-man.svg"}" alt="${entry.targetName}" class="vce-feature-focus-icon" />
+          <span class="vce-feature-focus-label">${entry.targetName}</span>
+          <button class="vce-witch-hex-release" data-target-id="${entry.targetId}" data-actor-id="${actor.id}" title="Remove Hex">
+            <i class="fas fa-times"></i>
+          </button>
+        `;
+        section.appendChild(row);
+      }
+    }
+
+    // Insert after the focus section if it exists, else after spellList
+    const focusSection = el.querySelector(".vce-feature-focus-section:not(.vce-witch-hex-section)");
+    (focusSection ?? spellList).after(section);
+
+    // Bind release handlers
+    section.querySelectorAll(".vce-witch-hex-release").forEach(btn => {
+      btn.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        const targetId = ev.currentTarget.dataset.targetId;
+        const actorId = ev.currentTarget.dataset.actorId;
+        const witchActor = game.actors.get(actorId);
+        if (witchActor) await this.removeHex(witchActor, targetId);
+      });
+    });
   },
 
   /* -------------------------------------------- */

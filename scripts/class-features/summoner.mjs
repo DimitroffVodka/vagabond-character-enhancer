@@ -1060,14 +1060,14 @@ export const SummonerFeatures = {
       await actor.update({ "system.mana.current": currentMana - cost });
     }
 
-    // Validate caster has a token on canvas
-    const summonerToken = actor.getActiveTokens()?.[0];
-    if (!summonerToken) {
-      ui.notifications.warn("No summoner token on canvas.");
+    // Validate caster has a token somewhere — CompanionSpawner picks the
+    // right scene (caster's actual scene, not whatever scene is "active").
+    const summonerTokens = actor.getActiveTokens(true);
+    if (!summonerTokens.length) {
+      ui.notifications.warn("Summoner has no token placed on any scene.");
       return;
     }
 
-    const gridSize = canvas.grid?.size ?? 100;
     const sizeMultiplier = SIZE_MAP[npcData.size?.toLowerCase()] ?? 1;
 
     // Resolve the creature UUID (world actor OR compendium)
@@ -1089,8 +1089,6 @@ export const SummonerFeatures = {
       tokenData: {
         name: npcData.name,
         texture: { src: npcData.img || "icons/svg/mystery-man.svg" },
-        x: summonerToken.document.x + gridSize,
-        y: summonerToken.document.y,
         width: sizeMultiplier,
         height: sizeMultiplier,
         disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY,
@@ -1140,7 +1138,7 @@ export const SummonerFeatures = {
       );
       if (!acquired) {
         ui.notifications.warn("No focus slots available — summon cannot be maintained.");
-        try { await gmRequest("removeToken", { sceneId: canvas.scene.id, tokenId }); } catch { /* best effort */ }
+        try { await gmRequest("removeToken", { sceneId: spawnResult.sceneId, tokenId }); } catch { /* best effort */ }
         if (importedFromCompendium) {
           try { await gmRequest("deleteActor", { actorId: sourceActorId }); } catch { /* best effort */ }
         }
@@ -1158,7 +1156,7 @@ export const SummonerFeatures = {
       summonArmor: npcData.armor ?? 0,
       summonImmunities: npcData.immunities ?? [],
       importedFromCompendium,
-      sceneId: canvas.scene.id
+      sceneId: spawnResult.sceneId
     };
     if (useSecondNature) conjureState.secondNatureCountdown = 4;
     await actor.setFlag(MODULE_ID, FLAG_CONJURE, conjureState);
@@ -1347,7 +1345,7 @@ export const SummonerFeatures = {
       critStatBonus: isCritical ? (summoner.system.stats?.[skill?.stat]?.value || 0) : 0
     } : null;
 
-    await VagabondChatCard.createActionCard({
+    const msg = await VagabondChatCard.createActionCard({
       actor: summoner,
       item: fakeItem,
       title: `${action.name} (${conjure.summonName})`,
@@ -1364,6 +1362,13 @@ export const SummonerFeatures = {
       targetsAtRollTime: targets,
       actionIndex: actionIdx
     });
+
+    // Tag the message with the companion's actorId so AutoActivate decrements
+    // the companion's combatant (not the controller PC's) on this chat card.
+    try {
+      const { AutoActivate } = await import("../combat-tracker/auto-activate.mjs");
+      await AutoActivate.tagCompanionAction(msg, conjure.summonActorId);
+    } catch { /* non-fatal */ }
 
     log("Summoner", `${summoner.name} used ${conjure.summonName}'s ${action.name}: ${isSuccess ? "hit" : "miss"}${damageRoll ? ` for ${damageRoll.total}` : ""}`);
   },
@@ -1383,11 +1388,12 @@ export const SummonerFeatures = {
     if (armor > 0) {
       aes.push({
         name: `Soulbonder: Armor (${summonData.name})`,
-        icon: "icons/magic/defensive/shield-barrier-deflect-gold.webp",
+        img: "icons/magic/defensive/shield-barrier-deflect-gold.webp",
         origin: `${MODULE_ID}.soulbonder`,
         changes: [{ key: "system.armorBonus", mode: 2, value: String(armor) }],
         disabled: false,
         transfer: true,
+        statuses: ["soulbonder"],
         flags: { [MODULE_ID]: { managed: true, [SOULBONDER_FLAG]: true } }
       });
     }
@@ -1397,11 +1403,12 @@ export const SummonerFeatures = {
     if (immunities.length > 0) {
       aes.push({
         name: `Soulbonder: Immunities (${summonData.name})`,
-        icon: "icons/magic/defensive/shield-barrier-deflect-gold.webp",
+        img: "icons/magic/defensive/shield-barrier-deflect-gold.webp",
         origin: `${MODULE_ID}.soulbonder`,
         changes: immunities.map(s => ({ key: "system.statusImmunities", mode: 2, value: s })),
         disabled: false,
         transfer: true,
+        statuses: ["soulbonder"],
         flags: { [MODULE_ID]: { managed: true, [SOULBONDER_FLAG]: true } }
       });
     }

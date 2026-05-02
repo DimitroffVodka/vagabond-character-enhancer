@@ -37,6 +37,21 @@ export const FocusManager = {
     // Already focusing this feature
     if (current.some(f => f.key === featureKey)) return true;
 
+    // Status block (Berserk / Incapacitated absolutely prevent Focus per
+    // rulebook). Refuse acquisition with a notification.
+    const hardBlock = this._getHardFocusBlock(actor);
+    if (hardBlock) {
+      ui.notifications.warn(`${actor.name} cannot Focus while ${hardBlock}.`);
+      log("FocusManager", `Blocked feature focus for ${actor.name}: ${hardBlock}`);
+      return false;
+    }
+    // Dazed allows Focus only by spending an Action (rulebook). We can't
+    // verify the Action was actually spent, so warn and proceed — GM/player
+    // arbitrate.
+    if (this._isDazed(actor)) {
+      ui.notifications.info(`${actor.name} is Dazed — Focusing requires spending an Action.`);
+    }
+
     // Check combined cap
     const remaining = this.getRemainingFocusSlots(actor);
     if (remaining <= 0) {
@@ -54,6 +69,67 @@ export const FocusManager = {
 
     log("FocusManager", `${actor.name} acquired feature focus: ${label} (${this.getTotalFocusCount(actor)}/${actor.system.focus?.max ?? 1})`);
     return true;
+  },
+
+  /**
+   * Statuses that absolutely prevent Focus per rulebook:
+   *   - Berserk:      "It can't take the Cast Action or Focus..."
+   *   - Incapacitated: "It can't Focus or use its Actions or Move."
+   * Returns the human-readable status name, or null if none.
+   */
+  _getHardFocusBlock(actor) {
+    if (!actor?.statuses) return null;
+    if (actor.statuses.has("berserk"))      return "Berserk";
+    if (actor.statuses.has("incapacitated")) return "Incapacitated";
+    return null;
+  },
+
+  /**
+   * Dazed prevents Focus "unless it uses an Action to do so" — soft block.
+   */
+  _isDazed(actor) {
+    return !!actor?.statuses?.has?.("dazed");
+  },
+
+  /**
+   * Drop ALL focus on an actor — both VCE feature focus and the system's
+   * spell focus. Used when a hard-blocking status is applied.
+   */
+  async _dropAllFocus(actor, reason = "status") {
+    let didDrop = false;
+    // Clear feature focus
+    if (this._getFeatureFocus(actor).length > 0) {
+      try {
+        await actor.unsetFlag(MODULE_ID, "featureFocus");
+        didDrop = true;
+      } catch (e) {
+        log("FocusManager", `Could not clear featureFocus: ${e.message}`);
+      }
+    }
+    // Clear system spell focus list
+    const spellIds = actor.system?.focus?.spellIds ?? [];
+    if (spellIds.length > 0) {
+      try {
+        await actor.update({ "system.focus.spellIds": [] });
+        didDrop = true;
+      } catch (e) {
+        log("FocusManager", `Could not clear focus.spellIds: ${e.message}`);
+      }
+    }
+    if (didDrop) {
+      this._syncFocusFX(actor);
+      log("FocusManager", `Dropped all focus on ${actor.name} (${reason})`);
+      ChatMessage.create({
+        speaker: ChatMessage.getSpeaker({ actor }),
+        content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+          <div class="card-body"><section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <strong>${actor.name}</strong> drops all Focus — <em>${reason}</em>.
+            </div>
+          </section></div>
+        </div>`,
+      }).catch(() => { /* non-fatal */ });
+    }
   },
 
   /**
@@ -131,6 +207,42 @@ export const FocusManager = {
   /* -------------------------------------------- */
 
   registerHooks() {
+    // Block adds to system.focus.spellIds when a hard-blocking status is on.
+    // Returning false from preUpdateActor cancels the update before it lands.
+    // Removals (length decreasing) are always allowed — players need to be
+    // able to drop existing focus even while Berserk/Incapacitated.
+    Hooks.on("preUpdateActor", (actor, changes) => {
+      const newIds = foundry.utils.getProperty(changes, "system.focus.spellIds");
+      if (!Array.isArray(newIds)) return;
+      const oldIds = actor.system?.focus?.spellIds ?? [];
+      const isAdd = newIds.length > oldIds.length;
+      if (!isAdd) return;
+      const hardBlock = this._getHardFocusBlock(actor);
+      if (hardBlock) {
+        ui.notifications.warn(`${actor.name} cannot Focus while ${hardBlock}.`);
+        log("FocusManager", `Blocked spellIds add on ${actor.name}: ${hardBlock}`);
+        return false;
+      }
+      if (this._isDazed(actor)) {
+        ui.notifications.info(`${actor.name} is Dazed — Focusing requires spending an Action.`);
+      }
+    });
+
+    // When a hard-blocking status is applied, drop all current focus.
+    // Watch both the embedded-effect path (createActiveEffect for AEs that
+    // carry the status in their `statuses` set) and statuses set directly.
+    Hooks.on("createActiveEffect", (effect) => {
+      const actor = effect.parent;
+      if (actor?.documentName !== "Actor") return;
+      // Only act once per turn — defer slightly so applyActiveEffect cascades land first
+      const blockingStatus = (effect.statuses ?? new Set());
+      const hit = ["berserk", "incapacitated"].find(s => blockingStatus.has(s));
+      if (!hit) return;
+      // GM-only to avoid double-triggers across clients
+      if (!game.user.isGM && game.users.find(u => u.isGM && u.active)) return;
+      setTimeout(() => this._dropAllFocus(actor, hit.charAt(0).toUpperCase() + hit.slice(1)), 100);
+    });
+
     // Sync FX + spell effects when spell focus changes (system updates spellIds)
     Hooks.on("updateActor", (actor, changes) => {
       if (actor.type !== "character") return;

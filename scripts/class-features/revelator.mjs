@@ -663,9 +663,10 @@ export const RevelatorFeatures = {
 
     const aeData = {
       name: "Holy Diver",
-      icon: "icons/magic/light/beam-rays-yellow.webp",
+      img: "icons/magic/light/beam-rays-yellow.webp",
       origin: `Actor.${actor.id}`,
       disabled: false,
+      statuses: ["holy-diver"],
       flags: {
         [MODULE_ID]: {
           managed: true,

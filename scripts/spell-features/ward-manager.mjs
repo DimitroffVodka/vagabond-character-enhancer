@@ -47,7 +47,12 @@ export const WardManager = {
       await this._applyWardAE(caster, targets);
     });
 
-    // Focus cleanup: remove Ward AEs when caster stops focusing
+    // Focus cleanup: remove Ward AEs when caster stops focusing.
+    // EXCEPTION — Witch Hex: if the caster is a Witch and the warded target
+    // is their current Hex target, the Ward effect is "continual" per Hex's
+    // rules ("until you use this Feature on a different Target") and should
+    // NOT be removed even if focus is dropped. Hex transfer / removal is
+    // what ends it.
     Hooks.on("updateCombat", async (combat, changes) => {
       if (!("round" in changes) && !("turn" in changes)) return;
       if (!game.user.isGM && game.users.find(u => u.isGM && u.active)) return;
@@ -68,10 +73,19 @@ export const WardManager = {
             return spell?.name?.toLowerCase() === "ward";
           });
 
-          if (!isFocusingWard) {
-            await actor.deleteEmbeddedDocuments("ActiveEffect", [ae.id]);
-            log("Ward", `Ward expired on ${actor.name} — caster ${caster.name} not focusing`);
+          if (isFocusingWard) continue;
+
+          // Hex continuality: any module-managed spell effect on a witch's
+          // hex target is continual per Hex's rules. Defer to the shared
+          // WitchFeatures.isHexContinual helper.
+          const { WitchFeatures } = await import("../class-features/witch.mjs");
+          if (WitchFeatures.isHexContinual(actor, caster)) {
+            log("Ward", `Ward on ${actor.name} preserved — continual via ${caster.name}'s Hex`);
+            continue;
           }
+
+          await actor.deleteEmbeddedDocuments("ActiveEffect", [ae.id]);
+          log("Ward", `Ward expired on ${actor.name} — caster ${caster.name} not focusing`);
         }
       }
     });
@@ -368,11 +382,12 @@ export const WardManager = {
       try {
         await targetActor.createEmbeddedDocuments("ActiveEffect", [{
           name: `Warded (${caster.name})`,
-          icon: "icons/magic/defensive/shield-barrier-blue.webp",
+          img: "icons/magic/defensive/shield-barrier-blue.webp",
           origin: `Actor.${caster.id}`,
           changes: [],
           disabled: false,
           transfer: true,
+          statuses: ["warded"],
           flags: {
             [MODULE_ID]: {
               [WARD_AE_FLAG]: true,

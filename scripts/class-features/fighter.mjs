@@ -214,9 +214,10 @@ export const FighterFeatures = {
     // Grant Momentum AE
     const aeData = {
       name: "Momentum",
-      icon: "icons/skills/movement/arrow-upward-yellow.webp",
+      img: "icons/skills/movement/arrow-upward-yellow.webp",
       origin: `Actor.${actor.id}`,
       disabled: false,
+      statuses: ["momentum"],
       flags: {
         [MODULE_ID]: {
           managed: true,

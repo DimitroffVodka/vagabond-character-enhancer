@@ -99,13 +99,33 @@ export const DRUID_REGISTRY = {
   // Polymorph into count as (+1) Relics. This bonus increases every 6 Druid
   // Levels hereafter.
   //
-  // STATUS: flavor — Focus mechanics and relic bonus too complex to automate.
+  // STATUS: partial
+  //
+  // MODULE HANDLES:
+  //   - Managed AE: +1 to system.focus.maxBonus (created disabled).
+  //   - Runtime hook: Mirrors Savagery — enables the AE while focusing
+  //     Polymorph (the module's beast-form flow only ever does self-polymorph
+  //     so the "self only" RAW restriction is satisfied implicitly).
+  //
+  // NOT YET AUTOMATED:
+  //   - Beast attacks count as (+1) Relics while polymorphed (scales by L12 +2,
+  //     L18 +3). Affects damage roll, not focus.
   "ancient growth": {
     class: "druid",
     level: 6,
     flag: "druid_ancientGrowth",
-    status: "flavor",
-    description: "Self-Polymorph Focus allows one additional Focus Spell. Beast attacks count as (+1) Relics (increases every 6 levels)."
+    status: "partial",
+    description: "Self-Polymorph Focus allows one additional Focus Spell. Beast attacks count as (+1) Relics (increases every 6 levels).",
+    effects: [
+      {
+        label: "Ancient Growth (+1 Focus)",
+        icon: "icons/magic/nature/leaf-glow-yellow.webp",
+        disabled: true,
+        changes: [
+          { key: "system.focus.maxBonus", mode: 2, value: "1" }
+        ]
+      }
+    ]
   },
 
   // ──────────────────────────────────────────────
@@ -238,6 +258,20 @@ export const DruidFeatures = {
         );
         if (ae && ae.disabled === isFocusingPolymorph) {
           log("Druid",`Savagery: ${isFocusingPolymorph ? "Enabling" : "Disabling"} +1 Armor for ${actor.name}`);
+          await ae.update({ disabled: !isFocusingPolymorph });
+        }
+      }
+
+      // --- Ancient Growth: Toggle +1 Focus maxBonus with Polymorph (Druid L6+) ---
+      // Module's beast-form flow only does self-polymorph, so the "only Targets
+      // yourself" RAW restriction is satisfied implicitly.
+      if (features?.druid_ancientGrowth) {
+        const ae = actor.effects.find(e =>
+          e.getFlag(MODULE_ID, "managed") &&
+          e.getFlag(MODULE_ID, "featureFlag") === "druid_ancientGrowth"
+        );
+        if (ae && ae.disabled === isFocusingPolymorph) {
+          log("Druid",`Ancient Growth: ${isFocusingPolymorph ? "Enabling" : "Disabling"} +1 Focus cap for ${actor.name}`);
           await ae.update({ disabled: !isFocusingPolymorph });
         }
       }

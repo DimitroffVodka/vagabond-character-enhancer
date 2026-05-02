@@ -159,6 +159,14 @@ export const BlessManager = {
           if (isAuraBless) continue; // Aura manager handles its own cleanup
 
           if (!isFocusingBless) {
+            // Hex continuality: any module-managed spell effect on a
+            // witch's hex target is continual per Hex.
+            const { WitchFeatures } = await import("../class-features/witch.mjs");
+            if (WitchFeatures.isHexContinual(actor, caster)) {
+              log("Bless", `Bless on ${actor.name} preserved — continual via ${caster.name}'s Hex`);
+              continue;
+            }
+
             await actor.deleteEmbeddedDocuments("ActiveEffect", [ae.id]);
             log("Bless", `Bless expired on ${actor.name} — caster ${caster.name} not focusing`);
 
@@ -429,11 +437,12 @@ export const BlessManager = {
       try {
         await target.createEmbeddedDocuments("ActiveEffect", [{
           name: `Bless (${caster.name})`,
-          icon: "icons/magic/holy/prayer-hands-glowing-yellow.webp",
+          img: "icons/magic/holy/prayer-hands-glowing-yellow.webp",
           origin: `Actor.${caster.id}`,
           changes: [],
           disabled: false,
           transfer: true,
+          statuses: ["blessed"],
           flags: {
             [MODULE_ID]: {
               managed: true,
@@ -510,11 +519,12 @@ export const BlessManager = {
       if (weapons.length > 0 && !target.effects.find(e => e.getFlag(MODULE_ID, BLESS_SILVER_FLAG))) {
         await target.createEmbeddedDocuments("ActiveEffect", [{
           name: `Bless: Silvered (${caster.name})`,
-          icon: "icons/commodities/metal/ingot-silver.webp",
+          img: "icons/commodities/metal/ingot-silver.webp",
           origin: `Actor.${caster.id}`,
           changes: [],
           disabled: false,
           transfer: true,
+          statuses: ["silvered"],
           flags: {
             [MODULE_ID]: {
               managed: true,

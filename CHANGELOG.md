@@ -1,6 +1,73 @@
 # Changelog
 
-## v0.4.4 — Briar Healer perk automation
+## v0.4.5 — In Progress
+
+### Familiar perk
+
+- Removed the Arcana / Mysticism dialog at conjure time. The dialog let players pick a Cast Skill but the chosen skill was silently ignored on every code path except the right-click context menu — actions clicked from the system NPC sheet or Companions tab always used the PC's class-default Mana Skill. All paths now consistently use `classData.manaSkill` (with the same `attributes.manaSkill` → `mysticism` fallback the rest of the module uses).
+- **Wrong-scene spawn fix.** `CompanionSpawner.spawn` was using `game.scenes.active` (the GM's "navigation default" pointer) instead of the caster's actual scene. If the active scene differed from where the caster's token was, the familiar landed on the wrong scene at scene-center coordinates, became invisible to the player, and the next cast couldn't clean up the orphan because the caster-side flag stored `canvas.scene.id` (a third scene). Fix: scene resolution prefers the user's current canvas if the caster has a token there, falls back to any scene with the caster's token, last resort is `canvas.scene` / `game.scenes.active`. Spawner now returns the resolved `sceneId` so callers (familiar, summoner) can record the truth in their state flags.
+- Removed redundant position overrides in `familiar.mjs` and `summoner.mjs` that were forcing post-spawn x/y based on `canvas.grid` — let the spawner own placement (caster + 1 grid offset).
+
+### Status icons on token effect bar (v13 schema migration)
+
+Every module-managed temporary AE now renders as a token effect-bar icon. Two changes per AE: `icon` → `img` (v13 deprecated `icon` on the AE schema; `img` is canonical) and a `statuses: [...]` entry so Foundry treats the AE as `isTemporary: true`.
+
+| Source | AE | Status id |
+|---|---|---|
+| ward-manager | Warded | `warded` |
+| bless-manager | Bless / Bless: Silvered | `blessed` / `silvered` |
+| imbue-manager | Imbued: {spell} | `imbued` |
+| aura-manager | Caster's aura source / Bless: Silvered (aura) / per-spell aura buff | `aura-source` / `silvered` / kebab-cased spell label (Ward → `warded`, Bless → `blessed`, else label) |
+| barbarian | Rage / Aggressor | `raging` / `aggressor` |
+| witch | Hexed | `hexed` |
+| polymorph-manager | Polymorph: {beast} | `polymorphed` |
+| bard | Virtuoso | `virtuoso` |
+| dancer | Choreographer | `choreographer` |
+| fighter | Momentum | `momentum` |
+| gunslinger | Deadeye | `deadeye` |
+| revelator | Holy Diver | `holy-diver` |
+| summoner | Soulbonder: Armor / Immunities | `soulbonder` |
+| draken | Draconic Resilience | `draconic-resilience` |
+| briar-healer | Briar Healer | `briar-healer` |
+| undead-template | Undead | `undead` |
+| talent-buffs | Generic talent buff | `talent-buff` |
+
+Skipped on purpose: internal trackers like Berserk Frighten-Immune and Monk per-attack Keen, since those would flash distracting icons without representing a player-relevant condition.
+
+### Animate spell
+
+- **Relic damage now applies to animated weapons.** When animating a relic weapon, the spawned synthetic NPC's attack action carried only the weapon's base die. Animation now scans the source weapon's transferable AEs for `system.universalWeaponDamageDice` / `system.universalWeaponDamageBonus` changes and bakes them into the synthetic action's `rollDamage`. Mom2Three's Minor Striking +1 Shotgun, sawed-off now correctly animates with `1d8 + 1d4 + 1` instead of `1d8`.
+- **Focus now actually required.** `_animateObject` was acquiring focus *after* spawning, with `try/catch` swallowing failures — meaning the synthetic NPC could spawn and be uncontrollable when the caster had no free focus slots. Now the capacity check runs *before* spawn; if no slots, the cast aborts with a notification.
+- **Focus state synced to spell card.** Animate's focus claim is now stored in the system's `focus.spellIds` (the same list used by every other spell), so the system's spell card reflects "focused" while the animated object exists. Previously focus was tracked only in the VCE-side `featureFocus` flag, leaving the spell card showing un-focused while the animated NPC was still alive.
+- **Eliminated double-counting.** With the spellIds sync added, the prior VCE feature-focus entry became redundant and inflated the focus-pip total by 1. Dropped the parallel feature-focus claim — Animate is tracked in exactly one place now.
+- New setting: **"Animate: Destroy Item on Death"** (world, default off). When enabled, an animated item reduced to 0 HP is removed from the caster's inventory (with a chat notification). Default off — most tables expect the magic to fail without the physical object being broken.
+
+### Hex (Witch L1)
+
+- **Single-target enforcement.** Hex now correctly enforces "for one of the Targets until you use this Feature on a different Target" — each new use replaces any prior hex on the witch. Previous code modeled it as ⌈level/2⌉ concurrent target slots, which was a misread (the rule's "spells continual" cap is about how many *spells* can be continual on the one hexed target, not how many targets).
+- **Sheet panel.** Witches with the `witch_hex` feature now get a Hex panel injected into their character sheet (under the Focus panel), showing the current hexed target with image, name, and a one-click remove button. Renders "No active hex" when nothing is hexed. Patched via `setTimeout(0)` deferral so the system's spell-list re-render doesn't clobber the injection.
+- **`WitchFeatures.isHexContinual(target, caster)`** — new shared helper. Returns true when the caster has the `witch_hex` feature *and* the target is the witch's current hex target. Spell-cleanup hooks consult it to preserve AEs that should be continual via Hex.
+- **Spell-cleanup integration.** Three round-based AE cleanup paths (Ward, Bless, generic effect-only) now check `isHexContinual` before removing an AE. A witch self-Wards + self-Hexes can drop focus and the Ward AE persists across rounds; the moment Hex transfers (or is removed), the next round sweeps the now-non-continual AE normally.
+
+### Focus restrictions
+
+- **Status-blocked Focus.** New runtime enforcement of the rulebook's Berserk / Incapacitated / Dazed clauses on Focus:
+  - **Berserk / Incapacitated** (hard block): `acquireFeatureFocus` returns false; `preUpdateActor` rejects net adds to `system.focus.spellIds`; `createActiveEffect` watcher drops all current focus when the status is applied. Removals (drops) are always allowed so a statused actor can still release a held focus.
+  - **Dazed** (soft block per "unless it uses an Action to do so"): allows acquisition with an info notification — GM/player arbitrate whether the Action was actually spent.
+- **Default focus cap is 1 (was 5).** The Vagabond system hard-codes `focus.max = 5 + maxBonus` in `actor-character.mjs`; the rulebook default is 1. Patched on the character data model's `prepareDerivedData` to subtract 4 (floor 1) so the default matches RAW. Existing class +maxBonus AEs (Wizard's Manifold Mind L4 / L8, Revelator's Paragon's Aura L4) compose correctly because they add to the underlying `maxBonus` formula before the adjustment. Verified across the world: every character's cap now matches expected (Wizard L4 → 2, Revelator L4 → 2, default → 1).
+- **Druid L6 Ancient Growth — automated.** New managed AE (`+1 system.focus.maxBonus`, created disabled) toggled on/off by the Druid polymorph hook in lockstep with Savagery's pattern. While the Druid is focusing Polymorph (the module's beast-form flow only ever does self-polymorph, satisfying the "only Targets yourself" RAW restriction implicitly), the AE enables and the focus cap rises by 1. Drops back when polymorph ends. The (+1) Relic bonus on Beast attacks (and its scaling at L12 +2 / L18 +3) is still future work — affects damage rolls, not focus.
+
+### Combat: auto-activate
+
+New module that decrements a combatant's `flags.vagabond.activations.value` when their actor takes an action. Solves the "players forget to click the Activate button" friction. Files: new `scripts/combat-tracker/auto-activate.mjs`.
+
+- **Trigger**: chat messages with both `flags.vagabond.actorId` and `flags.vagabond.itemId` from a weapon, spell, or talent. Free-action chat (Send to Chat, descriptions, automation cards) doesn't carry an itemId, so it doesn't fire.
+- **Companion routing**: companion action cards are speakered to the controller PC (because the roll uses the PC's Mana Skill), so a naive auto-activate would always spend the controller's activation, never the companion's. Action-card creators in `summoner.mjs` (rollSummonAction), `familiar.mjs` (rollFamiliarAction), and `companion-manager-tab.mjs` (`_rollNPCAction`) now tag their chat messages with `flags.vagabond-character-enhancer.companionActorId`, and auto-activate prefers that flag when present. The hook is deferred ~120ms so the post-create `setFlag` lands before processing.
+- **Floor**: combatants already at 0 are skipped (no double-decrement, no spurious "activates" message).
+- **GM-only execution** to avoid duplicate decrements across multiple connected clients.
+- New setting: **"Combat: Auto-Activate on Action"** (world, default on). Flip off if you want pure manual activation.
+
+
 
 Briar Healer (perk requiring the Life spell) is now fully automated.
 

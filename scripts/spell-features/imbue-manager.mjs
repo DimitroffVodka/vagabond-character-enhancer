@@ -389,11 +389,12 @@ export const ImbueManager = {
     const aeName = `Imbued: ${spellData.spellName}${typeLabel}`;
     const aeData = {
       name: aeName,
-      icon: spellData.spellImg || "icons/magic/light/explosion-star-glow-yellow.webp",
+      img: spellData.spellImg || "icons/magic/light/explosion-star-glow-yellow.webp",
       origin: `${MODULE_ID}.imbue`,
       changes: [],
       disabled: false,
       transfer: true,
+      statuses: ["imbued"],
       flags: {
         [MODULE_ID]: {
           managed: true,

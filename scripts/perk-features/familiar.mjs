@@ -133,9 +133,8 @@ export const FamiliarFeatures = {
 
                 const activeFamiliar = actor.getFlag(MODULE_ID, FLAG_FAMILIAR);
                 if (activeFamiliar) {
-                  const skillLabel = activeFamiliar.familiarSkill === "arcana" ? "Arcana" : "Mysticism";
                   menuItems.push({
-                    label: `${activeFamiliar.summonName} (${skillLabel})`,
+                    label: activeFamiliar.summonName,
                     icon: "fas fa-paw",
                     enabled: false,
                     action: () => {}
@@ -454,29 +453,13 @@ export const FamiliarFeatures = {
       await this.banishFamiliar(actor, "Replaced by new familiar");
     }
 
-    // Choose which skill the familiar uses for checks/saves
-    const familiarSkill = await new Promise(resolve => {
-      new Dialog({
-        title: "Familiar — Cast Skill",
-        content: `<p>Which skill will <strong>${npcData.name}</strong> use for Checks and Saves?</p>`,
-        buttons: {
-          arcana: { icon: '<i class="fas fa-hat-wizard"></i>', label: "Arcana", callback: () => resolve("arcana") },
-          mysticism: { icon: '<i class="fas fa-moon"></i>', label: "Mysticism", callback: () => resolve("mysticism") }
-        },
-        default: "arcana",
-        close: () => resolve(null)
-      }).render(true);
-    });
-    if (!familiarSkill) return; // Cancelled
-
-    // Validate caster has a token on canvas
-    const casterToken = actor.getActiveTokens()?.[0];
-    if (!casterToken) {
-      ui.notifications.warn("No caster token on canvas.");
+    // Validate caster has a token somewhere — CompanionSpawner will pick the
+    // right scene (caster's actual scene, not whatever scene is "active").
+    const casterTokens = actor.getActiveTokens(true);
+    if (!casterTokens.length) {
+      ui.notifications.warn("Caster has no token placed on any scene.");
       return;
     }
-
-    const gridSize = canvas.grid?.size ?? 100;
 
     // Resolve creature UUID (world actor OR compendium)
     const creatureUuid = npcData.worldActorId
@@ -487,9 +470,11 @@ export const FamiliarFeatures = {
       return;
     }
 
-    // Delegate spawn to CompanionSpawner: handles import, placeToken,
-    // flag stamping (controllerActorId + controllerType + companionMeta),
-    // combat-add, ownership grant, and chat notification.
+    // Delegate spawn to CompanionSpawner: handles scene resolution, import,
+    // placeToken, flag stamping (controllerActorId + controllerType +
+    // companionMeta), combat-add, ownership grant, and chat notification.
+    // Position defaults (caster's scene, 1 grid offset right of caster) are
+    // owned by the spawner — don't override x/y here.
     const spawnResult = await CompanionSpawner.spawn({
       caster: actor,
       sourceId: "familiar",
@@ -497,8 +482,6 @@ export const FamiliarFeatures = {
       tokenData: {
         name: npcData.name,
         texture: { src: npcData.img || "icons/svg/mystery-man.svg" },
-        x: casterToken.document.x + gridSize,
-        y: casterToken.document.y,
         width: 1,
         height: 1,
         disposition: CONST.TOKEN_DISPOSITIONS.FRIENDLY,
@@ -506,7 +489,6 @@ export const FamiliarFeatures = {
       meta: {
         hd: npcData.hd ?? 1,
         ritual: true,
-        familiarSkill,
         importedFromCompendium: !npcData.worldActorId && !!npcData.compendiumUuid,
       },
       // Familiar posts its own detailed ritual chat card with HD/skill details.
@@ -523,16 +505,16 @@ export const FamiliarFeatures = {
     const tokenId = spawnResult.tokenId;
     const importedFromCompendium = !npcData.worldActorId && !!npcData.compendiumUuid;
 
-    // Store familiar state
+    // Store familiar state — use the sceneId the spawner actually placed on
+    // (NOT canvas.scene.id, which can diverge from the caster's actual scene).
     await actor.setFlag(MODULE_ID, FLAG_FAMILIAR, {
       summonActorId: sourceActorId,
       summonTokenId: tokenId,
       summonName: npcData.name,
       summonImg: npcData.img,
       summonHD: npcData.hd,
-      familiarSkill,
       importedFromCompendium,
-      sceneId: canvas.scene.id
+      sceneId: spawnResult.sceneId
     });
 
     // Chat notification
@@ -629,8 +611,10 @@ export const FamiliarFeatures = {
     const attackType = action.attackType || "melee";
     const needsCheck = !!action.attackType;
 
-    // Use the skill chosen at conjure time (Arcana or Mysticism)
-    const skillKey = familiar.familiarSkill || "mysticism";
+    const skillKey =
+      caster.system?.classData?.manaSkill ??
+      caster.system?.attributes?.manaSkill ??
+      "mysticism";
     const skill = caster.system.skills?.[skillKey];
     const difficulty = skill?.difficulty ?? 12;
 
@@ -701,7 +685,7 @@ export const FamiliarFeatures = {
       critStatBonus: isCritical ? (caster.system.stats?.[skill?.stat]?.value || 0) : 0
     } : null;
 
-    await VagabondChatCard.createActionCard({
+    const msg = await VagabondChatCard.createActionCard({
       actor: caster,
       item: fakeItem,
       title: `${action.name} (${familiar.summonName})`,
@@ -719,6 +703,11 @@ export const FamiliarFeatures = {
       actionIndex: actionIdx
     });
 
+    try {
+      const { AutoActivate } = await import("../combat-tracker/auto-activate.mjs");
+      await AutoActivate.tagCompanionAction(msg, familiar.summonActorId);
+    } catch { /* non-fatal */ }
+
     log("Familiar", `${caster.name} used ${familiar.summonName}'s ${action.name}: ${isSuccess ? "hit" : "miss"}${damageRoll ? ` for ${damageRoll.total}` : ""}`);
   },
 
@@ -732,7 +721,10 @@ export const FamiliarFeatures = {
    * @param {object} familiar - The active familiar flag data
    */
   async rollFamiliarCheck(caster, familiar) {
-    const skillKey = familiar.familiarSkill || "mysticism";
+    const skillKey =
+      caster.system?.classData?.manaSkill ??
+      caster.system?.attributes?.manaSkill ??
+      "mysticism";
     const skill = caster.system.skills?.[skillKey];
     const difficulty = skill?.difficulty ?? 12;
 
@@ -748,7 +740,7 @@ export const FamiliarFeatures = {
     const isCritical = (d20?.results?.[0]?.result ?? 0) >= critNum;
 
     const { VagabondChatCard } = globalThis.vagabond.utils;
-    const skillLabel = skill?.label || (skillKey === "arcana" ? "Arcana" : "Mysticism");
+    const skillLabel = skill?.label || skillKey;
 
     await VagabondChatCard.createActionCard({
       actor: caster,
@@ -770,7 +762,10 @@ export const FamiliarFeatures = {
    * @param {object} familiar - The active familiar flag data
    */
   async rollFamiliarSave(caster, familiar) {
-    const skillKey = familiar.familiarSkill || "mysticism";
+    const skillKey =
+      caster.system?.classData?.manaSkill ??
+      caster.system?.attributes?.manaSkill ??
+      "mysticism";
     const skill = caster.system.skills?.[skillKey];
     const difficulty = skill?.difficulty ?? 12;
 
@@ -786,7 +781,7 @@ export const FamiliarFeatures = {
     const isCritical = (d20?.results?.[0]?.result ?? 0) >= critNum;
 
     const { VagabondChatCard } = globalThis.vagabond.utils;
-    const skillLabel = skill?.label || (skillKey === "arcana" ? "Arcana" : "Mysticism");
+    const skillLabel = skill?.label || skillKey;
 
     await VagabondChatCard.createActionCard({
       actor: caster,

@@ -51,7 +51,7 @@ export function makeUndeadAEData(sourceName = "Raised") {
       { key: "system.immunities",       mode: ADD,      value: "poison" },
       { key: "system.weaknesses",       mode: ADD,      value: "silver" },
     ],
-    statuses: [],
+    statuses: ["undead"],
     flags: {
       [MODULE_ID]: { undeadTemplate: true, appliedAt: Date.now() },
     },

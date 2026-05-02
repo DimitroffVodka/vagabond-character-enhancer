@@ -537,8 +537,9 @@ export const BarbarianFeatures = {
 
       await actor.createEmbeddedDocuments("ActiveEffect", [{
         name: "Rage (Active)",
-        icon: "icons/skills/melee/hand-grip-sword-red.webp",
+        img: "icons/skills/melee/hand-grip-sword-red.webp",
         origin: classItem?.uuid || actor.uuid,
+        statuses: ["raging"],
         flags: { [MODULE_ID]: { managed: true, rageActive: true } },
         changes: changes,
         disabled: false,
@@ -820,8 +821,9 @@ export const BarbarianFeatures = {
 
     await actor.createEmbeddedDocuments("ActiveEffect", [{
       name: "Aggressor",
-      icon: "icons/skills/movement/feet-winged-boots-brown.webp",
+      img: "icons/skills/movement/feet-winged-boots-brown.webp",
       origin: origin,
+      statuses: ["aggressor"],
       flags: { [MODULE_ID]: { managed: true, aggressor: true } },
       changes: [
         { key: "system.speed.bonus", mode: 2, value: "10" }

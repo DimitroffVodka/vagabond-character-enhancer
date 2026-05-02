@@ -286,9 +286,10 @@ export const GunslingerFeatures = {
     } else {
       await actor.createEmbeddedDocuments("ActiveEffect", [{
         name: `Deadeye (${stacks})`,
-        icon: "icons/skills/targeting/crosshair-pointed-orange.webp",
+        img: "icons/skills/targeting/crosshair-pointed-orange.webp",
         origin: `Actor.${actor.id}`,
         disabled: false,
+        statuses: ["deadeye"],
         flags: { [MODULE_ID]: { managed: true, deadeyeAE: true } },
         changes: [{ key: "system.rangedCritBonus", mode: 2, value: `${bonus}` }]
       }]);

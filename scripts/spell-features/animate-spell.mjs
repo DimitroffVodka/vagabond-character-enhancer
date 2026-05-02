@@ -108,12 +108,9 @@ export const AnimateSpell = {
   },
 
   _registerDismissHandler() {
-    CompanionSpawner.registerDismissHandler(SOURCE_ID, async (companionActor, { controller, meta }) => {
+    CompanionSpawner.registerDismissHandler(SOURCE_ID, async (companionActor, { controller, meta, reason }) => {
       if (!controller) return;
-      // Release the VCE focus slot
-      try { await FocusManager.releaseFeatureFocus(controller, FOCUS_KEY); }
-      catch (e) { log("AnimateSpell", `Could not release focus: ${e.message}`); }
-      // Also remove Animate from the system's focus list so the spell card
+      // Remove Animate from the system's focus list so the spell card
       // reflects the drop state. Re-entry guarded so our own drop-focus-
       // detection hook doesn't recurse.
       const animateSpell = controller.items.find(i => i.type === "spell" && i.name.toLowerCase() === "animate");
@@ -125,6 +122,34 @@ export const AnimateSpell = {
             await controller.update({ "system.focus.spellIds": ids.filter(id => id !== animateSpell.id) });
           } finally {
             this._handlingTrigger.delete(controller.id);
+          }
+        }
+      }
+      // Optional: destroy the source item from the caster's inventory when the
+      // animated form is reduced to 0 HP. Off by default — toggled via the
+      // "Animate: Destroy Item on Death" world setting. GM-only delete.
+      if (reason === "defeated" && meta?.meta?.synthetic && meta?.meta?.sourceItemId) {
+        let destroyOnDeath = false;
+        try { destroyOnDeath = !!game.settings.get(MODULE_ID, "animateDestroyOnDeath"); }
+        catch { /* setting not registered yet */ }
+        if (destroyOnDeath) {
+          const item = controller.items.get(meta.meta.sourceItemId);
+          if (item) {
+            try {
+              await item.delete();
+              ChatMessage.create({
+                speaker: ChatMessage.getSpeaker({ actor: controller }),
+                content: `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
+                  <div class="card-body"><section class="content-body">
+                    <div class="card-description" style="text-align:center;">
+                      <strong>${item.name}</strong> was destroyed when its animated form fell.
+                    </div>
+                  </section></div>
+                </div>`,
+              });
+            } catch (e) {
+              log("AnimateSpell", `Could not delete source item ${meta.meta.sourceItemId}: ${e.message}`);
+            }
           }
         }
       }
@@ -249,6 +274,18 @@ export const AnimateSpell = {
       },
     };
 
+    // Capacity check BEFORE spawning — Animate's rulebook entry: "It obeys
+    // your commands, which you can issue when you Focus on this Spell."
+    // Without a free focus slot the player can't sustain the animated
+    // object. We rely on the system's `focus.spellIds` as the single source
+    // of truth for the focus claim (added at the end of this function), so
+    // here we just check that adding one more would still fit under the cap.
+    const remainingSlots = FocusManager.getRemainingFocusSlots(caster);
+    if (remainingSlots <= 0) {
+      ui.notifications.warn("No focus slots available — Animate cannot be sustained.");
+      return;
+    }
+
     // Create the synthetic world actor via GM proxy
     let actorId;
     try {
@@ -282,19 +319,29 @@ export const AnimateSpell = {
     });
 
     if (!result.success) {
-      // Clean up the synthetic actor on failure
       try { await gmRequest("deleteActor", { actorId }); } catch { /* best effort */ }
       ui.notifications.error(`Could not animate object: ${result.error ?? "unknown error"}`);
       return;
     }
 
-    // Acquire focus
-    try {
-      await FocusManager.acquireFeatureFocus(
-        caster, FOCUS_KEY, `Animated ${item.name}`, npcData.img
-      );
-    } catch (e) {
-      log("AnimateSpell", `Could not acquire focus: ${e.message}`);
+    // Mirror Animate into the system's focus.spellIds so the spell card
+    // reflects "focused" state visually. Without this, the player's sheet
+    // shows the spell as un-focused even though we're actively maintaining
+    // the animated object — which is confusing. Guarded against our own
+    // _onFocusToggle ADD path so we don't recurse and re-trigger.
+    const animateSpell = caster.items.find(i => i.type === "spell" && i.name?.toLowerCase() === "animate");
+    if (animateSpell) {
+      const ids = caster.system?.focus?.spellIds ?? [];
+      if (!ids.includes(animateSpell.id)) {
+        (this._handlingTrigger ??= new Set()).add(caster.id);
+        try {
+          await caster.update({ "system.focus.spellIds": [...ids, animateSpell.id] });
+        } catch (e) {
+          log("AnimateSpell", `Could not add Animate to focus.spellIds: ${e.message}`);
+        } finally {
+          this._handlingTrigger.delete(caster.id);
+        }
+      }
     }
   },
 
@@ -364,7 +411,7 @@ export const AnimateSpell = {
     const isWeapon = item.type === "equipment" && sys.equipmentType === "weapon";
     if (isWeapon) {
       const preferTwoHands = sys.equipmentState === "twoHands";
-      const formula =
+      const baseFormula =
         normalize(preferTwoHands ? sys.damageTwoHands : sys.damageOneHand) ||
         normalize(sys.damageOneHand) ||
         normalize(sys.damageTwoHands) ||
@@ -374,10 +421,55 @@ export const AnimateSpell = {
         sys.damageTypeOneHand ||
         sys.damageType ||
         "-";
+      // Bake in relic-power bonuses. Relics live as transferable AEs on the
+      // weapon item and target system.universalWeaponDamageDice / system.
+      // universalWeaponDamageBonus. When equipped on a PC the system reads
+      // these off the actor — but a synthetic animated NPC won't inherit
+      // them. Compute the effective formula here.
+      const formula = this._appendItemDamageBonuses(item, baseFormula);
       return { formula, type };
     }
     const formula = normalize(sys.damageAmount) || "1d4";
     return { formula, type: sys.damageType || "-" };
+  },
+
+  /**
+   * Scan the weapon item's own ActiveEffects for relic / enchantment damage
+   * bonuses and append them to the base formula. Looks at non-disabled,
+   * transfer:true AEs targeting:
+   *   - system.universalWeaponDamageDice (e.g., "1d4")
+   *   - system.universalWeaponDamageBonus (flat, e.g., "1")
+   * Other system-side die-size bonuses (melee/ranged/finesse die size) are
+   * not handled here — relics that grant flat dice or flat bonuses are by
+   * far the common case.
+   *
+   * @param {Item} item
+   * @param {string} baseFormula
+   * @returns {string}
+   */
+  _appendItemDamageBonuses(item, baseFormula) {
+    const bonusDice = [];
+    let bonusFlat = 0;
+    const flatExpressions = [];
+    for (const ae of item.effects ?? []) {
+      if (ae.disabled || !ae.transfer) continue;
+      for (const ch of ae.changes ?? []) {
+        if (!ch?.key || ch.value == null || ch.value === "") continue;
+        if (ch.key === "system.universalWeaponDamageDice") {
+          bonusDice.push(String(ch.value));
+        } else if (ch.key === "system.universalWeaponDamageBonus") {
+          const num = Number(ch.value);
+          if (Number.isFinite(num)) bonusFlat += num;
+          else flatExpressions.push(String(ch.value)); // formula like "@stats.might.value"
+        }
+      }
+    }
+    let out = baseFormula;
+    if (bonusDice.length) out += ` + ${bonusDice.join(" + ")}`;
+    if (bonusFlat > 0) out += ` + ${bonusFlat}`;
+    else if (bonusFlat < 0) out += ` - ${Math.abs(bonusFlat)}`;
+    if (flatExpressions.length) out += ` + ${flatExpressions.join(" + ")}`;
+    return out;
   },
 
   /**

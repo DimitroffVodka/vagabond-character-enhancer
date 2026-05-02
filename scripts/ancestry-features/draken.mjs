@@ -144,11 +144,12 @@ export const DrakenFeatures = {
       // Create new display AE
       await actor.createEmbeddedDocuments("ActiveEffect", [{
         name: aeName,
-        icon: RESILIENCE_ICON,
+        img: RESILIENCE_ICON,
         origin: `${MODULE_ID}.draken_draconicResilience`,
         changes: [],
         disabled: false,
         transfer: true,
+        statuses: ["draconic-resilience"],
         flags: {
           [MODULE_ID]: {
             managed: true,

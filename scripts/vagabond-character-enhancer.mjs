@@ -253,6 +253,7 @@ import { ControlTalent } from "./talent/control-talent.mjs";
 import { runTalentMigrations } from "./talent/talent-migration.mjs";
 import { CompanionTerminationManager } from "./companion/companion-termination.mjs";
 import { GatherCompanions } from "./companion/gather-companions.mjs";
+import { AutoActivate } from "./combat-tracker/auto-activate.mjs";
 // Phase 2 spell adapters
 import { BeastSpell } from "./spell-features/beast-spell.mjs";
 import { RaiseSpell } from "./spell-features/raise-spell.mjs";
@@ -415,6 +416,24 @@ Hooks.once("init", () => {
     default: 100
   });
 
+  game.settings.register(MODULE_ID, "animateDestroyOnDeath", {
+    name: "Animate: Destroy Item on Death",
+    hint: "When enabled, an item that is reduced to 0 HP while Animated is removed from the caster's inventory. When disabled (default), the animation simply ends and the item remains.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false
+  });
+
+  game.settings.register(MODULE_ID, "autoActivateOnAction", {
+    name: "Combat: Auto-Activate on Action",
+    hint: "When a player's actor posts an attack / spell cast / weapon use chat card during combat, automatically decrement their combatant's activation. Saves players from forgetting to click the Activate button.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+
   // ---- Psychic / Talent item type ----------------------------------------
   // The Vagabond system registers CONFIG.Item.dataModels in its own init hook.
   // We extend (not replace) that object so existing item types are unaffected.
@@ -437,6 +456,31 @@ Hooks.once("init", () => {
 
 Hooks.once("ready", async () => {
   try {
+    // ── Focus cap default ─────────────────────────────────────────────────
+    // Per Vagabond rulebook, base Focus capacity is 1 (default). The system
+    // hard-codes `focus.max = 5 + maxBonus` in actor-character.mjs:1194 — to
+    // align with RAW we patch prepareDerivedData on the character data model
+    // to subtract 4 (floor 1). Existing class +maxBonus AEs (Wizard Manifold
+    // Mind, Revelator Paragon's Aura) compose correctly because they add to
+    // the underlying maxBonus formula before our adjustment.
+    try {
+      const CharCls = CONFIG.Actor.dataModels?.character;
+      if (CharCls && !CharCls.prototype._vceFocusCapPatched) {
+        const origPrepare = CharCls.prototype.prepareDerivedData;
+        CharCls.prototype.prepareDerivedData = function() {
+          const ret = origPrepare.apply(this, arguments);
+          if (this.focus && typeof this.focus.max === "number") {
+            this.focus.max = Math.max(1, this.focus.max - 4);
+          }
+          return ret;
+        };
+        CharCls.prototype._vceFocusCapPatched = true;
+        log("Focus", "Patched character focus.max default cap to 1 (was 5)");
+      }
+    } catch (e) {
+      log("Focus", `Could not patch focus.max default: ${e.message}`);
+    }
+
     const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
 
     // Route friendly NPC saves through their controller PC.
@@ -1851,6 +1895,7 @@ Hooks.once("ready", async () => {
   PsychicFeatures.init();
   CompanionTerminationManager.init();
   GatherCompanions.init();
+  AutoActivate.init();
   // Phase 2: spell adapters
   BeastSpell.init();
   RaiseSpell.init();
@@ -1899,7 +1944,7 @@ Hooks.once("ready", async () => {
                 }
                 if (meta.sourceId === "familiar") {
                   const familiar = controller.getFlag(MODULE_ID, "activeFamiliar")
-                    ?? { summonActorId: actor.id, summonName: actor.name, summonImg: actor.img, summonHD: 1, familiarSkill: "mysticism" };
+                    ?? { summonActorId: actor.id, summonName: actor.name, summonImg: actor.img, summonHD: 1 };
                   return await FamiliarFeatures.rollFamiliarAction(controller, familiar, actionIndex);
                 }
                 // Generic Mana-Skill companions (Beast, Raise, Animate, Control, Conjurer perk):

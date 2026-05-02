@@ -575,7 +575,8 @@ export const DancerFeatures = {
 
     await actor.createEmbeddedDocuments("ActiveEffect", [{
       name: "Choreographer (+10 Speed)",
-      icon: "icons/skills/movement/feet-winged-sandals-tan.webp",
+      img: "icons/skills/movement/feet-winged-sandals-tan.webp",
+      statuses: ["choreographer"],
       flags: {
         [MODULE_ID]: {
           managed: true,

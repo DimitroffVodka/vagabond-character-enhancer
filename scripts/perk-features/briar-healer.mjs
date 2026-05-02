@@ -179,13 +179,14 @@ export const BriarHealerManager = {
     try {
       await targetActor.createEmbeddedDocuments("ActiveEffect", [{
         name: `Briar Healer (${caster.name})`,
-        icon: BRIAR_ICON,
+        img: BRIAR_ICON,
         origin: `Actor.${caster.id}`,
         changes: [
           { key: "system.armorBonus", mode: 2, value: "1" }
         ],
         disabled: false,
         transfer: true,
+        statuses: ["briar-healer"],
         flags: {
           [MODULE_ID]: {
             managed: true,

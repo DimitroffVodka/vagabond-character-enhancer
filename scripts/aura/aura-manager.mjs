@@ -263,9 +263,10 @@ export const AuraManager = {
     // The auraeffects module handles propagation to nearby tokens automatically
     const aeData = {
       name: aeName,
-      icon: spellDef.icon,
+      img: spellDef.icon,
       origin: `Actor.${actor.id}`,
       disabled: false,
+      statuses: ["aura-source"],
       flags: aeFlags,
       changes: aeChanges
     };
@@ -631,10 +632,11 @@ export const AuraManager = {
           }
           const aeData = {
             name: `Bless: Silvered (Aura: ${casterActor.name})`,
-            icon: "icons/commodities/metal/ingot-silver.webp",
+            img: "icons/commodities/metal/ingot-silver.webp",
             origin: `Actor.${casterActor.id}`,
             description: "Weapons count as Silvered",
             disabled: false,
+            statuses: ["silvered"],
             flags,
             changes: []
           };
@@ -654,12 +656,23 @@ export const AuraManager = {
       flags[MODULE_ID].wardCasterId = casterActor.id;
     }
 
+    // Derive a status id from the spell label so the AE renders as a token
+    // icon. The exact string doesn't matter for display — the AE's `img` is
+    // what the player sees — but Foundry only renders icons for AEs with a
+    // `statuses` entry or a duration set. Map known buffs to their direct-
+    // cast status ids so aura and direct-cast versions share the same icon
+    // tag (e.g. aura Ward and direct Ward both register as "warded").
+    const labelLc = String(spellDef.label || "spell").toLowerCase();
+    const statusMap = { ward: "warded", bless: "blessed" };
+    const statusId = statusMap[labelLc] ?? labelLc.replace(/[^a-z0-9-]+/g, "-");
+
     const aeData = {
       name: `${spellDef.label} (Aura: ${casterActor.name})`,
-      icon: spellDef.icon,
+      img: spellDef.icon,
       origin: `Actor.${casterActor.id}`,
       description: spellDef.description || "",
       disabled: false,
+      statuses: [statusId],
       flags,
       changes: spellDef.changes
     };

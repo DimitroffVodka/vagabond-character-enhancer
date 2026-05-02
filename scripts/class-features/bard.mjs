@@ -931,6 +931,7 @@ export const BardFeatures = {
         name: config.name,
         img: "icons/tools/instruments/harp-yellow-teal.webp",
         origin: bard.uuid,
+        statuses: ["virtuoso"],
         flags: {
           [MODULE_ID]: aeFlags
         },
