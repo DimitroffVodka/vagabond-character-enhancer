@@ -94,7 +94,6 @@ export const EncumbranceManager = {
         transfer: false,
         flags: {
           [MODULE_ID]: {
-            managed: true,
             [ENCUMBERED_AE_FLAG]: true,
           },
         },
