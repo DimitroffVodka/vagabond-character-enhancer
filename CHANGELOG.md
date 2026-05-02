@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.4.5 — In Progress
+## v0.4.5 — Focus restrictions, Hex rework, status icons, auto-activate
 
 ### Familiar perk
 
@@ -54,7 +54,7 @@ Skipped on purpose: internal trackers like Berserk Frighten-Immune and Monk per-
 - **Status-blocked Focus.** New runtime enforcement of the rulebook's Berserk / Incapacitated / Dazed clauses on Focus:
   - **Berserk / Incapacitated** (hard block): `acquireFeatureFocus` returns false; `preUpdateActor` rejects net adds to `system.focus.spellIds`; `createActiveEffect` watcher drops all current focus when the status is applied. Removals (drops) are always allowed so a statused actor can still release a held focus.
   - **Dazed** (soft block per "unless it uses an Action to do so"): allows acquisition with an info notification — GM/player arbitrate whether the Action was actually spent.
-- **Default focus cap is 1 (was 5).** The Vagabond system hard-codes `focus.max = 5 + maxBonus` in `actor-character.mjs`; the rulebook default is 1. Patched on the character data model's `prepareDerivedData` to subtract 4 (floor 1) so the default matches RAW. Existing class +maxBonus AEs (Wizard's Manifold Mind L4 / L8, Revelator's Paragon's Aura L4) compose correctly because they add to the underlying `maxBonus` formula before the adjustment. Verified across the world: every character's cap now matches expected (Wizard L4 → 2, Revelator L4 → 2, default → 1).
+- **Default focus cap is 1 (was 5).** The Vagabond system hard-codes `focus.max = 5 + maxBonus` in `actor-character.mjs`; the rulebook default is 1. Patched on the character data model's `prepareDerivedData` to subtract 4 (floor 1) so the default matches RAW. Existing class +maxBonus AEs (Wizard's Manifold Mind L4 / L8, Revelator's Paragon's Aura L4) compose correctly because they add to the underlying `maxBonus` formula before the adjustment. Because `Hooks.once("ready")` fires after actors have already prepared their data once, the patch sweeps `prepareData()` over every existing character on install — without that sweep, actors loaded with the world keep the unpatched 5 + maxBonus cap until something else triggers a re-derive.
 - **Druid L6 Ancient Growth — automated.** New managed AE (`+1 system.focus.maxBonus`, created disabled) toggled on/off by the Druid polymorph hook in lockstep with Savagery's pattern. While the Druid is focusing Polymorph (the module's beast-form flow only ever does self-polymorph, satisfying the "only Targets yourself" RAW restriction implicitly), the AE enables and the focus cap rises by 1. Drops back when polymorph ends. The (+1) Relic bonus on Beast attacks (and its scaling at L12 +2 / L18 +3) is still future work — affects damage rolls, not focus.
 
 ### Combat: auto-activate

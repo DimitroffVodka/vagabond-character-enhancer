@@ -476,6 +476,15 @@ Hooks.once("ready", async () => {
         };
         CharCls.prototype._vceFocusCapPatched = true;
         log("Focus", "Patched character focus.max default cap to 1 (was 5)");
+        // Re-derive every existing character actor. Hooks.once("ready") fires
+        // AFTER actors have already prepared their data once — without this
+        // sweep, every actor that loaded with the world keeps the unpatched
+        // focus.max = 5 + maxBonus until something else triggers a re-derive.
+        for (const a of game.actors) {
+          if (a.type === "character") {
+            try { a.prepareData(); } catch (e) { /* per-actor failure is non-fatal */ }
+          }
+        }
       }
     } catch (e) {
       log("Focus", `Could not patch focus.max default: ${e.message}`);
