@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.11 — fix: Ward no longer leaves a "brought back from death" race
+
+When a Warded target took fatal damage, the prior Ward implementation let HP momentarily hit 0 before the async Ward dialog ran and healed them back. During that window the system applied dead/unconscious status, fired death-related chat cards, removed combat activations, etc. — and those side effects didn't always cleanly undo when HP later rose above 0. End state: alive HP, dead-flagged actor, stuck weird state.
+
+`WardManager.registerHooks` now subscribes to the new Vagabond v5.3.0 `vagabond.preDamageApply` hook. While a Ward AE is active on the target, any single hit is capped so the target ends at no less than **1 HP**. The async Ward reaction dialog still runs after this and applies the full Cast-Check-driven heal-back on top — same UX, same end-result math when the Cast Check succeeds, no temporary 0-HP window. If the Ward Cast Check fails or is skipped, the target is stuck at 1 HP rather than dying — effectively "Ward saves your life even on a bad roll", consistent with the spell's protective intent.
+
+Verified live: Fighter at 5 HP with Ward AE, incoming 100 damage → `preDamageApply` listener caps to 4 → target ends at 1 HP. No-Ward and already-at-0 cases pass through unchanged.
+
+Requires Vagabond v5.3.0+ for the cap behavior. Older system versions still get the legacy snapshot/heal-back flow with the original death-revive race.
+
 ## v0.4.10 — fix: encumbrance matches vagabond-crawler slot display
 
 The encumbrance speed penalty was using a slot count that disagreed with the displayed slot total on the character sheet whenever the **vagabond-crawler** module was active. The crawler post-processes the sheet's `.slot-value` field with two extra rules the system itself doesn't apply:

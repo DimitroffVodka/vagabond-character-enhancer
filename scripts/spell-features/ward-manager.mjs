@@ -97,6 +97,34 @@ export const WardManager = {
       if (!actor || actor.documentName !== "Actor") return;
       log("Ward", `Warded AE removed from ${actor.name}`);
     });
+
+    // Pre-damage cap: while a Ward AE is active on the target, prevent any
+    // single hit from reducing them below 1 HP. The async Ward reaction
+    // (snapshotHP / onPostDamage) still runs after this and applies the
+    // full Cast-Check-driven heal-back on top. Bypasses the death-then-
+    // revive race where HP momentarily hits 0 (firing dead/unconscious
+    // status and other death-related side effects) before being healed
+    // back. Requires Vagabond v5.3.0+ (`vagabond.preDamageApply` hook).
+    Hooks.on("vagabond.preDamageApply", (ctx) => {
+      if (!ctx?.actor) return;
+      const wardAE = ctx.actor.effects.find(e =>
+        e.getFlag(MODULE_ID, WARD_AE_FLAG) && !e.disabled
+      );
+      if (!wardAE) return;
+
+      const currentHP = ctx.actor.system?.health?.value ?? 0;
+      if (currentHP <= 0) return; // already down — let damage land normally
+
+      const incoming = ctx.amount ?? 0;
+      if (incoming <= 0) return;
+
+      // Cap damage so the target ends at no less than 1 HP.
+      const maxNonLethal = Math.max(0, currentHP - 1);
+      if (incoming > maxNonLethal) {
+        log("Ward", `${ctx.actor.name}: capping ${incoming} → ${maxNonLethal} (Ward non-lethal)`);
+        ctx.amount = maxNonLethal;
+      }
+    });
   },
 
   /* -------------------------------------------- */
