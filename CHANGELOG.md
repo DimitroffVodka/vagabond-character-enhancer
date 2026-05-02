@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.4.6 — In Progress
+## v0.4.6 — Encumbered homebrew (opt-in)
 
 ### Encumbered (homebrew, opt-in)
 
