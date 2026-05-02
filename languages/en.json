@@ -11,9 +11,7 @@
       "EnablePerkFeatures": "Enable Perk Automation",
       "EnablePerkFeaturesHint": "Automatically detect and apply perk effects.",
       "DebugMode": "Debug Mode",
-      "DebugModeHint": "Log feature detection and effect management to the console.",
-      "HomebrewEncumbranceSpeed": "Homebrew: Encumbered Speed Penalty",
-      "HomebrewEncumbranceSpeedHint": "Reduce base speed by 5 ft per inventory slot used over the actor's max. Crawl and travel pace cascade from the reduced base. Off = strict RAW."
+      "DebugModeHint": "Log feature detection and effect management to the console."
     },
     "Features": {
       "Rage": "Rage",

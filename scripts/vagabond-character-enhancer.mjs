@@ -435,8 +435,8 @@ Hooks.once("init", () => {
   });
 
   game.settings.register(MODULE_ID, "homebrewEncumbranceSpeedPenalty", {
-    name: "VCE.Settings.HomebrewEncumbranceSpeed",
-    hint: "VCE.Settings.HomebrewEncumbranceSpeedHint",
+    name: "Homebrew: Encumbered Speed Penalty",
+    hint: "Reduce base speed by 5 ft per inventory slot used over the actor's max. Crawl and travel pace cascade from the reduced base. Off = strict RAW.",
     scope: "world",
     config: true,
     type: Boolean,
