@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.4.6 — In Progress
+
+### Encumbered (homebrew, opt-in)
+
+New world setting **"Homebrew: Encumbered Speed Penalty"** (default off). When enabled, a PC's base speed drops by 5 ft for every inventory slot they're over their max. The penalty cascades to crawl and travel pace because the system derives both from base speed. Speed is floored at 0 — a PC carrying enough to fully zero out their movement simply can't move.
+
+- **Status icon.** Encumbered PCs are marked with an anchor icon on the token effect bar and the sheet's status row. Reactive — applied/removed automatically on inventory or fatigue changes (~150ms debounce). The icon is purely visual; the mechanical penalty lives in `prepareDerivedData` so it composes with the rest of the speed pipeline.
+- **Composes with Fatigue.** Fatigue already eats one inventory slot per stack in the system, so a Fatigued + over-encumbered PC compounds naturally.
+- **Setting toggle is live.** Flipping the setting on/off sweeps every PC and re-derives — no F5 required.
+
 ## v0.4.5 — Focus restrictions, Hex rework, status icons, auto-activate
 
 ### Familiar perk
