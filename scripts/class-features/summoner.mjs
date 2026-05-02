@@ -1394,7 +1394,7 @@ export const SummonerFeatures = {
         disabled: false,
         transfer: true,
         statuses: ["soulbonder"],
-        flags: { [MODULE_ID]: { managed: true, [SOULBONDER_FLAG]: true } }
+        flags: { [MODULE_ID]: { [SOULBONDER_FLAG]: true } }
       });
     }
 
@@ -1409,7 +1409,7 @@ export const SummonerFeatures = {
         disabled: false,
         transfer: true,
         statuses: ["soulbonder"],
-        flags: { [MODULE_ID]: { managed: true, [SOULBONDER_FLAG]: true } }
+        flags: { [MODULE_ID]: { [SOULBONDER_FLAG]: true } }
       });
     }
 

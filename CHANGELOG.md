@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.7 — hotfix: Soulbonder AE deletion
+
+Same-shape bug as the encumbered-AE fix in v0.4.6, found via the v0.4.6 final code review. The Summoner Soulbonder Armor / Immunities AEs (`scripts/class-features/summoner.mjs`) tagged themselves with `flags["vagabond-character-enhancer"].managed = true` but had no `effectKey`, which made `FeatureDetector._syncManagedEffects` queue them for deletion on every scan. Dormant in normal play (Soulbonder is short-lived during a summon and scans don't naturally fire during that window), but a manual `rescan()` or any class/perk/spell item update during summoning would silently wipe both AEs.
+
+Fix: drop `managed: true` from both flag blocks. The cleanup path (`_removeSoulbonder`) already looks up the AEs via the dedicated `soulbonderAE` flag, so identification and dismiss-time deletion are unaffected.
+
 ## v0.4.6 — Encumbered homebrew (opt-in)
 
 ### Encumbered (homebrew, opt-in)
