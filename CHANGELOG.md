@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.4.9 — Vagabond v5.3.0 compat
+
+Tested against Vagabond system v5.3.0 (`module.json` verified field bumped from 5.0.0 → 5.3.0). Smoke pass: focus-cap patch, encumbrance speed/icon pipeline, weapon `rollAttack` wrapper, status icon migration, auto-activate, hex panel — all working with zero new console errors.
+
+### Forward-compat fix: rollAttack difficultyOverride
+
+Vagabond v5.3.0 added a third parameter `difficultyOverride` to `VagabondItem.prototype.rollAttack`, passed by `RollHandler` when a `vagabond.preD20Roll` hook listener mutates the difficulty for a weapon attack. VCE's `rollAttack` wrapper (in `vagabond-character-enhancer.mjs`) was declared with only two parameters and called the original with only the actor — silently dropping `difficultyOverride` from any caller that supplied one.
+
+Fix: extend the wrapper signature to `(actor, favorHinder = "none", difficultyOverride = null)` and forward `difficultyOverride` to `origRollAttack.call(this, actor, "none", difficultyOverride)`. The favor/hinder slot stays "none" because VCE applies favor/hinder via `_rangeFavorHinder` + `buildAndEvaluateD20WithRollData` rather than the system's parameter.
+
+Bug was dormant in the wild because nothing currently registers a `vagabond.preD20Roll` listener that mutates difficulty, so `difficultyOverride` always arrived as `null` from `RollHandler`. Fixed proactively before downstream modules start using the new hook.
+
 ## v0.4.8 — fix: encumbrance respects stacked-item quantity
 
 The v0.4.6 encumbrance speed penalty read `system.inventory.occupiedSlots` directly, but the Vagabond system's slot loop sums `item.system.slots` per item without multiplying by `item.system.quantity` — so a stacked Battleaxe (`quantity: 2, slots: 2`) was contributing only 2 slots, not 4. Players seeing the inventory grid's "×2" stack badge expected each instance to occupy its full slot footprint, and the speed penalty came up short whenever a stacked weapon was the difference between under-cap and over-cap.

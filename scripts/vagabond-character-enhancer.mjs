@@ -808,7 +808,7 @@ Hooks.once("ready", async () => {
     const VagabondItem = itemModule.default || Object.values(itemModule).find(v => v?.prototype?.rollAttack);
     if (VagabondItem?.prototype?.rollAttack) {
       const origRollAttack = VagabondItem.prototype.rollAttack;
-      VagabondItem.prototype.rollAttack = async function (actor, favorHinder = "none") {
+      VagabondItem.prototype.rollAttack = async function (actor, favorHinder = "none", difficultyOverride = null) {
         const ctx = {
           item: this, actor, features: getFeatures(actor), favorHinder,
           VagabondDamageHelper
@@ -889,7 +889,10 @@ Hooks.once("ready", async () => {
         // since the system's rollAttack ignores the favorHinder parameter
         _rangeFavorHinder = ctx.favorHinder;
         try {
-          const result = await origRollAttack.call(this, actor);
+          // Forward difficultyOverride (v5.3.0+) so the system's vagabond.preD20Roll
+          // hook can modify weapon-attack difficulty. Pass favorHinder as "none"
+          // because VCE applies favor/hinder via _rangeFavorHinder + buildAndEvaluateD20.
+          const result = await origRollAttack.call(this, actor, "none", difficultyOverride);
           _currentRollActor = null;
           _rangeFavorHinder = "none";
           if (_vceHirelingRoutingRestore) { _vceHirelingRoutingRestore(); _vceHirelingRoutingRestore = null; }
