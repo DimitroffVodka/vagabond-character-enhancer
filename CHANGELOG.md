@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.8 — fix: encumbrance respects stacked-item quantity
+
+The v0.4.6 encumbrance speed penalty read `system.inventory.occupiedSlots` directly, but the Vagabond system's slot loop sums `item.system.slots` per item without multiplying by `item.system.quantity` — so a stacked Battleaxe (`quantity: 2, slots: 2`) was contributing only 2 slots, not 4. Players seeing the inventory grid's "×2" stack badge expected each instance to occupy its full slot footprint, and the speed penalty came up short whenever a stacked weapon was the difference between under-cap and over-cap.
+
+Fix: a new `computeQuantityAwareOccupiedSlots(actor)` helper sums `slots × quantity` per item with the same filtering as the system loop (skip non-inventory types, items inside containers, slot-0 items). Both the `prepareDerivedData` patch and the `EncumbranceManager.refresh` path now use this helper instead of `system.inventory.occupiedSlots`. Also added `system.quantity` to the inventory-related `updateItem` hook filter so quantity changes trigger a debounced refresh.
+
 ## v0.4.7 — hotfix: Soulbonder AE deletion
 
 Same-shape bug as the encumbered-AE fix in v0.4.6, found via the v0.4.6 final code review. The Summoner Soulbonder Armor / Immunities AEs (`scripts/class-features/summoner.mjs`) tagged themselves with `flags["vagabond-character-enhancer"].managed = true` but had no `effectKey`, which made `FeatureDetector._syncManagedEffects` queue them for deletion on every scan. Dormant in normal play (Soulbonder is short-lived during a summon and scans don't naturally fire during that window), but a manual `rescan()` or any class/perk/spell item update during summoning would silently wipe both AEs.

@@ -264,7 +264,7 @@ import { ReanimatorPerk } from "./perk-features/reanimator.mjs";
 import { ConjurerPerk } from "./perk-features/conjurer.mjs";
 import { RaisePerks } from "./perk-features/raise-perks.mjs";
 import { BriarHealerManager } from "./perk-features/briar-healer.mjs";
-import { EncumbranceManager } from "./encumbrance/encumbrance-manager.mjs";
+import { EncumbranceManager, computeQuantityAwareOccupiedSlots } from "./encumbrance/encumbrance-manager.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -520,7 +520,11 @@ Hooks.once("ready", async () => {
           const ret = prePrepare.apply(this, arguments);
           try {
             if (game.settings.get(MODULE_ID, "homebrewEncumbranceSpeedPenalty")) {
-              const occupied = this.inventory?.occupiedSlots ?? 0;
+              // Use quantity-aware count (system.inventory.occupiedSlots ignores
+              // item quantity — a stacked Battleaxe ×2 with 2 slots each contributes
+              // only 2, not 4). Recomputed here to match the rulebook + the visible
+              // ×N stack badge in the inventory grid.
+              const occupied = this.parent ? computeQuantityAwareOccupiedSlots(this.parent) : 0;
               const max = this.inventory?.maxSlots ?? 0;
               const over = Math.max(0, occupied - max);
               if (over > 0 && this.speed?.base != null) {

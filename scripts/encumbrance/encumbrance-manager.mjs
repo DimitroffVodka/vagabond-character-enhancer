@@ -21,6 +21,32 @@ import { MODULE_ID, log } from "../utils.mjs";
 const ENCUMBERED_AE_FLAG = "encumberedAE";
 const STATUS_ID = "encumbered";
 
+/**
+ * Quantity-aware occupied-slot count.
+ *
+ * The Vagabond system's `system.inventory.occupiedSlots` does NOT multiply by
+ * `system.quantity` — a Battleaxe with `quantity: 2, slots: 2` only contributes
+ * 2 slots, not 4. The rulebook (and the inventory grid's "×N" stack badge)
+ * imply each instance occupies its full slot footprint, so we recompute here
+ * by summing `slots × quantity` per item. Mirrors the system's filtering
+ * (skip non-inventory types, items inside containers, slot-0 items).
+ *
+ * @param {Actor} actor
+ * @returns {number}
+ */
+export function computeQuantityAwareOccupiedSlots(actor) {
+  let total = 0;
+  for (const item of actor?.items ?? []) {
+    if (!["equipment", "weapon", "armor", "gear", "container"].includes(item.type)) continue;
+    if (item.system?.containerId) continue;
+    const itemSlots = item.system?.slots || item.system?.baseSlots || 0;
+    if (itemSlots <= 0) continue;
+    const quantity = item.system?.quantity ?? 1;
+    total += itemSlots * quantity;
+  }
+  return total;
+}
+
 export const EncumbranceManager = {
   _debounceTimers: new Map(),
 
@@ -44,6 +70,7 @@ export const EncumbranceManager = {
       // Only debounce if a change could affect slot count
       if (foundry.utils.hasProperty(changes, "system.slots") ||
           foundry.utils.hasProperty(changes, "system.baseSlots") ||
+          foundry.utils.hasProperty(changes, "system.quantity") ||
           foundry.utils.hasProperty(changes, "system.equipped")) {
         this._debounce(item.actor);
       }
@@ -75,7 +102,7 @@ export const EncumbranceManager = {
     if (actor.type !== "character") return;
 
     const enabled = game.settings.get(MODULE_ID, "homebrewEncumbranceSpeedPenalty");
-    const occupied = actor.system.inventory?.occupiedSlots ?? 0;
+    const occupied = computeQuantityAwareOccupiedSlots(actor);
     const max = actor.system.inventory?.maxSlots ?? 0;
     const over = enabled ? Math.max(0, occupied - max) : 0;
     const wantStatus = over > 0;
