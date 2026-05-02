@@ -264,6 +264,7 @@ import { ReanimatorPerk } from "./perk-features/reanimator.mjs";
 import { ConjurerPerk } from "./perk-features/conjurer.mjs";
 import { RaisePerks } from "./perk-features/raise-perks.mjs";
 import { BriarHealerManager } from "./perk-features/briar-healer.mjs";
+import { EncumbranceManager } from "./encumbrance/encumbrance-manager.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -441,7 +442,7 @@ Hooks.once("init", () => {
     config: true,
     type: Boolean,
     default: false,
-    // onChange wired in Task 3 once EncumbranceManager exists. For now, no-op.
+    onChange: () => EncumbranceManager.sweepAll(),
   });
 
   // ---- Psychic / Talent item type ----------------------------------------
@@ -556,6 +557,14 @@ Hooks.once("ready", async () => {
       }
     } catch (e) {
       log("Encumbrance", `Could not patch prepareDerivedData for speed penalty: ${e.message}`);
+    }
+
+    // Init encumbrance hooks + initial sweep
+    try {
+      EncumbranceManager.init();
+      await EncumbranceManager.sweepAll();
+    } catch (e) {
+      log("EncumbranceManager", `Init failed: ${e.message}`);
     }
 
     const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
