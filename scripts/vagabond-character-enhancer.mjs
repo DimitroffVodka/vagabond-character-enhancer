@@ -265,6 +265,7 @@ import { ConjurerPerk } from "./perk-features/conjurer.mjs";
 import { RaisePerks } from "./perk-features/raise-perks.mjs";
 import { BriarHealerManager } from "./perk-features/briar-healer.mjs";
 import { EncumbranceManager, computeQuantityAwareOccupiedSlots } from "./encumbrance/encumbrance-manager.mjs";
+import { BerserkImmunities } from "./status-rules/berserk-immunities.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -569,6 +570,15 @@ Hooks.once("ready", async () => {
       await EncumbranceManager.sweepAll();
     } catch (e) {
       log("EncumbranceManager", `Init failed: ${e.message}`);
+    }
+
+    // Berserk status-vs-status rules (Frightened immunity, etc.) via the
+    // v5.3.0 preStatusApply hook. Status-rules live at the module level
+    // since they apply to any actor regardless of class.
+    try {
+      BerserkImmunities.init();
+    } catch (e) {
+      log("BerserkImmunities", `Init failed: ${e.message}`);
     }
 
     const { VagabondDamageHelper } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");

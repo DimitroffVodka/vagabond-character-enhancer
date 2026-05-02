@@ -42,8 +42,9 @@ export const BARBARIAN_REGISTRY = {
   //   - Die upsizing: system reads {weaponSkill}DamageDieSizeBonus from actor schema
   //     and applies to damage formula in item.mjs and chat-card.mjs.
   //   - Berserk status conditions: config.mjs defines "Can't be Frightened" but doesn't
-  //     enforce it. Module adds frightened immunity globally for all berserk characters
-  //     (see _registerBerserkFrightenImmunity below, not barbarian-specific).
+  //     enforce it. Module-level rule in `scripts/status-rules/berserk-immunities.mjs`
+  //     blocks Frightened from being applied to any actor with the Berserk status (not
+  //     barbarian-specific — applies to Rage, NPC abilities, GM toggles, etc.).
   //
   // MODULE HANDLES:
   //   - Permanent AE: Sets incomingDamageReductionPerDie = 1 (system gates behind berserk)
@@ -315,7 +316,9 @@ export const BarbarianFeatures = {
     this._registerAggressorHooks();
     this._registerFearmongerHooks();
     this._registerBloodthirstyHooks();
-    this._registerBerserkFrightenImmunity();
+    // Berserk frighten-immunity is registered at module level in
+    // scripts/status-rules/berserk-immunities.mjs (status rule, not
+    // barbarian-specific).
 
     log("Barbarian","Barbarian hooks registered.");
   },
@@ -517,8 +520,9 @@ export const BarbarianFeatures = {
       log("Barbarian",`Rage: Berserk applied to ${actor.name} — creating Rage (Active) companion AE`);
 
       // Build changes — these only apply while berserk (AE exists only while berserk)
-      // NOTE: Frightened immunity from Berserk is handled globally in
-      // _registerBerserkFrightenImmunity — it applies to ALL berserk characters, not just barbarians.
+      // NOTE: Frightened immunity from Berserk is handled at module level in
+      // scripts/status-rules/berserk-immunities.mjs — it applies to ALL berserk
+      // characters, not just barbarians.
       const changes = [
         // Exploding dice — enable global explode
         { key: "system.bonuses.globalExplode", mode: 2, value: "1" },
@@ -1027,37 +1031,4 @@ export const BarbarianFeatures = {
     log("Barbarian","Bloodthirsty: handler registered.");
   },
 
-  /* -------------------------------------------- */
-  /*  Berserk: Frighten Immunity (all berserk)    */
-  /* -------------------------------------------- */
-
-  /**
-   * Enforce "Can't be Frightened" for ALL berserk characters.
-   * System config defines this rule but doesn't enforce it mechanically.
-   */
-  _registerBerserkFrightenImmunity() {
-    Hooks.on("createActiveEffect", async (effect, options, userId) => {
-      if (!game.user.isGM) return;
-      if (!effect.statuses?.has("berserk")) return;
-      const actor = effect.parent;
-      if (!actor) return;
-      if (actor.effects.find(e => e.getFlag(MODULE_ID, "berserkFrightImmune"))) return;
-      await actor.createEmbeddedDocuments("ActiveEffect", [{
-        name: "Berserk (Frighten Immune)",
-        img: "icons/svg/terror.svg",
-        flags: { [MODULE_ID]: { managed: true, berserkFrightImmune: true } },
-        changes: [{ key: "system.statusImmunities", mode: 2, value: "frightened" }],
-        disabled: false,
-        transfer: false
-      }]);
-    });
-    Hooks.on("deleteActiveEffect", async (effect, options, userId) => {
-      if (!game.user.isGM) return;
-      if (!effect.statuses?.has("berserk")) return;
-      const actor = effect.parent;
-      if (!actor) return;
-      const frightImmune = actor.effects.find(e => e.getFlag(MODULE_ID, "berserkFrightImmune"));
-      if (frightImmune) await frightImmune.delete();
-    });
-  }
 };
