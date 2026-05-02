@@ -61,7 +61,7 @@ export const EncumbranceManager = {
     }
     this._debounceTimers.set(actor.id, setTimeout(() => {
       this._debounceTimers.delete(actor.id);
-      this.refresh(actor);
+      this.refresh(actor).catch(e => log("EncumbranceManager", `Refresh failed for ${actor?.name}: ${e.message}`));
     }, 100));
   },
 
@@ -91,7 +91,7 @@ export const EncumbranceManager = {
         statuses: [STATUS_ID],
         changes: [],
         disabled: false,
-        transfer: true,
+        transfer: false,
         flags: {
           [MODULE_ID]: {
             managed: true,
@@ -114,7 +114,8 @@ export const EncumbranceManager = {
     if (!game.user.isGM) return;
     for (const actor of game.actors) {
       if (actor.type !== "character") continue;
-      await this.refresh(actor);
+      try { await this.refresh(actor); }
+      catch (e) { log("EncumbranceManager", `Refresh failed for ${actor.name}: ${e.message}`); }
       try { actor.prepareData(); } catch (e) { /* non-fatal */ }
     }
     log("EncumbranceManager", `Sweep complete (${game.actors.filter(a => a.type === "character").length} PCs)`);
