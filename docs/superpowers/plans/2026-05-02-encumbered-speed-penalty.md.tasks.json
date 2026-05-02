@@ -1,0 +1,33 @@
+{
+  "planPath": "docs/superpowers/plans/2026-05-02-encumbered-speed-penalty.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: Register status, localization, and world setting",
+      "status": "pending",
+      "description": "**Goal:** Add the documentation entry for `encumbered`, the localization key, and the world setting that gates the entire feature. After this task the setting is visible in Module Settings (default off) but has no behavioral effect.\n\n**Files:**\n- Modify: scripts/status-effects.mjs (append entry to STATUS_EFFECTS_REGISTRY)\n- Modify: languages/en.json (add VCE.Status.Encumbered + VCE.Settings.HomebrewEncumbranceSpeed[Hint])\n- Modify: scripts/vagabond-character-enhancer.mjs (register the setting in init hook, no onChange yet)\n\n**Acceptance Criteria:**\n- game.settings.get returns false on fresh world\n- Setting visible in Module Settings with correct name/hint\n- game.i18n.localize('VCE.Status.Encumbered') returns 'Encumbered'\n- No new console errors on world load\n\n**Verify:** MCP evaluate snippet returns `{ setting: false, hasSettingDef: true, i18n: 'Encumbered' }`\n\n```json:metadata\n{\"files\": [\"scripts/status-effects.mjs\", \"languages/en.json\", \"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"MCP evaluate: see plan Task 1 Verify section\", \"acceptanceCriteria\": [\"setting registered default false\", \"settings dialog shows correct copy\", \"i18n key resolves\", \"no new console errors\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: Install the prepareDerivedData speed patch (mechanical penalty)",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** Chain a second prepareDerivedData patch onto the existing focus-cap patch so when the homebrew setting is on, every PC's speed.base drops by 5 * (occupiedSlots - maxSlots) and crawl/travel cascade. Setting off → no-op.\n\n**Files:**\n- Modify: scripts/vagabond-character-enhancer.mjs (extend the ready hook patch block; existing focus-cap patch is at lines ~466-491)\n\n**Acceptance Criteria:**\n- Setting OFF: speed.base matches RAW\n- Setting ON, at slots=max: no change\n- Setting ON, max+2: speed.base = max(0, originalBase - 10)\n- Setting ON, max+100: speed.base = 0 (floored)\n- speed.crawl and speed.travel cascade from the reduced base\n- Toggle setting + actor.prepareData() flips the penalty live\n\n**Verify:** MCP evaluate snippet creates a 99-slot junk item, asserts speed.base = 0 with setting on, restores RAW speed with setting off, cleans up.\n\n```json:metadata\n{\"files\": [\"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"MCP evaluate: see plan Task 2 Verify section\", \"acceptanceCriteria\": [\"setting OFF leaves speed at RAW\", \"setting ON applies -5/over\", \"speed floors at 0\", \"crawl/travel cascade\", \"toggle is live\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 3: Build EncumbranceManager + wire init/sweep/onChange",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Create the singleton that maintains the visual 'Encumbered' icon on every PC reactively (on inventory or fatigue changes), sweeps all PCs on world ready, and handles the setting-toggle case (re-derives speed + flips the icon globally).\n\n**Files:**\n- Create: scripts/encumbrance/encumbrance-manager.mjs (~100 lines)\n- Modify: scripts/vagabond-character-enhancer.mjs (import + init + ready wiring + setting onChange)\n\n**Acceptance Criteria:**\n- Setting ON + over slots: actor has managed AE name='Encumbered', img='icons/svg/anchor.svg', statuses=['encumbered']\n- Removing items so PC is no longer over: AE deleted within ~150ms\n- Increasing fatigue (reduces maxSlots): flips fine PC to encumbered without inventory change\n- Toggle OFF: AE cleared on all PCs, speed re-derived to RAW; toggle ON re-applies\n- World ready: sweep runs, every existing PC's encumbered state correct\n- GM-only writes (no duplicate creation across clients)\n\n**Verify:** MCP evaluate snippet adds/removes inventory items + toggles setting, asserts AE creation/deletion and statuses set match expected.\n\n```json:metadata\n{\"files\": [\"scripts/encumbrance/encumbrance-manager.mjs\", \"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"MCP evaluate: see plan Task 3 Verify section\", \"acceptanceCriteria\": [\"AE created when over slots\", \"AE deleted when under slots\", \"fatigue change flips state\", \"setting toggle sweeps all PCs\", \"GM-only writes\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 4: CHANGELOG entry",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** Document the v0.4.6 release in CHANGELOG.md with the same shape as v0.4.5.\n\n**Files:**\n- Modify: CHANGELOG.md\n\n**Acceptance Criteria:**\n- New '## v0.4.6 — In Progress' section at top of file (above v0.4.5)\n- Section explains setting + cascade + icon\n- Mirrors prose style of prior entries\n\n**Verify:** Visual review of diff.\n\n```json:metadata\n{\"files\": [\"CHANGELOG.md\"], \"verifyCommand\": \"git diff CHANGELOG.md\", \"acceptanceCriteria\": [\"v0.4.6 In Progress section added\", \"explains feature\", \"matches prose style\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-02T15:00:00Z"
+}
