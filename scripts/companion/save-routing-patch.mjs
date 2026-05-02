@@ -185,9 +185,21 @@ export async function patchedHandleSaveRoll(button, event = null) {
 
     const autoApply = game.settings.get('vagabond', 'autoApplySaveDamage') && !isCritical;
     if (autoApply) {
-      const currentHP = damageTarget.system.health?.value || 0;
-      const newHP = Math.max(0, currentHP - finalDamage);
-      await damageTarget.update({ 'system.health.value': newHP });
+      // Mirror the system's v5.3.0 auto-apply path so listeners on
+      // `vagabond.preDamageApply` (e.g. WardManager) can intercept or
+      // mutate damage before HP changes. Without this, our reimplemented
+      // save-handler bypassed the hook entirely.
+      const _autoPreCtx = { actor: damageTarget, amount: finalDamage, damageType, sourceItem };
+      if (Hooks.call('vagabond.preDamageApply', _autoPreCtx) !== false) {
+        const _autoFinal = Math.max(0, _autoPreCtx.amount);
+        const currentHP = damageTarget.system.health?.value || 0;
+        const newHP = Math.max(0, currentHP - _autoFinal);
+        await damageTarget.update({ 'system.health.value': newHP });
+        Hooks.callAll('vagabond.postDamageApply', {
+          actor: damageTarget, amount: _autoFinal, damageType, sourceItem,
+          oldHp: currentHP, newHp: newHP,
+        });
+      }
     }
 
     const { StatusHelper } = await import('/systems/vagabond/module/helpers/status-helper.mjs');

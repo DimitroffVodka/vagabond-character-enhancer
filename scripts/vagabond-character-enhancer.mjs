@@ -1289,13 +1289,11 @@ Hooks.once("ready", async () => {
           return;
         }
 
-        // Ward: snapshot HP before damage for accurate heal-back capping
-        try { WardManager.snapshotHP(button); } catch (e) { /* ignore */ }
-
+        // Ward: handled via vagabond.preDamageApply hook in WardManager;
+        // the listener cancels the system's damage application and runs
+        // the Cast Check dialog before damage lands. No wrapping needed
+        // here.
         await origHandleSaveRoll.call(this, button, event);
-
-        // Ward: prompt caster for reactive damage reduction AFTER save resolves and damage applies
-        try { await WardManager.onPostDamage(button); } catch (e) { /* Don't crash save flow */ }
         return;
       } finally {
         for (const ctx of _blessContexts) await BlessManager.onPostRollSave(ctx);
@@ -1449,13 +1447,9 @@ Hooks.once("ready", async () => {
           return;
         }
 
-        // Ward: snapshot HP before damage for accurate heal-back capping
-        try { WardManager.snapshotHP(button); } catch (e) { /* ignore */ }
-
+        // Ward: handled via vagabond.preDamageApply hook in WardManager;
+        // see comment above for handleSaveRoll path.
         await origHandleApplyDirect.call(this, button);
-
-        // Ward: prompt caster for reactive damage reduction AFTER damage is applied
-        try { await WardManager.onPostDamage(button); } catch (e) { /* Don't crash apply flow */ }
         return;
       } finally {
         _damageSourceActorId = null;

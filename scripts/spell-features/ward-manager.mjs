@@ -2,8 +2,14 @@
  * Ward Spell Manager
  * Handles the reactive Ward spell:
  *   - On cast: applies a "Warded" AE to the target with caster reference
- *   - On damage: intercepts handleSaveRoll/handleApplyDirect to show Ward dialog
- *   - Ward dialog: Cast Check → d6 per (1 + extra Mana) damage reduction, crit = negate all
+ *   - On damage: subscribes to Vagabond v5.3.0's `vagabond.preDamageApply`
+ *     hook — when a Warded target is about to take >0 damage, cancel the
+ *     system's damage path (return false) and asynchronously open the
+ *     Cast Check dialog BEFORE damage lands. The handler then applies
+ *     the post-reduction damage, fires postDamageApply, and renders the
+ *     standard damage chat card so the visible amount matches reality.
+ *   - Ward dialog: Cast Check → d6 per (1 + extra Mana) damage reduction,
+ *     crit = negate all
  *   - Focus cleanup: removes Warded AE when caster stops focusing
  */
 
@@ -98,116 +104,140 @@ export const WardManager = {
       log("Ward", `Warded AE removed from ${actor.name}`);
     });
 
-    // Pre-damage cap: while a Ward AE is active on the target, prevent any
-    // single hit from reducing them below 1 HP. The async Ward reaction
-    // (snapshotHP / onPostDamage) still runs after this and applies the
-    // full Cast-Check-driven heal-back on top. Bypasses the death-then-
-    // revive race where HP momentarily hits 0 (firing dead/unconscious
-    // status and other death-related side effects) before being healed
-    // back. Requires Vagabond v5.3.0+ (`vagabond.preDamageApply` hook).
+    // Pre-damage interception: when a Warded target is about to take >0
+    // damage, cancel the system's damage application (return false) and
+    // hand off to an async handler that opens the Cast Check dialog
+    // BEFORE damage lands. The handler then applies whatever damage
+    // remains after Ward reduction, fires postDamageApply, and renders
+    // the chat result card itself.
+    //
+    // Requires Vagabond v5.3.0+ for `vagabond.preDamageApply`. Pre-Vagabond-
+    // 5.3 environments fall through silently — the hook never fires.
     Hooks.on("vagabond.preDamageApply", (ctx) => {
       if (!ctx?.actor) return;
+      const incoming = ctx.amount ?? 0;
+      if (incoming <= 0) return;
+
       const wardAE = ctx.actor.effects.find(e =>
         e.getFlag(MODULE_ID, WARD_AE_FLAG) && !e.disabled
       );
       if (!wardAE) return;
 
-      const currentHP = ctx.actor.system?.health?.value ?? 0;
-      if (currentHP <= 0) return; // already down — let damage land normally
+      const casterId = wardAE.getFlag(MODULE_ID, "wardCasterId");
+      const caster = casterId ? game.actors.get(casterId) : null;
+      // Need a reachable caster who can roll the Cast Check on the local
+      // client. Without one we fall through and let the system apply
+      // damage normally (no Ward this hit).
+      if (!caster) return;
+      if (!caster.isOwner && !game.user.isGM) return;
 
-      const incoming = ctx.amount ?? 0;
-      if (incoming <= 0) return;
-
-      // Cap damage so the target ends at no less than 1 HP.
-      const maxNonLethal = Math.max(0, currentHP - 1);
-      if (incoming > maxNonLethal) {
-        log("Ward", `${ctx.actor.name}: capping ${incoming} → ${maxNonLethal} (Ward non-lethal)`);
-        ctx.amount = maxNonLethal;
-      }
+      // Fire-and-forget: the dialog runs async, system has already been
+      // told (via return false) not to apply damage on its own.
+      this._handleWardedDamage(ctx, wardAE, caster).catch((e) =>
+        log("Ward", `_handleWardedDamage failed: ${e.message}`)
+      );
+      return false;
     });
   },
 
   /* -------------------------------------------- */
-  /*  Pre/Post-damage Hooks — called from main     */
+  /*  Pre-Damage Ward Reaction                     */
   /* -------------------------------------------- */
 
-  /** Internal HP snapshot storage */
-  _hpBeforeDamage: {},
-
   /**
-   * Called BEFORE damage is applied. Snapshots target HP so Ward can cap
-   * the heal-back to the actual damage taken from this hit.
+   * Async pre-damage handler. The preDamageApply listener already cancelled
+   * the system's damage path. This handler:
+   *   1. Opens the Ward dialog (Cast Check + mana spend)
+   *   2. Computes final damage = max(0, ctx.amount - reduction)
+   *   3. Applies the reduced damage to the target's HP
+   *   4. Fires `vagabond.postDamageApply` (so on-damage triggers still fire)
+   *   5. Renders the system damage chat card via VagabondChatCard.applyResult
+   *
+   * If the dialog is cancelled / Ward fails / no Cast Check, the original
+   * un-reduced damage is applied so behavior matches the no-Ward path.
    */
-  snapshotHP(button) {
-    this._hpBeforeDamage = {};
+  async _handleWardedDamage(ctx, wardAE, caster) {
+    const { actor, damageType, sourceItem } = ctx;
+    const incoming = ctx.amount ?? 0;
+    const previousValue = actor.system.health?.value ?? 0;
+
+    let reduction = null;
     try {
-      const targets = JSON.parse((button.dataset.targets || "[]").replace(/&quot;/g, '"'));
-      for (const t of targets) {
-        const actor = game.actors.get(t.actorId);
-        if (actor) {
-          this._hpBeforeDamage[t.actorId] = actor.system.health?.value ?? 0;
-        }
-      }
-    } catch { /* ignore */ }
-  },
+      reduction = await this._promptWardReaction(caster, actor);
+    } catch (e) {
+      log("Ward", `_promptWardReaction threw: ${e.message}`);
+      reduction = null;
+    }
 
-  /**
-   * Called AFTER handleSaveRoll or handleApplyDirect has already applied damage.
-   * Checks if any target has a Ward AE, prompts the caster for Ward reaction,
-   * and heals back the Ward reduction amount (capped at damage taken).
-   * @param {HTMLElement} button - The damage button with dataset
-   */
-  async onPostDamage(button) {
-    let targets;
-    try {
-      targets = JSON.parse((button.dataset.targets || "[]").replace(/&quot;/g, '"'));
-    } catch { return; }
+    let finalAmount;
+    if (reduction === Infinity) {
+      finalAmount = 0;
+    } else if (typeof reduction === "number" && reduction > 0) {
+      finalAmount = Math.max(0, incoming - reduction);
+    } else {
+      finalAmount = incoming;
+    }
 
-    for (const target of targets) {
-      const targetActor = game.actors.get(target.actorId);
-      if (!targetActor) continue;
+    const newValue = Math.max(0, previousValue - finalAmount);
 
-      const wardAEs = targetActor.effects.filter(e =>
-        e.getFlag(MODULE_ID, WARD_AE_FLAG) && !e.disabled
-      );
-      if (wardAEs.length === 0) continue;
-
-      // Snapshot HP after damage was applied (before Ward heals back)
-      const hpAfterDamage = targetActor.system.health?.value ?? 0;
-
-      for (const wardAE of wardAEs) {
-        const casterId = wardAE.getFlag(MODULE_ID, "wardCasterId");
-        const caster = game.actors.get(casterId);
-        if (!caster) continue;
-
-        if (!caster.isOwner && !game.user.isGM) continue;
-
-        // Calculate how much damage was actually dealt by this hit
-        // (current HP vs what it was before — we track via hpBefore stored pre-damage)
-        const hpBefore = this._hpBeforeDamage?.[target.actorId] ?? hpAfterDamage;
-        const damageTaken = Math.max(0, hpBefore - hpAfterDamage);
-
-        if (damageTaken === 0) continue; // No damage taken, skip Ward
-
-        const reduction = await this._promptWardReaction(caster, targetActor);
-        if (reduction === null) continue; // Cancelled, skipped, or failed
-
-        // Ward can't heal more than the damage taken from this hit
-        let healAmount;
-        if (reduction === Infinity) {
-          healAmount = damageTaken; // Crit: negate all damage from this hit
-        } else {
-          healAmount = Math.min(reduction, damageTaken);
-        }
-
-        if (healAmount > 0) {
-          const currentHP = targetActor.system.health?.value ?? 0;
-          const newHP = currentHP + healAmount;
-          await targetActor.update({ "system.health.value": newHP });
-          log("Ward", `${targetActor.name} healed ${healAmount} HP from Ward (${currentHP} → ${newHP}), damage was ${damageTaken}`);
-        }
+    // Apply the HP change. Owner / GM writes directly; other clients relay
+    // through the system's socket helper (added in v5.3.0).
+    if (actor.isOwner || game.user.isGM) {
+      try { await actor.update({ "system.health.value": newValue }); }
+      catch (e) { log("Ward", `actor.update failed: ${e.message}`); return; }
+    } else {
+      try {
+        game.vagabond?.socket?.emit?.("applyDamage", {
+          actorUuid: actor.uuid,
+          newHp: newValue,
+        });
+      } catch (e) {
+        log("Ward", `socket emit applyDamage failed: ${e.message}`);
+        return;
       }
     }
+
+    // Fire postDamageApply so on-damage triggers (Briar Healer, retributive
+    // effects, etc.) still see the reduced damage.
+    try {
+      Hooks.callAll("vagabond.postDamageApply", {
+        actor,
+        amount: finalAmount,
+        damageType,
+        sourceItem,
+        oldHp: previousValue,
+        newHp: newValue,
+      });
+    } catch (e) {
+      log("Ward", `postDamageApply hook failed: ${e.message}`);
+    }
+
+    // Render the system's standard damage chat card so chat reflects the
+    // reduced amount.
+    try {
+      const VCC = game.vagabond?.api?.VagabondChatCard;
+      if (VCC?.applyResult) {
+        await VCC.applyResult(actor, {
+          type: "damage",
+          rawAmount: incoming,
+          armorReduction: 0, // already accounted for upstream by the system
+          finalAmount,
+          damageType: damageType || "-",
+          previousValue,
+          newValue,
+        });
+      }
+    } catch (e) {
+      log("Ward", `applyResult chat card failed: ${e.message}`);
+    }
+
+    log(
+      "Ward",
+      `${actor.name}: incoming ${incoming} → ${finalAmount} (Ward ${
+        reduction === Infinity ? "CRIT (negate)" :
+        reduction != null ? `reduced ${reduction}` : "no reduction"
+      })`
+    );
   },
 
   /* -------------------------------------------- */
@@ -298,42 +328,74 @@ export const WardManager = {
     const totalDice = 1 + extraMana;
     let reductionAmount = 0;
     let reductionRoll = null;
-    let resultText = "";
 
     if (isCrit) {
-      resultText = `<strong style="color:#ffd700;">CRIT!</strong> All damage negated!`;
       reductionAmount = Infinity;
     } else if (isSuccess) {
       reductionRoll = new Roll(`${totalDice}d6`);
       await reductionRoll.evaluate();
       reductionAmount = reductionRoll.total;
-      resultText = `<strong style="color:#4a90d9;">Pass!</strong> Reduced by ${reductionAmount} (${totalDice}d6: ${reductionRoll.result})`;
-    } else {
-      resultText = `<strong style="color:#cc4444;">Failed.</strong> Ward fizzles — no reduction.`;
     }
 
-    // Post result to chat
-    const skillLabel = skill.label || manaSkillKey;
-    const chatContent = `<div class="vagabond-chat-card-v2" data-card-type="apply-result">
-      <div class="card-body"><section class="content-body">
-        <div class="card-description" style="text-align:center;">
-          <i class="fas fa-shield-alt" style="color:#4a90d9;"></i>
-          <strong>${caster.name}</strong> casts Ward to protect <strong>${targetActor.name}</strong>
-          <br><span style="font-size:0.9em;">${skillLabel} Check: ${rollTotal} vs ${difficulty}</span>
-          ${extraMana > 0 ? `<br><span style="font-size:0.85em; opacity:0.7;">+${extraMana} extra Mana spent</span>` : ""}
-          <br>${resultText}
-        </div>
-      </section></div>
-    </div>`;
+    // Render the Cast Check as a spell-style chat card so the header reads
+    // "WARD" with the spell's subtitle and icon (matching how a normal
+    // Ward cast appears), with the Mysticism check as the roll badge and
+    // the d6 reduction roll rendered as damage-style green dice (so the
+    // actual rolled values are visible AND Dice So Nice animates them).
+    //
+    // We build the card manually via the system's `new VagabondChatCard()`
+    // builder rather than `createActionCard` because the latter auto-adds
+    // save/apply buttons whenever a damage roll is present — those don't
+    // make sense for a reduction roll. Manual construction lets us keep
+    // the dice rendering and skip the buttons.
+    const wardSpell = caster.items.find(i =>
+      i.type === "spell" && i.name?.toLowerCase?.() === "ward"
+    );
 
-    const rolls = [castRoll];
-    if (reductionRoll) rolls.push(reductionRoll);
+    const tags = [
+      { label: `Protecting ${targetActor.name}`, cssClass: "" },
+    ];
+    if (extraMana > 0) tags.push({ label: `+${extraMana} extra Mana`, cssClass: "" });
+    if (isCrit) {
+      tags.push({ label: "CRIT — All damage negated", cssClass: "" });
+    } else if (isSuccess) {
+      tags.push({ label: `Reduced by ${reductionAmount}`, cssClass: "" });
+    } else {
+      tags.push({ label: "Ward fizzles — no reduction", cssClass: "" });
+    }
 
-    await ChatMessage.create({
-      content: chatContent,
-      speaker: ChatMessage.getSpeaker({ actor: caster }),
-      rolls
-    });
+    const VCC = game.vagabond?.api?.VagabondChatCard;
+    if (VCC) {
+      try {
+        const card = new VCC();
+        // setItem before setActor → spell icon + spell title (matches
+        // how a normal Ward cast looks on the sheet).
+        if (wardSpell) card.setItem(wardSpell);
+        card.setActor(caster);
+        card.setTitle(wardSpell?.name ?? "Ward");
+        card.addRoll(castRoll, difficulty);
+        card.setOutcome(isSuccess ? "PASS" : "FAIL", isCrit);
+        card.data.standardTags = tags;
+        card.data.propertyTags = [];
+        card.setMetadataTags(tags);
+        // Add the d6 reduction roll as a damage block so it renders with
+        // the system's green-pentagon dice icons. send() puts both rolls
+        // into msgData.rolls so Dice So Nice animates them.
+        if (reductionRoll) {
+          card.addDamage(reductionRoll, "Reduction", isCrit, "physical");
+        }
+        await card.send();
+      } catch (e) {
+        log("Ward", `Ward card construction failed: ${e.message}`);
+      }
+    } else {
+      // Fallback for environments without the v5.3.0 chat-card API
+      await ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2"><strong>${caster.name}</strong> Ward Cast Check ${rollTotal} vs ${difficulty}</div>`,
+        speaker: ChatMessage.getSpeaker({ actor: caster }),
+        rolls: reductionRoll ? [castRoll, reductionRoll] : [castRoll],
+      });
+    }
 
     log("Ward", `${caster.name} Ward check: ${rollTotal} vs ${difficulty} — ${isSuccess ? (isCrit ? "CRIT" : `pass, -${reductionAmount}`) : "fail"}`);
 
