@@ -227,6 +227,22 @@ async function _handleRequest(data) {
       return { ok: true };
     }
 
+    case "consumeImbueMana": {
+      // Deferred Imbue delivery cost — wielder's client triggers the attack,
+      // but the 1 Mana comes from the spell's caster (per RAW). When the
+      // wielder doesn't own the caster, the request hops here so the GM can
+      // deduct from caster.system.mana.current. Idempotent on insufficient
+      // funds — caller is expected to pre-check, but we clamp at 0 anyway.
+      const caster = game.actors.get(data.casterId);
+      if (!caster) return { error: `consumeImbueMana: caster "${data.casterId}" not found` };
+      const amount = Math.max(0, parseInt(data.amount) || 0);
+      if (amount === 0) return { ok: true, oldMana: caster.system?.mana?.current ?? 0, newMana: caster.system?.mana?.current ?? 0 };
+      const cur = caster.system?.mana?.current ?? 0;
+      const newMana = Math.max(0, cur - amount);
+      await caster.update({ "system.mana.current": newMana });
+      return { ok: true, oldMana: cur, newMana };
+    }
+
     case "applyDamage": {
       // Direct HP reduction. Used by reactive perk damage (e.g. Briar Healer's
       // d6 thorn damage to a melee attacker). Bypasses armor by design — these
@@ -327,7 +343,7 @@ async function _handleRequest(data) {
 /**
  * Request a GM-privileged operation. If the caller IS the GM, executes directly.
  * Otherwise, sends a socket request and awaits the GM's response.
- * @param {string} action - One of: importActor, placeToken, removeToken, deleteActor, setActorFlag, updateActorFlags, applyImbue, clearImbue, selflessTransfer
+ * @param {string} action - One of: importActor, placeToken, removeToken, deleteActor, setActorFlag, updateActorFlags, applyImbue, clearImbue, consumeImbueMana, selflessTransfer
  * @param {object} payload - Action-specific data
  * @returns {Promise<object>} Result from the GM
  */

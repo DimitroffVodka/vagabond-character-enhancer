@@ -69,6 +69,93 @@ function _recordCastUseFx(actorId, spellId, useFx) {
   _castUseFxBySpell.set(key, useFx);
   setTimeout(() => _castUseFxBySpell.delete(key), 5 * 60_000);
 }
+
+/**
+ * Apply the imbue's spell `causedStatuses` (and `critCausedStatuses` on a
+ * crit) to all targets of a weapon attack. Reads the spell-effect payload
+ * from the chat message's flag (set by ImbueManager._annotateWeaponAttackCard
+ * after a delivery-authorized hit) so the apply path uses the SPELL's
+ * statuses instead of the (always empty) WEAPON's statuses.
+ *
+ * Without this, an imbued attack with an effect-only spell like Charm would
+ * silently apply nothing — the system's apply path reads
+ * `sourceItem.system.causedStatuses` from the weapon, which is empty, and
+ * never sees the imbue.
+ *
+ * `skipSaveRoll: true` mirrors the convention in handleApplyDirect — Apply
+ * Direct treats the attack hit as the cast check (per Imbue's RAW: "The
+ * Attack Check is used for the Cast Check"), so no separate status save.
+ *
+ * @param {HTMLElement} button - The Apply Direct button that was clicked
+ * @param {Array} targets - Targets array from button.dataset.targets (already parsed)
+ */
+async function _applyImbueStatusesIfPresent(button, targets) {
+  try {
+    const messageEl = button.closest?.("[data-message-id]");
+    const messageId = messageEl?.dataset?.messageId;
+    if (!messageId) return;
+    const message = game.messages.get(messageId);
+    if (!message) return;
+    const ctx = message.getFlag(MODULE_ID, "imbueStatusContext");
+    if (!ctx) return;
+
+    const isCritical = button.dataset.isCritical === "true";
+    const normalEntries = ctx.causedStatuses ?? [];
+    const critEntries = isCritical ? (ctx.critCausedStatuses ?? []) : [];
+    const mergedEntries = isCritical
+      ? [...critEntries, ...normalEntries.filter(e => !critEntries.some(c => c.statusId === e.statusId))]
+      : normalEntries;
+    if (mergedEntries.length === 0) return;
+
+    const { StatusHelper } = await import("/systems/vagabond/module/helpers/status-helper.mjs");
+    const { VagabondDamageHelper: VDH } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
+    const damageWasBlocked = (parseInt(button.dataset.damageAmount) || 0) === 0;
+
+    // Resolve targets via VagabondDamageHelper helper (it normalizes the
+    // stored-target shapes used by various card types).
+    let targetTokens = [];
+    try {
+      const stored = VDH._getTargetsFromButton?.(button) ?? targets ?? [];
+      targetTokens = VDH._resolveStoredTargets?.(stored) ?? [];
+    } catch {
+      // Fallback: walk targets array directly
+      targetTokens = (targets || []).map(t => canvas.tokens?.placeables?.find(tok => tok.id === t.tokenId)).filter(Boolean);
+    }
+
+    for (const token of targetTokens) {
+      const targetActor = token.actor;
+      if (!targetActor) continue;
+      await StatusHelper.processCausedStatuses(
+        targetActor, mergedEntries, damageWasBlocked, ctx.spellName ?? "Imbue", { skipSaveRoll: true }
+      );
+    }
+    log("Imbue", `Applied ${mergedEntries.length} status entry/entries from ${ctx.spellName} to ${targetTokens.length} target(s)`);
+  } catch (e) {
+    console.warn(`${MODULE_ID} | _applyImbueStatusesIfPresent failed:`, e);
+  }
+}
+
+/**
+ * Vagabond core rule: Focus sustains a spell's Effect; the damage portion is
+ * Instant. So Focus on a cast with `useFx === false` is invalid — there's
+ * nothing to sustain. Block the cast and tell the player to either include
+ * the Effect or unfocus the spell.
+ *
+ * Returns true if the cast may proceed, false if it should be blocked.
+ *
+ * Called from both SpellHandler.castSpell (sheet path) and
+ * CrawlerSpellDialog._cast (crawler-strip path).
+ */
+function _validateFocusEffectCoupling(actor, spell, state) {
+  if (!actor || !spell || !state) return true; // missing context — let it through
+  const isFocused = (actor.system?.focus?.spellIds ?? []).includes(spell.id);
+  if (!isFocused) return true;
+  if (state.useFx) return true;
+  ui.notifications.error(
+    `${spell.name}: Focus sustains the spell's Effect — turn on "Include Effect" or unfocus the spell before casting.`
+  );
+  return false;
+}
 function _statusEntryMatches(a, b) {
   if (!a || !b || a.statusId !== b.statusId) return false;
   return (a.duration ?? null) === (b.duration ?? null)
@@ -966,9 +1053,26 @@ Hooks.once("ready", async () => {
         // (armor applied once). The spell's damage type is surfaced on the chat
         // card by ImbueManager's createChatMessage hook for visibility; weakness
         // vs the spell's type is also pre-rolled here when applicable.
+        //
+        // Gate: ImbueManager.onPostRollAttack runs BEFORE this and decides
+        // whether the caster can pay the deferred 1-Mana delivery cost. If
+        // the caster couldn't pay (out of mana, dead, unconscious), it sets
+        // `_vceImbueDeliveryDenied` on the wielder and we skip the spell-dice
+        // append so the weapon does plain damage. The authorize-positive case
+        // and the legacy "neither sentinel set" case both fall through to
+        // appending dice as before.
+        //
+        // Per-round gate: damage only fires in the cast round (Vagabond core
+        // rule — Focus sustains the Effect, damage is Instant). When the
+        // imbue is being focus-sustained past its cast round,
+        // onPostRollAttack sets `_vceImbueDamageSuppressed` and the spell
+        // dice are skipped — the chat-card annotation shows "Effect (Type)"
+        // instead of dice.
         let imbueOrigDamage;
         const imbue = actor.getFlag(MODULE_ID, "imbue");
-        if (imbue && imbue.damageDice > 0 && this.id === imbue.weaponId) {
+        const deliveryDenied = !!actor._vceImbueDeliveryDenied;
+        const damageSuppressed = !!actor._vceImbueDamageSuppressed;
+        if (imbue && imbue.damageDice > 0 && this.id === imbue.weaponId && !deliveryDenied && !damageSuppressed) {
           const formula = this.system.currentDamage || "d6";
           const dieSize = imbue.dieSize || 6;
           let addition = `${imbue.damageDice}d${dieSize}`;
@@ -1454,12 +1558,14 @@ Hooks.once("ready", async () => {
             await origHandleApplyDirect.call(this, mock);
           }
           log("Cleave", `${sourceItem?.name}: ${ceilHalf} to first, ${floorHalf} to ${targets.length - 1} others`);
+          await _applyImbueStatusesIfPresent(button, targets);
           return;
         }
 
         // Ward: handled via vagabond.preDamageApply hook in WardManager;
         // see comment above for handleSaveRoll path.
         await origHandleApplyDirect.call(this, button);
+        await _applyImbueStatusesIfPresent(button, targets);
         return;
       } finally {
         _damageSourceActorId = null;
@@ -1619,6 +1725,14 @@ Hooks.once("ready", async () => {
       const spellId = target.dataset.spellId;
       const state = this._getSpellState?.(spellId);
 
+      // Focus + Effect coupling: per Vagabond core rules, Focus sustains a
+      // spell's EFFECT — the damage portion is always Instant. So Focus on a
+      // cast with `useFx === false` is invalid (nothing to sustain). Block at
+      // cast time; the player can either turn Effect on or unfocus the spell.
+      // The system's cast dialog currently lets the toggles be set independently.
+      const spell = this.actor?.items?.get(spellId);
+      if (!_validateFocusEffectCoupling(this.actor, spell, state)) return;
+
       // Record useFx for this cast so processCausedStatuses can gate the
       // spell's Effect at apply time. Without this, the system's apply path
       // reads spell.system.causedStatuses unconditionally and fires the Effect
@@ -1669,6 +1783,11 @@ Hooks.once("ready", async () => {
         if (CrawlerSpellDialog?.prototype?._cast) {
           const origCrawlerCast = CrawlerSpellDialog.prototype._cast;
           CrawlerSpellDialog.prototype._cast = async function () {
+            // Focus + Effect coupling — same rule as the sheet path. The
+            // crawler dialog has its own toggle layout, so this gate is a
+            // belt-and-suspenders mirror of the SpellHandler.castSpell patch.
+            if (!_validateFocusEffectCoupling(this.actor, this.spell, this.spellState)) return;
+
             _recordCastUseFx(this.actor?.id, this.spell?.id, !!this.spellState?.useFx);
             return await origCrawlerCast.call(this);
           };
