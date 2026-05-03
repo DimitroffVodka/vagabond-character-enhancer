@@ -445,7 +445,10 @@ export const BlessManager = {
           statuses: ["blessed"],
           flags: {
             [MODULE_ID]: {
-              managed: true,
+              // No `managed: true` — that flag opts the AE into
+              // FeatureDetector._syncManagedEffects which would silently
+              // delete it on every PC scan (no matching effectKey in the
+              // class/perk registry). Lookups use BLESS_AE_FLAG.
               [BLESS_AE_FLAG]: true,
               blessCasterId: caster.id
             }
@@ -527,7 +530,8 @@ export const BlessManager = {
           statuses: ["silvered"],
           flags: {
             [MODULE_ID]: {
-              managed: true,
+              // No `managed: true` — see Bless AE block above. Lookups
+              // use BLESS_SILVER_FLAG.
               [BLESS_SILVER_FLAG]: true,
               blessCasterId: caster.id
             }

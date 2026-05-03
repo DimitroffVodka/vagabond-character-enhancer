@@ -1,6 +1,18 @@
 # Changelog
 
-## v0.4.12 — In Progress: v5.3.0 hook migrations (Ward, Berserk, Briar Healer)
+## v0.4.12 — In Progress: v5.3.0 hook migrations (Ward, Berserk, Briar Healer) + managed:true sweep
+
+### Bless / Imbue / Hex — `managed: true` removal sweep
+
+While verifying the Briar Healer fix, audited the rest of VCE's runtime-applied AEs for the same `managed: true` bug we've now hit four times (encumbered v0.4.6, Soulbonder v0.4.7, Briar Healer above, and now). Found the same pattern in three more places — all latent (no one had reported them yet), but each would silently lose its AE under any `FeatureDetector.scan`:
+
+- `scripts/spell-features/bless-manager.mjs` — Bless and Bless: Silvered AEs
+- `scripts/spell-features/imbue-manager.mjs` — Imbued: {spell} AE
+- `scripts/class-features/witch.mjs` — Hexed AE on hex targets
+
+Each manager already uses a dedicated lookup flag (`blessAE`, `silveredAE`, `imbueAE`, `witchHexAE`) for its own cleanup logic, so dropping `managed: true` is a no-op for the manager and stops `FeatureDetector._syncManagedEffects` from sweeping them. Verified live: synthetic AEs of all four shapes applied to a PC and a `rescan(actor)` triggered — all four survived.
+
+
 
 Three features migrated to the new Vagabond v5.3.0 system hooks (`vagabond.preDamageApply`, `vagabond.preStatusApply`, `vagabond.postDamageApply`). Each was previously implemented via fragile patterns (calculate-damage dispatcher, status tracker AEs, post-hoc damage cleanup) that the new hooks replace cleanly.
 

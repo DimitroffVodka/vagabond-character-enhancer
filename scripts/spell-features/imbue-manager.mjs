@@ -397,7 +397,10 @@ export const ImbueManager = {
       statuses: ["imbued"],
       flags: {
         [MODULE_ID]: {
-          managed: true,
+          // No `managed: true` — that flag opts the AE into
+          // FeatureDetector._syncManagedEffects which would silently
+          // delete it on every PC scan (no matching effectKey in the
+          // class/perk registry). Lookups use IMBUE_AE_FLAG.
           [IMBUE_AE_FLAG]: true
         }
       }

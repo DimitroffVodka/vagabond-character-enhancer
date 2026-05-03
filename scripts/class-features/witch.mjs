@@ -171,7 +171,10 @@ export const WitchFeatures = {
         statuses: ["hexed"],
         flags: {
           [MODULE_ID]: {
-            managed: true,
+            // No `managed: true` — that flag opts the AE into
+            // FeatureDetector._syncManagedEffects which would silently
+            // delete it on every PC scan (no matching effectKey in the
+            // class/perk registry). Lookups use HEX_AE_FLAG.
             [HEX_AE_FLAG]: true,
             hexWitchId: witch.id
           }
