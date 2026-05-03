@@ -12,8 +12,8 @@ A character automation module for the **Vagabond RPG** system in Foundry VTT. Au
 
 - **[Class Automation](docs/classes.md)** — All 20 classes automated to varying depth: Barbarian Rage, Bard Virtuoso, Druid Beast Forms, Hunter's Mark, Magus Spell Surge, Pugilist Haymaker, Witch Hex, Wizard Page Master, and more.
 - **[Ancestry Traits](docs/ancestries.md)** — Auto-applied traits for all 7 ancestries (Dwarf, Draken, Elf, Goblin, Halfling, Human, Orc) including Draken Breath Attack, Goblin Nimble, Orc Beefy.
-- **[Perk Automation](docs/perks.md)** — System AEs and module-driven perks (Spin-to-Win, Treads Lightly, Briar Healer, Bully, Full Swing, Protector, Akimbo Trigger). Reference for all 104 perks.
-- **[Spell Automation](docs/spells.md)** — Bless aura, Exalt damage bonus, Imbue (RAW delivery), Polymorph beast forms, Ward (preDamageApply intercept). Reference for all 59 spells.
+- **[Perk Automation](docs/perks.md)** — System AEs and module-driven perks (Spin-to-Win, Treads Lightly, Briar Healer, Bully, Full Swing, Protector, Akimbo Trigger). Tracks all 104 perks.
+- **[Spell Automation](docs/spells.md)** — Bless aura, Exalt damage bonus, Imbue (RAW delivery), Polymorph beast forms, Ward (preDamageApply intercept). Tracks all 59 spells.
 - **[Companion System](docs/companions.md)** — Unified engine for summons, familiars, raised undead, animal companions, conjured beasts, and hirelings. Companions tab on every PC sheet, save/action routing through the controller.
 - **[Polymorph & Beast Form](docs/classes.md#druid)** — 72 modified beasts in a compendium, Beast Form tab on the character sheet, token swap, action rolls. Works for any caster.
 - **[Alchemy Cookbook](docs/classes.md#alchemist)** — Crafting UI with search, cost calculation, and craft buttons. Material auto-deducted from inventory. Crafted items work as weapons via the crawler combat strip.
@@ -51,14 +51,12 @@ After installation, enable the module in your world under **Settings → Manage 
 
 - [Classes](docs/classes.md) — All 20 class feature tables, plus deep-dives on Alchemy, Polymorph, and Psychic Talents
 - [Ancestries](docs/ancestries.md) — All 7 ancestry trait tables
-- [Perks](docs/perks.md) — Currently automated perks (104 tracked total)
-- [Spells](docs/spells.md) — Currently automated spells (59 tracked total)
+- [Perks](docs/perks.md) — Currently automated highlights + full reference for all 104 perks
+- [Spells](docs/spells.md) — Currently automated spells + full reference for all 59 spells
 - [Companion System](docs/companions.md) — Summons, familiars, raised undead, animal companions, hirelings
 - [Other Automation](docs/other-automation.md) — Aura delivery, range enforcement, cleave, status rules, cast-time rules, manual rolls
 - [Feature FX System](docs/feature-fx-system.md) — Sequencer animation configuration
 - [Silver Weakness System](docs/silver-weakness-system.md) — Metal weakness damage details
-- [Full Perk Reference](docs/perk-automation-reference.md) — All 104 perks with implementation status
-- [Full Spell Reference](docs/spell-automation-reference.md) — All 59 spells with implementation status
 
 ---
 

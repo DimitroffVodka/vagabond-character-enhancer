@@ -239,8 +239,8 @@ saves.reflex.bonus, saves.endure.bonus, saves.will.bonus
 - `packs/vce-beasts/` — LevelDB compendium of 72 modified beast actors for Druid polymorph
 
 ### Reference Documents
-- `docs/perk-automation-reference.md` — All 104 perks with automation status, descriptions, and implementation notes. **Read this before working on perk automation.**
-- `docs/spell-automation-reference.md` — All 59 spells with automation status, damage types, and implementation notes. **Read this before working on spell automation.**
+- `docs/perks.md` — All 104 perks with automation status, descriptions, and implementation notes. **Read this before working on perk automation.** (Renamed from `perk-automation-reference.md` in the v0.4.13 docs restructure.)
+- `docs/spells.md` — All 59 spells with automation status, damage types, and implementation notes. **Read this before working on spell automation.** (Renamed from `spell-automation-reference.md` in the v0.4.13 docs restructure.)
 - `docs/feature-fx-system.md` — Feature FX / Sequencer animation system reference
 - `docs/silver-weakness-system.md` — Silver/metal weakness damage system reference
 
