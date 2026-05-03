@@ -33,7 +33,7 @@ This method will allow Foundry to automatically detect future updates.
 ## Compatibility
 
 - **Foundry VTT:** v13+
-- **[Vagabond System](https://github.com/mordachai/vagabond)** v5.0.0+
+- **[Vagabond System](https://github.com/mordachai/vagabond)** v5.0.0+ (v5.3.0+ recommended — several VCE features rely on the system hooks introduced in v5.3.0: Ward pre-damage cancel, Berserk → Frightened immunity, Briar Healer reactive d6)
 
 ## Optional Dependencies
 
@@ -438,6 +438,7 @@ Perks are auto-detected from character items. Some have built-in system AEs, som
 | Bully | ✅ Module | Favor on Grapple/Shove vs smaller targets |
 | Full Swing | ✅ Module | Auto-shove on Melee beat-by-10+ |
 | Protector | ✅ Module | Auto-rolls Endure save when ally fails a save near attacker; heals for highest die on pass |
+| Briar Healer | ✅ Module | While caster Focuses on Life: target gains +1 Armor + reactive d6 thorn damage to any Being who melees them. Subscribes to `vagabond.postDamageApply` (v5.3.0+) so the reaction fires cleanly without monkey-patching the damage pipeline. |
 
 ---
 
@@ -455,6 +456,7 @@ Spells in the Vagabond system have no built-in Active Effects. VCE automates sel
 | Exalt | +1 per damage die (+2 vs Undead/Hellspawn), counts all dice including silver/imbue bonus dice |
 | Imbue | Spell damage dice added to weapon formula, single armor application. 1 Mana minimum enforced; friendly-target resolves wielder (self, ally, or multi-target with picker) |
 | Polymorph | Beast Form tab, stat swap, token swap, beast action rolls, mana drain per round. Works for any caster. |
+| Ward | +1 Armor AE applied to target. On incoming damage, intercepts via `vagabond.preDamageApply` (v5.3.0+) and opens a Cast Check dialog BEFORE damage lands; on success, reduces damage by Nd6 (1 + extra Mana spent), crit negates entirely. Damage chat card shows the already-reduced amount — no death-revive race. |
 
 ---
 
@@ -471,3 +473,4 @@ Spells in the Vagabond system have no built-in Active Effects. VCE automates sel
 - **Perk Detection** — Auto-detects perks from character items and applies relevant AEs
 - **Treads Lightly** — Nullifies walk-type region movement costs for characters with this perk
 - **Manual Rolls** — Apply damage or healing from just standard dice rolls in chat by right clicking the result
+- **Status Rules** — Module-level enforcement of status-vs-status interactions the system describes but doesn't enforce. Berserk → cannot be Frightened: any actor with the Berserk status (regardless of class — Barbarian Rage, NPC ability, GM toggle, etc.) blocks Frightened applications via the v5.3.0 `vagabond.preStatusApply` hook, with a debounced chat-card notification listing affected targets.

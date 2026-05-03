@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.4.12 — In Progress: v5.3.0 hook migrations (Ward, Berserk, Briar Healer) + managed:true sweep
+## v0.4.12 — v5.3.0 hook migrations (Ward, Berserk, Briar Healer) + managed:true sweep
 
 ### Bless / Imbue / Hex — `managed: true` removal sweep
 
