@@ -46,7 +46,7 @@ The character sheet adds a Cookbook tab listing all Alchemical Items. Right-clic
 | Well-Versed            | 1     | 📝 Flavor | Ignore Prerequisites for Perks, and gain a Perk of your choice.                                |
 | Song of Rest           | 2     | ✅ Module  | Auto-applies healing bonus on rest chat cards (Presence + Bard Level)                          |
 | Starstruck             | 4     | ✅ Module  | Chat card integration for status application (Berserk, Charmed, Confused, or Frightened)       |
-| Bravado                | 6     | ✅ Module  | Will Saves can't be Hindered while not Incapacitated.                                          |
+| Bravado                | 6     | 🔲 Partial | Will Saves can't be Hindered while not Incapacitated.                                          |
 | Climax                 | 8     | ✅ Module  | Favor and bonus dice you grant can Explode (the d6 favor die explodes on max).                 |
 | Starstruck Enhancement | 10    | ✅ Module  | Starstruck can now affect all Near Enemies.                                                    |
 
@@ -76,7 +76,7 @@ Virtuoso works through the character sheet's Virtuoso tab or the Vagabond Crawle
 | Feral Shift     | 1     | 📝 Flavor | Perk grant + action economy rule                                                            |
 | Tempest Within  | 2     | ✅ Module  | Cold/Fire/Shock DR per die (monkey-patch on damage calc)                                    |
 | Innervate       | 4     | 📝 Flavor | Action to transfer Mana to a Close Being, or end Charmed/Confused/Frightened/Sickened.      |
-| Ancient Growth  | 6     | 📝 Flavor | Self-Polymorph Focus allows one additional Focus Spell. Beast attacks count as (+1) Relics. |
+| Ancient Growth  | 6     | 🔲 Partial | Self-Polymorph Focus allows one additional Focus Spell. Beast attacks count as (+1) Relics. |
 | Savagery        | 8     | ✅ Module  | +1 Armor managed AE, toggles active only during polymorph                                   |
 | Force of Nature | 10    | ✅ Module  | Auto-rolls Awareness check on lethal damage, chat card with result                          |
 
@@ -95,8 +95,8 @@ The character sheet adds a Beast Form tab populated with 72 modified beast actor
 | Fighting Style    | 1     | 📝 Flavor | Perk grants (manual)                                                             |
 | Valor             | 1/4/8 | ✅ System  | attackCritBonus + reflexCritBonus + endureCritBonus: -1/-2/-3 scaling with level |
 | Momentum          | 2     | ✅ Module  | Pass save → next attack favored                                                  |
-| Muster for Battle | 6     | 📝 Flavor | Two actions on first turn                                                        |
-| Harrying          | 10    | 📝 Flavor | Attack twice with Attack action                                                  |
+| Muster for Battle | 6     | 🔲 Todo   | Two actions on first turn                                                        |
+| Harrying          | 10    | 🔲 Todo   | Attack twice with Attack action                                                  |
 
 ---
 
@@ -120,7 +120,7 @@ The character sheet adds a Beast Form tab populated with 72 modified beast actor
 |------------------|-------|-----------|----------------------------------------------------------------------|
 | Hunter's Mark    | 1     | ✅ Module  | Mark target → 2d20 keep highest                                      |
 | Survivalist      | 1     | 📝 Flavor | Perk grant + narrative bonuses                                       |
-| Rover            | 2     | ✅ Module  | Difficult Terrain doesn't impede walking Speed. Gain Climb and Swim. |
+| Rover            | 2     | 📝 Flavor | Difficult Terrain doesn't impede walking Speed. Gain Climb and Swim. |
 | Overwatch        | 4     | ✅ Module  | Mark bonus extends to saves                                          |
 | Quarry           | 6     | 📝 Flavor | Narrative blindsight sense                                           |
 | Lethal Precision | 8     | ✅ Module  | 3d20 keep highest                                                    |
@@ -190,7 +190,7 @@ The Gold Sink tab lets Merchants browse and buy from system compendiums (no Reli
 
 | Feature       | Level | Status     | What It Does                                           |
 |---------------|-------|------------|--------------------------------------------------------|
-| Fisticuffs    | 1     | 🔲 Partial | Brawl d4 minimum — needs verification                  |
+| Fisticuffs    | 1     | ✅ Module  | Brawl d4 minimum                                       |
 | Rope-a-Dope   | 1     | 📝 Flavor  | Perk grant                                             |
 | Beat Rush     | 2     | 📝 Flavor  | Action economy                                         |
 | Prowess       | 4     | ✅ Module   | Chat reminder + removes 2 highest dice on passed Block |
@@ -233,7 +233,7 @@ The **Control Talent** (Animate-spell logic) spawns a synthetic NPC controlled o
 | Righteous      | 1     | ✅ System  | Casting handled by base system                                                                        |
 | Selfless       | 1     | ✅ Module  | Prompt to redirect ally damage; raw pre-armor amount                                                  |
 | Lay on Hands   | 2     | ✅ Module  | Sheet button + chat card heal (d6+Level), 2 uses/rest                                                 |
-| Paragon's Aura | 4     | ✅ Module  | +1 Focus AE + AuraManager. Free 10' Aura delivery (cost discount enforced via SpellHandler patch)     |
+| Paragon's Aura | 4     | 🔲 Partial | +1 Focus AE + AuraManager. Free 10' Aura delivery (cost discount enforced via SpellHandler patch)     |
 | Divine Resolve | 6     | ✅ AE      | statusImmunities: blinded, paralyzed, sickened                                                        |
 | Holy Diver     | 8     | 🔲 Todo   | After Selfless → favor + Presence damage (no turn expiry)                                             |
 | Sacrosanct     | 10    | ✅ AE      | saves.reflex/endure/will.bonus +2                                                                     |
@@ -288,7 +288,7 @@ See [Companion System](companions.md) for the unified engine that drives summons
 
 | Feature        | Level | Status    | What It Does                                                                                                    |
 |----------------|-------|-----------|-----------------------------------------------------------------------------------------------------------------|
-| Stalwart       | 1     | ✅ Module  | Protector perk automated — auto-rolls Block on ally failed save, heals for highest die on pass                  |
+| Stalwart       | 1     | 🔲 Partial | Protector perk automated — auto-rolls Block on ally failed save, heals for highest die on pass                  |
 | Guard          | 1     | ✅ Module  | Prompt card on Block pass or enemy entering Close range. Brawl check with Beefy/Bully favor, Push/Prone on pass |
 | Rampant Charge | 2     | 📝 Flavor | Push during movement (player-tracked)                                                                           |
 | Wall (Large)   | 4     | ✅ Module  | Managed AE + shove size override — treated as Large for Shoves via brawl-intent                                 |
