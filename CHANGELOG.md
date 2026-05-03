@@ -1,5 +1,69 @@
 # Changelog
 
+## v0.4.13 — Imbue RAW rewrite + rules-correctness pass
+
+Reworked the Imbue spell delivery from "pay everything upfront, mandatory delivery on hit, consumed on attack" to a faithful read of the rulebook entry — and along the way caught and fixed three other rules-of-the-system issues that were independent of Imbue.
+
+### Imbue — RAW behavior model
+
+> *Imbue: Targets a Weapon equipped by a willing Being within Far, which can then deliver the Spell as if by Touch if you spend 1 Mana to do so when the attack hits. The Attack Check is used for the Cast Check.*
+
+The prior implementation deducted the entire spell cost (damage + effect + delivery) at cast time and consumed the imbue on the first attack — hit or miss. Per RAW the 1-Mana delivery cost is **deferred to the on-hit moment**, and the imbue is a **standing buff on the weapon** that doesn't burn out on a miss. New behavior:
+
+| Phase | Rule |
+|---|---|
+| Cast time | Charge `damage + effect` mana only (`totalCost - 1`). 1 Mana of delivery cost is deferred. |
+| Duration (in combat) | Imbue AE expires at end of the cast round unless the caster is focusing on the spell. |
+| Duration (out of combat) | Cast aborts unless the caster is already focusing on the spell at cast time. No round to anchor expiry against. |
+| On hit | Caster's pool is silently auto-deducted 1 Mana → spell rides along. If the caster has 0 Mana, is Unconscious, or is dead, delivery skips with a chat note and the weapon does plain damage. Imbue stays. |
+| On miss | Nothing. Imbue stays. (No more "wasted" card.) |
+| Caster ≠ wielder | The 1 Mana comes from the **caster's** pool, GM-routed via socket relay when the wielder's client triggers the attack. |
+| Manual end | Player deletes the imbue AE on the wielder, OR the caster drops focus on the spell → all imbues from that cast cascade-clear past their round window. |
+
+Implementation seams:
+- New `consumeImbueMana` op in `socket-relay.mjs` so the wielder's client can route the on-hit Mana deduct to the GM when the caster isn't theirs to update.
+- `handleImbueCast` now splits cost: `castTimeCost = totalCost - 1` upfront, `pendingDeliveryCost: 1` stashed on the imbue state for `onPostRollAttack` to consume on hit.
+- `onPostRollAttack` checks caster mana / consciousness via `_checkDeliveryGate` before deducting; the rollDamage patch reads `_vceImbueDeliveryDenied` and skips the spell-dice append on a fail-closed result.
+- Round-end sweep (`updateCombat` + `("round" in changes)`) walks all PCs/NPCs for imbue AEs whose `expiresAtRound` has passed AND whose caster isn't focusing on the spell.
+- Focus-drop cascade uses a `preUpdateActor` → `updateActor` snapshot pair (`_focusSpellIdSnapshot`) to diff old vs new `system.focus.spellIds` (in-place document updates make `_source` post-update by the time `updateActor` fires).
+- AE-delete hook syncs the imbue flag when the player clicks the AE icon off the wielder.
+
+Verified live (foundry-mcp-bridge): Drako casts Burn Imbue → 6 mana → 5 (1 of 2 paid upfront), `pendingDeliveryCost: 1` stashed; hit drops mana to 4 (deferred 1 paid), imbue persists; round 2 advance with focus → imbue persists; focus dropped → imbue + AE cascade-cleared; out-of-combat cast without focus → blocked, no mana spent. All paths green, zero console errors over the run.
+
+### Focus + Effect coupling (system-wide rule)
+
+Per Vagabond core rules ("Focus sustains the spell's Effect; the damage portion is Instant"), Focus on a cast with `useFx === false` is invalid — there's nothing to sustain. The system's cast dialog let those toggles be set independently. New `_validateFocusEffectCoupling` helper blocks at cast time on both `SpellHandler.castSpell` and `CrawlerSpellDialog._cast` with `"<Spell>: Focus sustains the spell's Effect — turn on Include Effect or unfocus the spell before casting."` Verified: Burn + focus + useFx=false → blocked, no mana spent. Burn + focus + useFx=true → passes through. Charm (effect-only, `damageType:"-"`) → passes through (defaultUseFx=true).
+
+### Imbue damage suppression past cast round
+
+Per Vagabond core rules, damage is Instant; only the Effect carries forward via Focus. So a sustained Imbue past its cast round delivers **only** the Effect — the damage portion is gone, regardless of whether the damage was ever actually delivered (e.g., caster missed every cast-round attack). Out-of-combat imbues exist purely via focus (`expiresAtRound: null`) and are always effect-only.
+
+New `ImbueManager.isInCastRound(imbue)` does the round comparison; `onPostRollAttack` sets `_vceImbueDamageSuppressed` when out of cast round; the rollDamage patch reads it and skips spell-dice append; the chat-card annotation renders `"Effect (Fire)"` instead of `"1d6 Fire"` with a tooltip explaining "effect only — sustained past cast round". Verified: round 1 hit (cast round) → full payload + dice appended; round 2 hit (sustained via focus) → `damageDelivered: false`, no dice, annotation says "Effect".
+
+### Effect-only spells: drop phantom damage dice
+
+Bug user reported: imbuing Charm produced "Drako imbues … with Charm (+1d6 -)" and added a 1d6 of "Untyped" damage on attack. Charm has `damageType: "-"` (no damage), but our code stored `damageDice: state.damageDice || 1` defaulting to 1, so the rollDamage patch's append branch fired with a phantom 1d6.
+
+Fix: `handleImbueCast` now gates `damageDice` on `spellHasDamage = spell.system.damageType !== "-"`. Effect-only spells get `damageDice: 0` and the append branch never fires. Damage spells (Burn, Disintegrate) keep their dice. Verified: Charm → `damageDice: 0`; Burn → `damageDice: 1`.
+
+### Spell effect application on imbued hit
+
+Bug user reported: imbuing Charm and hitting the wolf — nothing happened. Casting Charm directly DID charm the wolf, so the issue was that imbued-attack apply was reading the WEAPON's `causedStatuses` (always empty for a normal weapon) instead of the spell's. Effect-only spells like Charm had no damage to apply either, so the entire "delivery" boiled down to nothing landing on the target.
+
+Fix: `onPostRollAttack` snapshots the spell's `causedStatuses` and `critCausedStatuses` from the live spell item onto the pending state. `_annotateWeaponAttackCard` writes them onto the chat message as `flags.vagabond-character-enhancer.imbueStatusContext`. The patched `VagabondDamageHelper.handleApplyDirect` walks `button.closest("[data-message-id]")` to find the message, reads the flag, and runs `StatusHelper.processCausedStatuses` on each target with `skipSaveRoll: true` (mirroring the system's Apply Direct convention — the attack hit IS the cast check). Crit branch merges `critCausedStatuses` over `causedStatuses` per the system's own merge rule. Verified: Charm imbue + click Apply on synthetic damage card → wolf gains the Charmed AE.
+
+### Imbue dice routing — composing with vagabond-crawler relic effects
+
+Bug user reported: "It works before I cast imbue but it breaks all my relics afterwards." The prior implementation set `_vceForceRollDamage = true` so the imbue dice could be folded inline via `item.rollDamage()`. But `vagabond-crawler`'s relic engine (`relic-effects.mjs`) patches a **different method** — `rollDamageFromButton` — and only injects relic dice (Strike I `+1d4`, Bane, typed Strike, Vicious crit, etc.) when the player clicks Roll Damage. Auto-roll bypassed `rollDamageFromButton` entirely → relic dice never made it into the roll.
+
+Fix: dropped the `_vceForceRollDamage` set in the imbue branch of `onPostRollAttack`. `_annotateWeaponAttackCard` now appends imbue spell dice (plus `universalSpellDamageBonus` / `universalSpellDamageDice`) to the Roll Damage button's `data-damage-formula` directly. When the player clicks, `rollDamageFromButton` runs → crawler's relic patch fires on top → final formula is `weapon + imbue + relic`, all in one roll. Cost: one extra click on imbued damage (matches every other weapon attack). Verified live: button starts at `d8`, post-VCE-annotate `d8 + 1d6`, post-crawler-on-click `d8 + 1d6 + 1d4`.
+
+The auto-roll branch in the rollDamage patch is preserved for Monk Finesse + Sneak Attack paths (they set `_vceForceRollDamage` themselves). Monk + imbue + relic on the same weapon will still bypass crawler's relic injection — known niche edge case, accepted.
+
+### Side fix: clearImbue race tolerance
+
+`clearImbue` could be invoked concurrently by the focus-drop cascade and an explicit cleanup (e.g., test setup that sets `system.focus.spellIds: []` then immediately calls `clearImbue` — both try to delete the same AE). Wrapped the `deleteEmbeddedDocuments` call in try/catch with idempotent semantics: "AE does not exist" is treated as success.
+
 ## v0.4.12 — v5.3.0 hook migrations (Ward, Berserk, Briar Healer) + managed:true sweep
 
 ### Bless / Imbue / Hex — `managed: true` removal sweep

@@ -454,7 +454,7 @@ Spells in the Vagabond system have no built-in Active Effects. VCE automates sel
 |-------|------------------|
 | Bless | Full aura system — d4 save bonus AE on allies, silvered weapons, mode buttons in chat |
 | Exalt | +1 per damage die (+2 vs Undead/Hellspawn), counts all dice including silver/imbue bonus dice |
-| Imbue | Spell damage dice added to weapon formula, single armor application. 1 Mana minimum enforced; friendly-target resolves wielder (self, ally, or multi-target with picker) |
+| Imbue | RAW delivery: 1 Mana of cost is deferred to on-hit (auto-deducted from caster's pool); imbue persists as a standing buff until end of round (or longer if Focused, free sustain). Spell damage dice added to weapon formula on the cast round only — sustained imbues deliver Effect only. Spell's Effect (Burning, Charmed, etc.) applied on Apply via `causedStatuses` injection. Damage routes through Roll Damage button so vagabond-crawler relic bonuses (Strike, Bane, Vicious) compose. Out-of-combat casts require Focus. Friendly-target resolves wielder (self, ally, multi-target with picker). |
 | Polymorph | Beast Form tab, stat swap, token swap, beast action rolls, mana drain per round. Works for any caster. |
 | Ward | +1 Armor AE applied to target. On incoming damage, intercepts via `vagabond.preDamageApply` (v5.3.0+) and opens a Cast Check dialog BEFORE damage lands; on success, reduces damage by Nd6 (1 + extra Mana spent), crit negates entirely. Damage chat card shows the already-reduced amount — no death-revive race. |
 
@@ -474,3 +474,4 @@ Spells in the Vagabond system have no built-in Active Effects. VCE automates sel
 - **Treads Lightly** — Nullifies walk-type region movement costs for characters with this perk
 - **Manual Rolls** — Apply damage or healing from just standard dice rolls in chat by right clicking the result
 - **Status Rules** — Module-level enforcement of status-vs-status interactions the system describes but doesn't enforce. Berserk → cannot be Frightened: any actor with the Berserk status (regardless of class — Barbarian Rage, NPC ability, GM toggle, etc.) blocks Frightened applications via the v5.3.0 `vagabond.preStatusApply` hook, with a debounced chat-card notification listing affected targets.
+- **Cast-Time Rules Enforcement** — Focus + Effect coupling: per Vagabond core rules, Focus sustains a spell's Effect; the damage portion is Instant. Casting with Focus engaged but `Include Effect` toggled off is invalid — the cast is blocked at SpellHandler.castSpell (and CrawlerSpellDialog._cast) with a notification asking the player to either turn Effect on or unfocus the spell.
