@@ -702,9 +702,9 @@ Hooks.once("ready", async () => {
       WitchFeatures.onCalculateFinalDamage(widdCtx);
       result = widdCtx.result;
 
-      // Briar Healer (perk): if buffed actor takes melee damage, fire d6 reactive at attacker
-      const briarCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
-      BriarHealerManager.onCalculateFinalDamage(briarCtx);
+      // Briar Healer (perk): subscribed to vagabond.postDamageApply directly
+      // in BriarHealerManager.registerHooks (v5.3.0+ system hook). No
+      // dispatcher call needed here.
 
       const needsRageDR = actor.system?.incomingDamageReductionPerDie > 0
         && actor.statuses?.has("berserk")

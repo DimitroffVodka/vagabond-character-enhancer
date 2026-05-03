@@ -231,8 +231,22 @@ async function _handleRequest(data) {
       // Direct HP reduction. Used by reactive perk damage (e.g. Briar Healer's
       // d6 thorn damage to a melee attacker). Bypasses armor by design — these
       // are reactive effects, not attack rolls.
-      const target = game.actors.get(data.targetActorId);
-      if (!target) return { error: `applyDamage: actor "${data.targetActorId}" not found` };
+      //
+      // Prefer `targetTokenUuid` when present so unlinked NPC tokens lose HP
+      // on the actual scene instance, not just the world prototype actor.
+      // Falls back to `targetActorId` for linked actors / situations where
+      // the source token isn't known.
+      let target = null;
+      if (data.targetTokenUuid) {
+        try {
+          const tokenDoc = await fromUuid(data.targetTokenUuid);
+          target = tokenDoc?.actor ?? null;
+        } catch { /* fall through to actorId */ }
+      }
+      if (!target && data.targetActorId) {
+        target = game.actors.get(data.targetActorId);
+      }
+      if (!target) return { error: `applyDamage: target not found (token=${data.targetTokenUuid}, actor=${data.targetActorId})` };
       const dmg = Math.max(0, parseInt(data.damage) || 0);
       const cur = target.system?.health?.value ?? 0;
       const newHp = Math.max(0, cur - dmg);

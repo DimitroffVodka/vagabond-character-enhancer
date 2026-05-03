@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.4.12 — In Progress: v5.3.0 hook migrations (Ward, Berserk, Briar Healer)
+
+Three features migrated to the new Vagabond v5.3.0 system hooks (`vagabond.preDamageApply`, `vagabond.preStatusApply`, `vagabond.postDamageApply`). Each was previously implemented via fragile patterns (calculate-damage dispatcher, status tracker AEs, post-hoc damage cleanup) that the new hooks replace cleanly.
+
+### Ward — pre-damage flow rewrite (cancel-and-replay)
+
+Supersedes the v0.4.11 non-lethal cap. The prior implementation showed the damage card BEFORE the Ward dialog and used a heal-back to undo damage afterward, which exposed the player to a "brought back from death" race when fatal damage briefly dropped HP to 0. The new flow:
+- `WardManager` subscribes to `vagabond.preDamageApply`. When a Warded target takes >0 damage, the listener returns `false` to cancel the system's damage application, then asynchronously opens the Cast Check dialog, applies the post-reduction damage, fires `postDamageApply`, and renders the standard damage chat card itself.
+- Result: dialog runs BEFORE damage lands, chat card shows the already-reduced amount, no temporary 0-HP window, no heal-back card.
+- Chat card uses `new VagabondChatCard()` builder with `setItem(wardSpell)` so the header reads "WARD" with the spell's subtitle and shield icon, plus `addDamage(reductionRoll)` for green-pentagon d6 dice that DSN animates.
+- Side fix in `save-routing-patch.mjs`: VCE's reimplemented save handler was applying damage directly without firing `vagabond.preDamageApply` / `postDamageApply`, so the new Ward flow never triggered for routed (Friendly NPC) saves. Patched to mirror the system's v5.3.0 hook firing.
+
+### Berserk → Frightened immunity (status-rules)
+
+Migrate the "Berserk → can't be Frightened" rule from a class-feature tracker AE pattern in `class-features/barbarian.mjs` to a generic, module-level `vagabond.preStatusApply` listener in `scripts/status-rules/berserk-immunities.mjs`. Berserk is a status condition (not a Barbarian-specific feature) — any actor with Berserk gets Frightened immunity, regardless of how it landed. Includes a debounced chat-card notification ("X and Y are immune to Frightened — Berserk") so the table sees why the status didn't land. One-shot ready-hook cleanup sweeps any leftover legacy `berserkFrightImmune` tracker AEs from prior versions.
+
+### Briar Healer perk — postDamageApply migration + token-aware damage + chat card restyle
+
+The reactive d6 (deals d6 to any Being who damages a Briar-buffed target with a Melee attack) previously ran via VCE's calculateFinalDamage dispatcher (`onCalculateFinalDamage`). Now subscribes to `vagabond.postDamageApply` directly, reducing coupling to VCE's internal damage pipeline plumbing. Belt-and-braces: the listener also explicitly calls `_isCasterFocusingLife(caster)` to refuse the reaction if the caster has dropped focus between the buff being applied and damage arriving (catches the small race window between focus-drop and the AE-cleanup hook firing).
+
+Companion fixes:
+- **Invalid icon path** (latent since v0.4.0): `BRIAR_ICON` referenced `icons/magic/nature/plant-vines-thorned-green.webp` which doesn't exist in Foundry's core icons. Caused a token-render error every time the AE was applied to a token in a scene. Corrected to `icons/magic/nature/vines-thorned-green.webp`.
+- **`managed: true` AE deletion bug** (same shape as the v0.4.6 encumbered fix and v0.4.7 Soulbonder hotfix): Briar AE was being silently deleted by `FeatureDetector._syncManagedEffects` on every PC scan because it carried `managed: true` without a matching `effectKey`. Dropped `managed: true`; the lookup paths use the dedicated `briarHealerAE` flag.
+- **Unlinked-token damage application**: `_triggerBriarReaction` was applying d6 damage to the **world** actor's HP via `applyDamage` socket relay. For unlinked NPC tokens (most monsters), the world actor's HP is meaningless — each token has its own synthetic actor. Briar now resolves `attacker.getActiveTokens(false, true)` to the active TokenDocument and passes its UUID to the GM relay; the relay's `applyDamage` handler honors `targetTokenUuid` when present, falling back to `targetActorId` for linked actors.
+- **Chat card restyle**: the reaction card now uses `new VagabondChatCard()` with `setItem(briarPerk)` for the system spell-card header look (perk icon + "Briar Healer" title), `addDamage(roll, "Thorns")` for the green-pentagon d6 (DSN-animated), `setTargets([attackerToken])` for the attacker portrait, and metadata tags showing "Protecting [target]" / "[attacker] HP: X → Y".
+
 ## v0.4.11 — fix: Ward no longer leaves a "brought back from death" race
 
 When a Warded target took fatal damage, the prior Ward implementation let HP momentarily hit 0 before the async Ward dialog ran and healed them back. During that window the system applied dead/unconscious status, fired death-related chat cards, removed combat activations, etc. — and those side effects didn't always cleanly undo when HP later rose above 0. End state: alive HP, dead-flagged actor, stuck weird state.
