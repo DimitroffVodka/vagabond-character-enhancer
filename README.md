@@ -1,45 +1,70 @@
 # Vagabond Character Enhancer
 
-A Foundry VTT module that automates ancestry traits, class features, and perks for the [Vagabond](https://github.com/mordachai/vagabond) RPG system for Foundry. Detects class features from compendium data and applies managed Active Effects for gameplay automation.
+![Foundry v13](https://img.shields.io/badge/foundry-v13-green?style=for-the-badge)
+![System](https://img.shields.io/badge/system-vagabond-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-0.4.13-orange?style=for-the-badge)
+
+A character automation module for the **Vagabond RPG** system in Foundry VTT. Auto-detects classes, ancestries, and perks from your character's compendium items and runs the rules for you — class features, magical effects, summons, polymorph, alchemy, and the dozens of edge cases that would otherwise need a sticky note next to the screen.
+
+---
+
+## Headline Features
+
+- **[Class Automation](docs/classes.md)** — All 20 classes automated to varying depth: Barbarian Rage, Bard Virtuoso, Druid Beast Forms, Hunter's Mark, Magus Spell Surge, Pugilist Haymaker, Witch Hex, Wizard Page Master, and more.
+- **[Ancestry Traits](docs/ancestries.md)** — Auto-applied traits for all 7 ancestries (Dwarf, Draken, Elf, Goblin, Halfling, Human, Orc) including Draken Breath Attack, Goblin Nimble, Orc Beefy.
+- **[Perk Automation](docs/perks.md)** — System AEs and module-driven perks (Spin-to-Win, Treads Lightly, Briar Healer, Bully, Full Swing, Protector, Akimbo Trigger). Reference for all 104 perks.
+- **[Spell Automation](docs/spells.md)** — Bless aura, Exalt damage bonus, Imbue (RAW delivery), Polymorph beast forms, Ward (preDamageApply intercept). Reference for all 59 spells.
+- **[Companion System](docs/companions.md)** — Unified engine for summons, familiars, raised undead, animal companions, conjured beasts, and hirelings. Companions tab on every PC sheet, save/action routing through the controller.
+- **[Polymorph & Beast Form](docs/classes.md#druid)** — 72 modified beasts in a compendium, Beast Form tab on the character sheet, token swap, action rolls. Works for any caster.
+- **[Alchemy Cookbook](docs/classes.md#alchemist)** — Crafting UI with search, cost calculation, and craft buttons. Material auto-deducted from inventory. Crafted items work as weapons via the crawler combat strip.
+- **[Aura Delivery System](docs/other-automation.md#aura-delivery-system)** — Persistent templates that follow the caster, tick each round on hostiles in range, and fire entry ticks on movement. Works for damage, effect, and buff spells/talents.
+- **[Cross-Module Composition](docs/other-automation.md#vagabond-crawler-integration)** — Imbue dice, relic dice (Strike, Bane, Vicious), and silver weakness all stack correctly through the same Roll Damage path.
+
+---
+
+## Requirements
+
+- **Foundry VTT** v13+
+- **[Vagabond](https://github.com/mordachai/vagabond)** system v5.0.0+ (v5.3.0+ recommended — Ward, Berserk frighten immunity, and Briar Healer rely on hooks introduced in v5.3.0)
+
+### Optional
+
+- **[Vagabond Crawler](https://github.com/DimitroffVodka/vagabond-crawler)** — Companion module. Adds NPC ability automation, Virtuoso/Step Up integration, relic forge, monster creator, etc.
+- **lib-wrapper** — Cleaner method patching (not required)
+- **Sequencer + JB2A** — Visual effects for class features, monster attacks, and status conditions (graceful degradation if missing)
+
+---
 
 ## Installation
 
-### Method 1: Manifest URL (Recommended)
-
-1. Open Foundry VTT and go to the **Add-on Modules** tab
-2. Click **Install Module**
-3. Paste the following URL into the **Manifest URL** field at the bottom:
+Paste the following manifest URL into Foundry's module installer:
 
 ```
 https://github.com/DimitroffVodka/vagabond-character-enhancer/releases/latest/download/module.json
 ```
 
-4. Click **Install**
-5. Launch your world and enable the module under **Settings → Manage Modules**
+After installation, enable the module in your world under **Settings → Manage Modules**. Class features, ancestry traits, and perks are auto-detected from the character's compendium items — no per-character configuration needed.
 
-This method will allow Foundry to automatically detect future updates.
+---
 
-### Method 2: Manual Download
+## Documentation
 
-1. Go to the [latest release](https://github.com/DimitroffVodka/vagabond-character-enhancer/releases/latest)
-2. Download `module.zip`
-3. Extract the zip into your Foundry VTT modules folder:
-   - **Windows:** `%localappdata%/FoundryVTT/Data/modules/`
-   - **macOS:** `~/Library/Application Support/FoundryVTT/Data/modules/`
-   - **Linux:** `~/.local/share/FoundryVTT/Data/modules/`
-4. Ensure the extracted folder is named `vagabond-character-enhancer`
-5. Launch your world and enable the module under **Settings → Manage Modules**
+- [Classes](docs/classes.md) — All 20 class feature tables, plus deep-dives on Alchemy, Polymorph, and Psychic Talents
+- [Ancestries](docs/ancestries.md) — All 7 ancestry trait tables
+- [Perks](docs/perks.md) — Currently automated perks (104 tracked total)
+- [Spells](docs/spells.md) — Currently automated spells (59 tracked total)
+- [Companion System](docs/companions.md) — Summons, familiars, raised undead, animal companions, hirelings
+- [Other Automation](docs/other-automation.md) — Aura delivery, range enforcement, cleave, status rules, cast-time rules, manual rolls
+- [Feature FX System](docs/feature-fx-system.md) — Sequencer animation configuration
+- [Silver Weakness System](docs/silver-weakness-system.md) — Metal weakness damage details
+- [Full Perk Reference](docs/perk-automation-reference.md) — All 104 perks with implementation status
+- [Full Spell Reference](docs/spell-automation-reference.md) — All 59 spells with implementation status
 
-## Compatibility
-
-- **Foundry VTT:** v13+
-- **[Vagabond System](https://github.com/mordachai/vagabond)** v5.0.0+ (v5.3.0+ recommended — several VCE features rely on the system hooks introduced in v5.3.0: Ward pre-damage cancel, Berserk → Frightened immunity, Briar Healer reactive d6)
-
-## Optional Dependencies
-
-- **[Vagabond Crawler](https://github.com/DimitroffVodka/vagabond-crawler)** — Enables NPC ability automation (Morale, abilities, etc.)
+---
 
 ## Status Legend
+
+Used in feature tables across the docs:
 
 | Icon       | Meaning                                                                         |
 |------------|---------------------------------------------------------------------------------|
@@ -52,426 +77,10 @@ This method will allow Foundry to automatically detect future updates.
 
 ---
 
-## Fully Implemented Classes
+## Authors
 
-### Alchemist
-
-| Feature       | Level | Status    | What It Does                                                         |
-|---------------|-------|-----------|----------------------------------------------------------------------|
-| Alchemy       | 1     | ✅ Module | Full crafting UI window with search, cost calculation, craft buttons |
-| Catalyze      | 1     | ✅ System | Built into character creator                                         |
-| Eureka        | 2     | ✅ Module | Study die on Craft Crit in combat                                    |
-| Potency       | 4     | ✅ Module | Baked into the items when crafted to explode                         |
-| Mix           | 6     | 📝 Flavor | Might add later                                                      |
-| Big Bang      | 8     | ✅ Module | Baked into the items when crafted to explode                         |
-| Prima Materia | 10    | 📝 Flavor | Not worth adding                                                     |
-
-On the character sheet there is a Cookbook tab that shows you all the Alchemical Items. You can choose your formulae ones by right clicking them. Material is automatically deduced from your inventory during crafting. Through the Vagabond Crawler you can craft your favorited formulae's and use them as weapons from the drop down menu.
+- **DimitroffVodka**
 
 ---
 
-### Barbarian
-
-| Feature         | Level | Status    | What It Does                                                                                                             |
-|-----------------|-------|-----------|--------------------------------------------------------------------------------------------------------------------------|
-| Rage            | 1     | ✅ Module  | DR per die, die upsizing, exploding dice, auto-berserk on attack/damage, combat end cleanup                              |
-| Wrath           | 1     | 📝 Flavor | Gain the Interceptor Perk. Can make its attack against Enemies that make Ranged Attacks, Cast, or damage you or an Ally. |
-| Aggressor       | 2     | ✅ Module  | +10 Speed during first Round of Combat. 3+ Fatigue doesn't prevent Rush Action.                                          |
-| Fearmonger      | 4     | ✅ Module  | When you kill an Enemy, every Near Enemy with HD lower than your Level becomes Frightened until end of your next Turn.   |
-| Mindless Rancor | 6     | ✅ Module  | Managed AE for extra rage bonuses                                                                                        |
-| Bloodthirsty    | 8     | ✅ Module  | Attacks against Beings missing any HP are Favored. Sense them within Far as Blindsight.                                  |
-| Rip and Tear    | 10    | ✅ Module  | +1 universal damage bonus during rage                                                                                    |
-
----
-
-### Bard
-
-| Feature                | Level | Status    | What It Does                                                                                   |
-|------------------------|-------|-----------|------------------------------------------------------------------------------------------------|
-| Virtuoso               | 1     | ✅ Module  | Performance check → Valor/Resolve/Inspiration buff buttons on chat card, auto-applies to party |
-| Well-Versed            | 1     | 📝 Flavor | Ignore Prerequisites for Perks, and gain a Perk of your choice.                                |
-| Song of Rest           | 2     | ✅ Module  | Auto-applies healing bonus on rest chat cards (Presence + Bard Level)                          |
-| Starstruck             | 4     | ✅ Module  | Chat card integration for status application (Berserk, Charmed, Confused, or Frightened)       |
-| Bravado                | 6     | ✅ Module  | Will Saves can't be Hindered while not Incapacitated.                                          |
-| Climax                 | 8     | ✅ Module  | Favor and bonus dice you grant can Explode (the d6 favor die explodes on max).                 |
-| Starstruck Enhancement | 10    | ✅ Module  | Starstruck can now affect all Near Enemies.                                                    |
-
-Works through the charcter sheet tab Virtuoso or through the drop down menu on the Vagabond Crawler.
----
-
-### Dancer
-
-| Feature           | Level | Status    | What It Does                                                                                         |
-|-------------------|-------|-----------|------------------------------------------------------------------------------------------------------|
-| Fleet of Foot     | 1     | ✅ Module  | Managed AE: reflexCritBonus reduced by ceil(Dancer Level / 4)                                        |
-| Step Up           | 1     | ✅ Module  | Dialog to select allies, grants bonus action via AE                                                  |
-| Evasive           | 2     | ✅ Module  | Ignore Hinder on Reflex Saves while not Incapacitated. Ignore two Dodged damage dice instead of one. |
-| Don't Stop Me Now | 4     | 🔲 Todo   | Speed unaffected by Difficult Terrain. Favor on Saves vs Paralyzed, Restrained, or being moved.      |
-| Choreographer     | 6     | ✅ Module  | Extends Step Up with Favor + Speed bonus                                                             |
-| Flash of Beauty   | 8     | ✅ Module  | Injects "two Actions this turn" reminder into chat cards                                             |
-| Double Time       | 10    | ✅ Module  | Step Up can target two Allies instead of one.                                                        |
-
----
-
-### Druid
-
-| Feature         | Level | Status    | What It Does                                                                                |
-|-----------------|-------|-----------|---------------------------------------------------------------------------------------------|
-| Primal Mystic   | 1     | ✅ System  | Casting handled by base system                                                              |
-| Feral Shift     | 1     | 📝 Flavor | Perk grant + action economy rule                                                            |
-| Tempest Within  | 2     | ✅ Module  | Cold/Fire/Shock DR per die (monkey-patch on damage calc)                                    |
-| Innervate       | 4     | 📝 Flavor | Action to transfer Mana to a Close Being, or end Charmed/Confused/Frightened/Sickened.      |
-| Ancient Growth  | 6     | 📝 Flavor | Self-Polymorph Focus allows one additional Focus Spell. Beast attacks count as (+1) Relics. |
-| Savagery        | 8     | ✅ Module  | +1 Armor managed AE, toggles active only during polymorph                                   |
-| Force of Nature | 10    | ✅ Module  | Auto-rolls Awareness check on lethal damage, chat card with result                          |
-
-**Polymorph System** — Beast Form tab on character sheet with 72 beasts from compendium. Dialog selection, token swap, cast skill checks (uses caster's own skill), Roll Damage button, condition auto-apply, and size scaling. **Works for any caster with the Polymorph spell** — not just Druids. Druid-specific bonuses (Savagery +1 Armor) remain gated. Shapechanger perk correctly exempts from per-round Mana cost.
-
----
-
-### Gunslinger
-
-| Feature       | Level | Status    | What It Does                                                                                                                                  |
-|---------------|-------|-----------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| Quick Draw    | 1     | ✅ Module  | Free Ranged attack before first Turn — auto-applies Hinder on 2H weapons. Flag consumed after one attack.                                     |
-| Deadeye       | 1     | ✅ Module  | Cascading crit threshold: each passed Ranged Check lowers crit by 1 (min 17). Tracks stacks via actor flags. Resets at end of Turn if no hit. |
-| Skeet Shooter | 2     | 📝 Flavor | Once per Round, make Off-Turn Ranged attack to reduce incoming projectile damage.                                                             |
-| Grit          | 4     | ✅ Module  | When you Crit on a Ranged attack, damage dice can explode. Accounts for Marksmanship die upsizing.                                            |
-| Devastator    | 6     | ✅ Module  | Reduce an Enemy to 0 HP → Deadeye crit immediately set to 17 (max stacks).                                                                    |
-| Bad Medicine  | 8     | ✅ Module  | Extra die of damage on Ranged Crit. Die size accounts for Marksmanship bonus.                                                                 |
-| High Noon     | 10    | ✅ Module  | Once per Turn, Crit on Ranged → chat notification for one additional attack. Tracks usage per turn.                                           |
-
----
-
-### Fighter
-
-| Feature           | Level | Status    | What's Automated                                                                 |
-|-------------------|-------|-----------|----------------------------------------------------------------------------------|
-| Fighting Style    | 1     | 📝 Flavor | Perk grants (manual)                                                             |
-| Valor             | 1/4/8 | ✅ SystemY      | attackCritBonus + reflexCritBonus + endureCritBonus: -1/-2/-3 scaling with level |
-| Momentum          | 2     | ✅ Module  | Pass save → next attack favored                                                  |
-| Muster for Battle | 6     | 📝 Flavor | Two actions on first turn                                                        |
-| Harrying          | 10    | 📝 Flavor | Attack twice with Attack action                                                  |
-
----
-
-### Hunter
-
-| Feature          | Level | Status    | What's Automated                                                     |
-|------------------|-------|-----------|----------------------------------------------------------------------|
-| Hunter's Mark    | 1     | ✅ Module   | Mark target → 2d20 keep highest                                      |
-| Survivalist      | 1     | 📝 Flavor | Perk grant + narrative bonuses                                       |
-| Rover            | 2     | ✅ Module  | Difficult Terrain doesn't impede walking Speed. Gain Climb and Swim. |
-| Overwatch        | 4     | ✅ Module   | Mark bonus extends to saves                                          |
-| Quarry           | 6     | 📝 Flavor | Narrative blindsight sense                                           |
-| Lethal Precision | 8     | ✅ Moduleo   | 3d20 keep highest                                                    |
-| Apex Predator    | 10    | ✅ Module   | Ignore immune + armor vs mark                                        |
-
----
-
-### Luminary
-
-| Feature        | Level | Status    | What's Automated               |
-|----------------|-------|-----------|--------------------------------|
-| Theurgy        | 1     | ✅ System  | Casting handled by base system |
-| Radiant Healer | 1     | ✅ Module   | Healing dice explode on max    |
-| Overheal       | 2     | ✅ Module    | Excess HP redirect             |
-| Ever-Cure      | 4     | ✅ Module   | Healing removes a status       |
-| Revivify       | 6     | 📝 Flavor | Narrative revival mechanic     |
-| Saving Grace   | 8     | ✅ Module   | Healing dice also explode on 2 |
-| Life-Giver     | 10    | 📝 Flavor | Modifies Revivify              |
-
----
-
-
-### Magus
-
-| Feature          | Level | Status    | What's Automated                       |
-|------------------|-------|-----------|----------------------------------------|
-| Spellstriker     | 1     | ✅ System  | Casting handled by base system         |
-| Esoteric Eye     | 1     | 📝 Flavor | Narrative magic detection              |
-| Spell Parry      | 2     | 📝 Flavor | Defensive choice                       |
-| Arcane Recall    | 4     | 📝 Flavor | Swap spell known on rest               |
-| Spell Surge      | 6     | ✅ Module   | Block cast by 10+ → reflect            |
-| Aegis Obscura    | 8     | 📝 Flavor   | Allsight + half magic damage with Ward |
-| Spell Surge (8+) | 10    | ✅ Module   | Lower Spell Surge threshold            |
-
----
-
-### Merchant
-
-| Feature                 | Level | Status    | What's Automated                                        |
-|-------------------------|-------|-----------|---------------------------------------------------------|
-| Gold Sink               | 1     | ✅ Module  | Shop tab to buy/sell gear, weapons, armor, alchemical items. Favorites integrate with crawler combat strip. |
-| Deep Pockets            | 1     | ✅ AE      | inventory.bonusSlots = ceil(level/2), scales with level |
-| Bang for Your Buck      | 2     | 🔲 Todo   | Luck roll to not expend items                           |
-| Diamond Hands           | 4     | 📝 Flavor | Downtime relic modification                             |
-| Treasure Seeker         | 6     | 📝 Flavor | Narrative sense                                         |
-| Bang for Your Buck (d8) | 8     | 🔲 Todo   | Upgrade refund die                                      |
-| Top Shelf               | 10    | 📝 Flavor | Weekly relic pull                                       |
-
-The Gold Sink tab lets Merchants browse and buy from system compendiums (no Relics). Right-click items to favorite them — favorites appear at the top of the list and in the Vagabond Crawler combat dropdown for quick purchasing. Items marked as junk (via right-click on the inventory tab) can be sold in bulk with the "Sell Junk" button. Sell ratio is configurable in module settings (default 100%).
-
----
-
-### Pugilist
-
-| Feature       | Level | Status     | What's Automated                      |
-|---------------|-------|------------|---------------------------------------|
-| Fisticuffs    | 1     | 🔲 Partial | Brawl d4 minimum — needs verification |
-| Rope-a-Dope   | 1     | 📝 Flavor  | Perk grant                            |
-| Beat Rush     | 2     | 📝 Flavor  | Action economy                        |
-| Prowess       | 4     | ✅ Module   | Chat reminder + removes 2 highest dice on passed Block |
-| Haymaker      | 6     | ✅ Module   | Pass brawl by 10+ → applies Dazed     |
-| Impact        | 8     | ✅ AE       | brawlDamageDieSizeBonus +2 (d4→d6)    |
-| Haymaker (8+) | 10    | ✅ Module   | Haymaker threshold lowered to 8+       |
-
----
-
-### Psychic
-
-| Feature           | Level | Status    | What's Automated                                                                          |
-|-------------------|-------|-----------|-------------------------------------------------------------------------------------------|
-| Psionics          | 1     | ✅ Module  | Talents tab + Pick dialog + Cast pipeline. Mana cap = floor(level/2). Free Focus.         |
-| Awakening         | 1     | ✅ Module  | Auto-grants Telepath Perk on class drop; sets `psychicMindTrinket` flag                   |
-| Precognition      | 2     | ✅ Module  | While Focusing, first Save each round gets Favor (cancels Hinder); resets on round end    |
-| Duality           | 4     | ✅ Module  | Focus on up to 2 Talents simultaneously (capacity enforced by TalentBuffs.getMaxFocus)    |
-| Mental Fortress   | 6     | ✅ AE      | statusImmunities ADD: berserk, charmed, confused, frightened                              |
-| Transcendent Duality | 8  | ✅ Module  | Focus on up to 3 Talents simultaneously                                                   |
-| Transcendence     | 10    | ✅ Module  | DialogV2 swap: drop one known Talent, learn another (1 Action, honor system)              |
-
-The Talents tab is a single scrollable list of all 14 Talents — picked entries on top, unpicked dimmed. **Right-click any row to pick or unpick** (the same favorite pattern used in the beast browser). Picked Talents get a Cast button and, when focused, a Drop Focus button. Header counter shows `Picked X / Y` for the level (turns amber when below the cap, red when over). Focused rows glow with the same accent treatment as focused spells, and a generic `_focus` Sequencer animation plays on the caster's token while focusing.
-
-Cast opens a Crawler-style configuration dialog (−/Nd6/+ pill buttons, Effect toggle, Delivery dropdown showing every standard delivery — unaffordable ones faded — Mana row with cap, live Targets row, Focus toggle). Casts route through the system's `VagabondChatCard.spellCast` and `VagabondDamageHelper.rollSpellDamage` for full polish (targets section, big damage numbers, Apply Direct, save buttons), and respect the v0.3.3 Effect (Fx) gating — casting Pyrokinesis with Effect: Off does fire damage but no Burning. Cast attacks bypass armor and the cast check uses Mysticism with favor/hinder applied. Multi-target Mana on Remote (`+1 per additional target`) is computed live from the selected token set.
-
-Buff Talents (Shield, Evade, Absence, Transvection) flow through the same Cast dialog as everything else — pick delivery, pick targets, fire. Shield-on-an-ally and Evade-on-an-ally work via Touch / Remote, with the d4 reductions correctly applying to the buffed actor (not the caster). Distributed buff AEs route through the GM relay when the caster doesn't own the target, so Shielding a hireling or summoned ally Just Works. Each focused Talent reserves a slot from the Psychic's focus pool (1/2/3 by Duality at L1/L4/L8); dropping focus tears down every distributed AE in the world via `casterActorId` flag matching.
-
-The Control Talent (Animate-spell logic) spawns a synthetic NPC controlled object via the unified Companion system — adds a Companions tab + a Control button to the Companions action bar, attacks route through the Psychic's Mysticism, HP-to-zero auto-dismisses, and dropping focus removes the object cleanly. A defensive round-tick reap catches the rare cases where focus state desyncs from spawned objects.
-
----
-
-### Revelator
-
-| Feature        | Level | Status    | What's Automated                                          |
-|----------------|-------|-----------|-----------------------------------------------------------|
-| Righteous      | 1     | ✅ System  | Casting handled by base system                            |
-| Selfless       | 1     | ✅ Module  | Prompt to redirect ally damage; raw pre-armor amount      |
-| Lay on Hands   | 2     | ✅ Module  | Sheet button + chat card heal (d6+Level), 2 uses/rest     |
-| Paragon's Aura | 4     | ✅ Module  | +1 Focus AE + AuraManager. Free 10' Aura delivery (cost discount enforced via SpellHandler patch) |
-| Divine Resolve | 6     | ✅ AE      | statusImmunities: blinded, paralyzed, sickened            |
-| Holy Diver     | 8     | 🔲 Todo   | After Selfless → favor + Presence damage (no turn expiry) |
-| Sacrosanct     | 10    | ✅ AE      | saves.reflex/endure/will.bonus +2                         |
-
----
-
-### Rogue
-
-| Feature                | Level | Status     | What's Automated                                       |
-|------------------------|-------|------------|--------------------------------------------------------|
-| Sneak Attack           | 1     | ✅ Module   | Extra d4s on favored hit + armor pen. Scales per level |
-| Infiltrator            | 1     | 📝 Flavor  | Perk grant + narrative bonuses                         |
-| Unflinching Luck       | 2     | 📝 Flavor  | Luck refund die (d12) — player-tracked                 |
-| Evasive                | 4     | ✅ Module   | Ignore Reflex hinder + remove 2 Dodge dice             |
-| Lethal Weapon          | 6     | ✅ Module   | Sneak Attack on all favored attacks per turn           |
-| Unflinching Luck (d10) | 8     | 📝 Flavor  | Upgrade refund die — player-tracked                    |
-| Waylay                 | 10    | 📝 Flavor  | Kill → extra action — player-tracked                   |
-
----
-
-### Summoner
-
-| Feature          | Level | Status     | What's Automated                                                                                   |
-|------------------|-------|------------|----------------------------------------------------------------------------------------------------|
-| Arcanum          | 1     | 📝 Flavor  | Casting handled by base system                                                                     |
-| Creature Codex   | 1     | ✅ Module   | Summon tab with creature list, personal Codex management, conjure flow, mana cost, token placement  |
-| Soulbonder       | 2     | ✅ Module   | Copies summon's Armor + Immunities as managed AEs while conjured                                   |
-| Second Nature    | 4     | ✅ Module   | Cd4 countdown option instead of Focus (no mana drain per round)                                    |
-| Avatar Emergence | 6     | ✅ Module   | Once per Shift, conjure without Mana cost. Resets on rest.                                         |
-| Guardian Force   | 8     | ✅ Module   | Summoner 0 HP → summon persists on Cd4 countdown, revive at 1 HP (+1 Fatigue) on expiry            |
-| Ultimate Weapon  | 10    | ✅ Module   | Max summon HD cap increased by +5                                                                  |
-
----
-
-### Sorcerer
-
-| Feature        | Level | Status    | What's Automated                               |
-|----------------|-------|-----------|------------------------------------------------|
-| Glamour        | 1     | ✅ System  | Casting handled by base system                 |
-| Tap            | 1     | 📝 Flavor | Reduce Max HP → regain Mana (player-tracked)   |
-| Spell-Slinger  | 2     | ✅ AE      | castCritBonus -1 + spellDamageDieSize 8        |
-| Quickening     | 4     | 📝 Flavor | Skip move to cast                              |
-| Arcane Anomaly | 6     | 📝 Flavor | Half magic damage (player-tracked)             |
-| Spell Twinning | 8     | 📝 Flavor | 2nd same-spell cast favored (player-tracked)   |
-| Overpowered    | 10    | ✅ AE      | Additional castCritBonus -1 (total crit on 18) |
-
----
-
-### Vanguard
-
-| Feature        | Level | Status     | What's Automated                                                                                   |
-|----------------|-------|------------|----------------------------------------------------------------------------------------------------|
-| Stalwart       | 1     | ✅ Module   | Protector perk automated — auto-rolls Block on ally failed save, heals for highest die on pass     |
-| Guard          | 1     | ✅ Module   | Prompt card on Block pass or enemy entering Close range. Brawl check with Beefy/Bully favor, Push/Prone on pass |
-| Rampant Charge | 2     | 📝 Flavor  | Push during movement (player-tracked)                                                               |
-| Wall (Large)   | 4     | ✅ Module   | Managed AE + shove size override — treated as Large for Shoves via brawl-intent                    |
-| Unstoppable    | 6     | 📝 Flavor  | Chain shoves (player-tracked)                                                                       |
-| Wall (Huge)    | 8     | ✅ Module   | Managed AE + shove size override — treated as Huge for Shoves via brawl-intent                     |
-| Indestructible | 10    | ✅ Module   | Immune to melee/ranged attack damage while Armor ≥ 1 and not Incapacitated. Spells still apply.    |
-
----
-
-### Witch
-
-| Feature           | Level | Status    | What's Automated                                                                                   |
-|-------------------|-------|-----------|----------------------------------------------------------------------------------------------------|
-| Occultist         | 1     | ✅ System  | Casting handled by base system                                                                     |
-| Hex               | 1     | ✅ Module  | "Hex" button on spell cast cards. Tracks hexed targets with managed AE. Max slots = ceil(level/2). Oldest hex removed when over capacity. |
-| Ritualism         | 2     | 📝 Flavor | Downtime ritual (player-tracked)                                                                   |
-| Things Betwixt    | 4     | ✅ Module  | Applies Invisible status + consumes Focus slot. Once per scene. Auto-expires on round change.       |
-| Coventry          | 6     | 📝 Flavor | Cast allies' spells (player-tracked)                                                               |
-| Widdershins       | 8     | ✅ Module  | Hexed targets are Weak to witch's damage — armor bypassed in calculateFinalDamage. Does not bypass Immunity. |
-| Ritualism (2)     | 10    | 📝 Flavor | Two rituals per shift (player-tracked)                                                             |
-
----
-
-### Wizard
-
-| Feature           | Level | Status    | What's Automated                                                                                |
-|-------------------|-------|-----------|-------------------------------------------------------------------------------------------------|
-| Spellcaster       | 1     | ✅ System  | Casting handled by base system                                                                  |
-| Page Master       | 1     | ✅ Module  | "+1d6 Studied Die" button on spell damage cards. Updates damage total + save amounts on click.   |
-| Sculpt Spell      | 2     | ✅ System  | deliveryManaCostReduction +1 (system AE on class item)                                          |
-| Manifold Mind     | 4     | ✅ AE      | focus.maxBonus +1                                                                               |
-| Extracurricular   | 6     | 📝 Flavor | Studied die to cast unknown spell (player-tracked)                                              |
-| Manifold Mind (3) | 8     | ✅ AE      | Additional focus.maxBonus +1 (total +2)                                                         |
-| Archwizard        | 10    | ✅ System  | Additional deliveryManaCostReduction +1 (system AE on class item)                               |
-
-### Monk
-
-| Feature           | Level | Status      | What's Automated                                          |
-|-------------------|-------|-------------|-----------------------------------------------------------|
-| Martial Arts      | 1     | ✅ Module    | 1 target → Keen (crit -1). 2 targets → Cleave (half dmg). Die escalation per round. |
-| Fleet of Foot     | 1     | ✅ System    | System AE: reflexCritBonus scaling + Treads Lightly perk   |
-| Fluid Motion      | 2     | 📝 Flavor   | Walk on walls/water (narrative)                            |
-| Impetus           | 4     | ✅ Module    | Chat reminder: Dodge ignores 2 highest dice                |
-| Flurry of Blows   | 6     | 📝 Flavor   | Extra Finesse attack (player-tracked)                      |
-| Empowered Strikes | 8     | ✅ AE        | finesseDamageDieSizeBonus +2 (d4→d6)                      |
-| Flurry of Blows   | 10    | 📝 Flavor   | Up to 3 extra Finesse attacks (player-tracked)             |
-
----
-
-## Ancestry Traits
-
-Ancestry traits are automatically detected from compendium items on the character sheet and applied as managed Active Effects where applicable.
-
-### Dwarf
-| Trait     | Status | What It Does                                            |
-|-----------|--------|---------------------------------------------------------|
-| Darksight | ✅ AE   | Not Blinded by Dark.                                    |
-| Sturdy    | ✅ AE   | Favor on Saves against Frightened, Sickened, or Shoved. |
-| Tough     | ✅ AE   | Bonus to max HP equal to your Level.                    |
-
-### Draken
-| Trait               | Status   | What It Does                                                                                         |
-|---------------------|----------|------------------------------------------------------------------------------------------------------|
-| Breath Attack       | ✅ Module | Endure or Will Save to make a 15' Cone dealing 2d6! draconic breath. Recharges on Rest or 1 Fatigue. |
-| Scale               | ✅ AE     | +1 bonus to Armor Rating.                                                                            |
-| Draconic Resilience | ✅ AE     | Half damage from a chosen source: Acid, Cold, Fire, or Shock.                                        |
-
-### Elf
-| Trait             | Status    | What It Does                                                             |
-|-------------------|-----------|--------------------------------------------------------------------------|
-| Ascendancy        | 📝 Flavor | Trained in a Skill from Arcana, Mysticism, Influence, or Ranged Attacks. |
-| Elven Eyes        | ✅ AE      | Favor on sight-based Detect Checks.                                      |
-| Naturally Attuned | 📝 Flavor | Know a Spell and Cast it with a Skill of your choice.                    |
-
-### Goblin
-| Trait     | Status | What It Does                                      |
-|-----------|--------|---------------------------------------------------|
-| Darksight | ✅ AE   | Not Blinded by Dark.                              |
-| Nimble    | ✅ AE   | +5 Speed bonus and ignore Hinder on Reflex Saves. |
-| Scavenger | ✅ AE   | Favor on Endure Saves against being Sickened.     |
-
-### Halfling
-| Trait   | Status    | What It Does                                             |
-|---------|-----------|----------------------------------------------------------|
-| Nimble  | ✅ AE      | +5 Speed bonus and ignore Hinder on Reflex Saves.        |
-| Squat   | 📝 Flavor | Move through areas occupied by other Beings.             |
-| Tricksy | 📝 Flavor | Gain 1 additional Luck when you regain Luck from a Rest. |
-
-### Human
-| Trait            | Status    | What It Does                    |
-|------------------|-----------|---------------------------------|
-| Knack            | 📝 Flavor | Gain a Perk and a Training.     |
-| Strong Potential | 📝 Flavor | Increase one Stat by 1 (max 7). |
-
-### Orc
-| Trait     | Status | What It Does                                                                  |
-|-----------|--------|-------------------------------------------------------------------------------|
-| Darksight | ✅ AE   | Not Blinded by Dark.                                                          |
-| Beefy     | ✅ AE   | Favor on Saves against Grappled/Shoved, and Favor on Checks to Grapple/Shove. |
-| Hulking   | ✅ AE   | +2 bonus to Item Slots.                                                       |
-
----
-
-## Perk Automation
-
-Perks are auto-detected from character items. Some have built-in system AEs, some are automated by VCE, and the rest are tracked for future automation.
-
-> Full reference with all 104 perks: [`docs/perk-automation-reference.md`](docs/perk-automation-reference.md)
-
-### Currently Automated Perks
-
-| Perk | Status | What's Automated |
-|------|--------|------------------|
-| Tough | ✅ System AE | `hpPerLevel` +1 — Max HP increases by Level |
-| Pack Mule | ✅ System AE | `inventory.bonusSlots` +2 — Gain +2 Item Slots |
-| Secret of Mana | ✅ System AE | `mana.bonus` = `@lvl` — +1 Mana per Level |
-| Marksmanship | ✅ System AE | `rangedDamageDieSizeBonus` +2 — Ranged damage dice one size larger |
-| Metamagic | ✅ System AE | `mana.castingMaxBonus` +1 — Max Mana per Spell +1 |
-| Magical Secret | ✅ System AE | `isSpellcaster` = true — Grants spellcaster flag |
-| Gish | ✅ System AE | `isSpellcaster` = true — Grants spellcaster flag |
-| Second Wind | ✅ System AE | Placeholder AE (no changes) |
-| Spin-to-Win | ✅ Module | Managed AE: `cleaveMaxTargets` = 100, removes Cleave target cap |
-| Treads Lightly | ✅ Module | Runtime hook: nullifies region movement costs (Foundry + Crawler) |
-| Akimbo Trigger | ✅ Module | Range validator skips Ranged-at-Close hinder |
-| Bully | ✅ Module | Favor on Grapple/Shove vs smaller targets |
-| Full Swing | ✅ Module | Auto-shove on Melee beat-by-10+ |
-| Protector | ✅ Module | Auto-rolls Endure save when ally fails a save near attacker; heals for highest die on pass |
-| Briar Healer | ✅ Module | While caster Focuses on Life: target gains +1 Armor + reactive d6 thorn damage to any Being who melees them. Subscribes to `vagabond.postDamageApply` (v5.3.0+) so the reaction fires cleanly without monkey-patching the damage pipeline. |
-
----
-
-## Spell Automation
-
-Spells in the Vagabond system have no built-in Active Effects. VCE automates select spells via runtime hooks.
-
-> Full reference with all 59 spells: [`docs/spell-automation-reference.md`](docs/spell-automation-reference.md)
-
-### Currently Automated Spells
-
-| Spell | What's Automated |
-|-------|------------------|
-| Bless | Full aura system — d4 save bonus AE on allies, silvered weapons, mode buttons in chat |
-| Exalt | +1 per damage die (+2 vs Undead/Hellspawn), counts all dice including silver/imbue bonus dice |
-| Imbue | RAW delivery: 1 Mana of cost is deferred to on-hit (auto-deducted from caster's pool); imbue persists as a standing buff until end of round (or longer if Focused, free sustain). Spell damage dice added to weapon formula on the cast round only — sustained imbues deliver Effect only. Spell's Effect (Burning, Charmed, etc.) applied on Apply via `causedStatuses` injection. Damage routes through Roll Damage button so vagabond-crawler relic bonuses (Strike, Bane, Vicious) compose. Out-of-combat casts require Focus. Friendly-target resolves wielder (self, ally, multi-target with picker). |
-| Polymorph | Beast Form tab, stat swap, token swap, beast action rolls, mana drain per round. Works for any caster. |
-| Ward | +1 Armor AE applied to target. On incoming damage, intercepts via `vagabond.preDamageApply` (v5.3.0+) and opens a Cast Check dialog BEFORE damage lands; on success, reduces damage by Nd6 (1 + extra Mana spent), crit negates entirely. Damage chat card shows the already-reduced amount — no death-revive race. |
-
----
-
-## Other Automation
-
-- **Alchemy Cookbook** — Full crafting UI with search, cost calculation, and craft buttons
-- **Countdown Dice Overlay** — Visual overlay for tracking countdown dice on effects
-- **NPC Ability Automation** — With Vagabond Crawler module: morale checks, NPC abilities, and combat AI
-- **Weapon Range Enforcement** — Blocks out-of-range attacks with distance warnings. Auto-hinders Ranged at Close (unless Akimbo Trigger) and Thrown at Far. World setting, on by default.
-- **Cleave Damage** — Cleave weapons deal half damage to all targets (ceil to first, floor to rest; minimum 1). Works with both direct damage and save-based damage paths.
-- **Target Count Enforcement** — Non-Cleave weapons limited to 1 target. Cleave weapons limited to 2 targets. Spin-to-Win perk removes the Cleave target cap.
-- **Aura Delivery System** — Casting any spell or Psychic Talent with `delivery: aura` activates a persistent template that follows the caster, ticks each combat round on hostiles in range, and fires entry ticks when a hostile walks into the radius mid-round. Containment uses Foundry's per-grid-square rule (matches the purple-square highlighting), so large monsters with a single tile inside are correctly affected. Works for damage spells (Burn cast as Aura), effect spells/talents (Befuddle), buff spells (Bless, Exalt, Ward), buff Talents (Shield, Evade), and one-shot Aura casts without focus. Revelator's L4 Paragon's Aura zeroes the base 10' Aura cost.
-- **Silver Weakness Die Fix** — Silver/metal weakness extra die now accounts for weapon skill die size bonuses (e.g., Marksmanship upgrades the weakness die from d6→d8 for Ranged weapons).
-- **Perk Detection** — Auto-detects perks from character items and applies relevant AEs
-- **Treads Lightly** — Nullifies walk-type region movement costs for characters with this perk
-- **Manual Rolls** — Apply damage or healing from just standard dice rolls in chat by right clicking the result
-- **Status Rules** — Module-level enforcement of status-vs-status interactions the system describes but doesn't enforce. Berserk → cannot be Frightened: any actor with the Berserk status (regardless of class — Barbarian Rage, NPC ability, GM toggle, etc.) blocks Frightened applications via the v5.3.0 `vagabond.preStatusApply` hook, with a debounced chat-card notification listing affected targets.
-- **Cast-Time Rules Enforcement** — Focus + Effect coupling: per Vagabond core rules, Focus sustains a spell's Effect; the damage portion is Instant. Casting with Focus engaged but `Include Effect` toggled off is invalid — the cast is blocked at SpellHandler.castSpell (and CrawlerSpellDialog._cast) with a notification asking the player to either turn Effect on or unfocus the spell.
+*This module is an independent community project for the Vagabond RPG system and is not affiliated with Land of the Blind, LLC.*
