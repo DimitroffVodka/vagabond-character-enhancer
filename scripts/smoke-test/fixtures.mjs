@@ -24,6 +24,18 @@ export const Fixtures = {
     return game.actors.getName(def.name);
   },
 
+  async swapClass(shortName, className, level = 5) {
+    const a = this.get(shortName);
+    if (!a) throw new Error(`Fixture "${shortName}" not found — call Fixtures.ensureAll first`);
+    await this._syncClass(a, { className, level });
+    try {
+      await a.update({ "system.attributes.level.value": level });
+    } catch (e) {
+      log("SmokeTest", `Could not set level on ${a.name}: ${e.message}`);
+    }
+    await game.vagabondCharacterEnhancer.rescan(a);
+  },
+
   async _ensureFolder() {
     let f = game.folders.find(f => f.name === FIXTURE_FOLDER_NAME && f.type === "Actor");
     if (!f) f = await Folder.create({ name: FIXTURE_FOLDER_NAME, type: "Actor", color: "#5d3fd3" });
