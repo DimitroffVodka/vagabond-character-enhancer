@@ -19,6 +19,9 @@ export const SmokeTest = {
       await import("./tests/tier-a/focus.mjs"),
       await import("./tests/tier-a/companion.mjs"),
       await import("./tests/tier-a/spells.mjs"),
+      await import("./tests/tier-a/aura-polymorph-brawl.mjs"),
+      await import("./tests/tier-a/detection-ae.mjs"),
+      await import("./tests/tier-a/encumbrance-fx.mjs"),
     ];
     return modules.flatMap(m => m.tests);
   }
