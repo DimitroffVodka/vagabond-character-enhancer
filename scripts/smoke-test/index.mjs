@@ -16,7 +16,9 @@ export const SmokeTest = {
   async _discoverTests() {
     const modules = [
       await import("./tests/tier-a/boot.mjs"),
-      await import("./tests/tier-a/focus.mjs")
+      await import("./tests/tier-a/focus.mjs"),
+      await import("./tests/tier-a/companion.mjs"),
+      await import("./tests/tier-a/spells.mjs"),
     ];
     return modules.flatMap(m => m.tests);
   }
