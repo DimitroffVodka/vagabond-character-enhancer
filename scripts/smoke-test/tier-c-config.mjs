@@ -9,6 +9,7 @@ export const TIER_C_SKIPS = {
   perks: {
     // Add perks here that can't be smoke-tested.
     // Example: "lucky strike": "GM-arbitrated reroll, no automation hook"
+    "primordial summoner": "Not in vagabond.perks system compendium (v5.3.0). PERK_REGISTRY references a perk the system doesn't ship."
   },
   spells: {
     "polymorph": "Already covered by Tier A polymorph round-trip"
