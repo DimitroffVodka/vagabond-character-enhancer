@@ -14,7 +14,10 @@ export const SmokeTest = {
   },
 
   async _discoverTests() {
-    // Filled in by later tasks (Tier A/B/C imports).
-    return [];
+    const modules = [
+      await import("./tests/tier-a/boot.mjs"),
+      await import("./tests/tier-a/focus.mjs")
+    ];
+    return modules.flatMap(m => m.tests);
   }
 };
