@@ -10,19 +10,26 @@
 const BUFFER = [];
 const MAX = 1000;
 
-const _origError = console.error.bind(console);
-const _origWarn  = console.warn.bind(console);
+// Guard against double-wrap if the module is somehow imported twice (e.g.,
+// dev hot-reload, dynamic import). ES modules are singletons per import path
+// in production, but the guard is cheap insurance.
+if (!console.error.__vceWrapped) {
+  const _origError = console.error.bind(console);
+  const _origWarn  = console.warn.bind(console);
 
-console.error = (...args) => {
-  BUFFER.push({ ts: Date.now(), level: "error", message: _format(args) });
-  if (BUFFER.length > MAX) BUFFER.splice(0, BUFFER.length - MAX);
-  _origError(...args);
-};
-console.warn = (...args) => {
-  BUFFER.push({ ts: Date.now(), level: "warn", message: _format(args) });
-  if (BUFFER.length > MAX) BUFFER.splice(0, BUFFER.length - MAX);
-  _origWarn(...args);
-};
+  console.error = (...args) => {
+    BUFFER.push({ ts: Date.now(), level: "error", message: _format(args) });
+    if (BUFFER.length > MAX) BUFFER.splice(0, BUFFER.length - MAX);
+    _origError(...args);
+  };
+  console.warn = (...args) => {
+    BUFFER.push({ ts: Date.now(), level: "warn", message: _format(args) });
+    if (BUFFER.length > MAX) BUFFER.splice(0, BUFFER.length - MAX);
+    _origWarn(...args);
+  };
+  console.error.__vceWrapped = true;
+  console.warn.__vceWrapped = true;
+}
 
 function _format(args) {
   return args.map(a => {
