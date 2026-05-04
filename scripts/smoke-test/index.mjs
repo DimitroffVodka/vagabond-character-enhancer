@@ -1,18 +1,17 @@
 /**
- * VCE Smoke Test Harness
- * Runner orchestration filled in by Task 3. Currently runs Fixtures.ensureAll()
- * to validate fixture builder.
+ * VCE Smoke Test Harness — runner orchestration.
+ * Test discovery (Tier A/B/C aggregation) is filled in by Tasks 5-12.
  */
-import { MODULE_ID, log } from "../utils.mjs";
-import { Fixtures } from "./fixtures.mjs";
+import { Runner } from "./runner.mjs";
 
 export const SmokeTest = {
   async run(opts = {}) {
-    const start = performance.now();
-    await Fixtures.ensureAll();
-    return {
-      summary: { total: 0, passed: 0, failed: 0, skipped: 0, errored: 0, durationMs: Math.round(performance.now() - start) },
-      results: []
-    };
+    const tests = await this._discoverTests();
+    return Runner.run(tests, opts);
+  },
+
+  async _discoverTests() {
+    // Filled in by later tasks (Tier A/B/C imports).
+    return [];
   }
 };
