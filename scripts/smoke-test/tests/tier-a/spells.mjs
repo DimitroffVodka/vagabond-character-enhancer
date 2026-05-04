@@ -159,7 +159,7 @@ export const tests = [
       const caster = fixtures.Revelator;
       const target = fixtures.NPC;
 
-      const { BlessManager } = await import("../../spell-features/bless-manager.mjs");
+      const { BlessManager } = await import("../../../spell-features/bless-manager.mjs");
 
       // Clear any pre-existing bless AE from target
       const existingBlessAEs = target.effects.filter(e =>
@@ -204,7 +204,7 @@ export const tests = [
 
       let WardMod;
       try {
-        WardMod = await import("../../spell-features/ward-manager.mjs");
+        WardMod = await import("../../../spell-features/ward-manager.mjs");
       } catch (e) {
         assert(false, `Could not import ward-manager: ${e.message}`);
         return;
@@ -270,10 +270,10 @@ export const tests = [
         );
         assert(!!hexAE, `hexed AE expected on target after hex; effects: ${target.effects.map(e => e.name).join(", ")}`);
 
-        // Also check hex flag on caster
-        const hexTargets = caster.getFlag?.(MODULE_ID, "hexTargets") || [];
+        // Also check hex flag on caster — flag is stored as "witch_hexTargets"
+        const hexTargets = caster.getFlag?.(MODULE_ID, "witch_hexTargets") || [];
         assert(hexTargets.some(h => h.targetId === target.id),
-          `caster hexTargets flag should include target; got ${JSON.stringify(hexTargets)}`);
+          `caster witch_hexTargets flag should include target; got ${JSON.stringify(hexTargets)}`);
 
         // Unhex
         await api.unhex(caster, target.id);
@@ -284,9 +284,9 @@ export const tests = [
         );
         assert(!hexAEAfter, `hexed AE should be removed after unhex; effects: ${target.effects.map(e => e.name).join(", ")}`);
 
-        const hexTargetsAfter = caster.getFlag?.(MODULE_ID, "hexTargets") || [];
+        const hexTargetsAfter = caster.getFlag?.(MODULE_ID, "witch_hexTargets") || [];
         assert(!hexTargetsAfter.some(h => h.targetId === target.id),
-          "caster hexTargets should no longer include target after unhex");
+          "caster witch_hexTargets should no longer include target after unhex");
       } catch (e) {
         assert(false, `hex/unhex threw: ${e.message}`);
       }

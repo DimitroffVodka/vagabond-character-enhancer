@@ -30,7 +30,7 @@ export const tests = [
     tier: "a",
     usesFixtures: ["Witch"],
     run: async ({ fixtures, assert, wait }) => {
-      const { CompanionSpawner } = await import("../../companion/companion-spawner.mjs");
+      const { CompanionSpawner } = await import("../../../companion/companion-spawner.mjs");
       let creatureUuid;
       try {
         creatureUuid = await _firstBeastUuid();
@@ -79,7 +79,7 @@ export const tests = [
     tier: "a",
     usesFixtures: ["Witch"],
     run: async ({ fixtures, assert, wait }) => {
-      const { CompanionSpawner } = await import("../../companion/companion-spawner.mjs");
+      const { CompanionSpawner } = await import("../../../companion/companion-spawner.mjs");
       let creatureUuid;
       try {
         creatureUuid = await _firstBeastUuid();
@@ -129,7 +129,7 @@ export const tests = [
     tier: "a",
     usesFixtures: ["Witch"],
     run: async ({ fixtures, assert, wait }) => {
-      const { CompanionSpawner } = await import("../../companion/companion-spawner.mjs");
+      const { CompanionSpawner } = await import("../../../companion/companion-spawner.mjs");
       let creatureUuid;
       try {
         creatureUuid = await _firstBeastUuid();
@@ -197,7 +197,7 @@ export const tests = [
     tier: "a",
     usesFixtures: ["Witch"],
     run: async ({ fixtures, assert, wait }) => {
-      const { CompanionSpawner } = await import("../../companion/companion-spawner.mjs");
+      const { CompanionSpawner } = await import("../../../companion/companion-spawner.mjs");
       let creatureUuid;
       try {
         creatureUuid = await _firstBeastUuid();
