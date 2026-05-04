@@ -261,6 +261,35 @@ export const FocusManager = {
       }
     });
 
+    // Clean up stale focus.spellIds when a focused spell item is deleted.
+    // Without this, the ID lingers, keeping focus count > 0 and the persistent
+    // FX visible, with no UI to release it (release buttons need the item).
+    Hooks.on("deleteItem", (item) => {
+      const actor = item.parent;
+      if (actor?.documentName !== "Actor") return;
+      if (!actor.isOwner) return;
+      const ids = actor.system?.focus?.spellIds ?? [];
+      if (!ids.includes(item.id)) return;
+      actor.update({ "system.focus.spellIds": ids.filter(id => id !== item.id) })
+        .catch(e => log("FocusManager", `Could not strip deleted spell from focus.spellIds: ${e.message}`));
+    });
+
+    // GM-only: sweep stale focus.spellIds (refs to deleted spell items) at world ready.
+    // Catches actors that lost a focused spell before the deleteItem hook shipped.
+    // registerHooks() runs from VCE's own ready hook, so Foundry's ready phase has
+    // already passed — schedule the sweep on the next tick instead of Hooks.once.
+    setTimeout(() => {
+      if (!game.user.isGM) return;
+      for (const a of game.actors.contents) {
+        const ids = a.system?.focus?.spellIds || [];
+        if (!ids.length) continue;
+        const valid = ids.filter(id => !!a.items.get(id));
+        if (valid.length === ids.length) continue;
+        a.update({ "system.focus.spellIds": valid })
+          .catch(e => log("FocusManager", `Stale-focus sweep failed for ${a.name}: ${e.message}`));
+      }
+    }, 0);
+
     // Restore FX + Light on scene load
     Hooks.on("canvasReady", () => {
       this._restoreAllFX();
