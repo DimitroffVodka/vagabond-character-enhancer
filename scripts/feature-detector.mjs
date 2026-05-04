@@ -351,24 +351,29 @@ export const FeatureDetector = {
     // Use the class item's UUID as origin so the effects panel shows the class name as "Source"
     const classUuid = features._classUuid || null;
 
-    // Check class feature registry
-    for (const [featureName, featureDef] of Object.entries(CLASS_FEATURE_REGISTRY)) {
-      if (!features[featureDef.flag]) continue;
-      if (!featureDef.effects) continue;
+    // Check class feature registry — iterate the MULTI map so every class's
+    // version of a name-collided feature is considered. The flat registry
+    // would last-wins-overwrite, e.g. Monk's "fleet of foot" (no effects)
+    // would mask Dancer's "fleet of foot" (Reflex crit AE).
+    for (const [featureName, entries] of Object.entries(_CLASS_FEATURE_MULTI)) {
+      for (const featureDef of entries) {
+        if (!features[featureDef.flag]) continue;
+        if (!featureDef.effects) continue;
 
-      for (const effectDef of featureDef.effects) {
-        const key = `${featureDef.flag}_${effectDef.label}`;
-        desiredEffects.set(key, {
-          ...effectDef,
-          origin: classUuid || `${MODULE_ID}.${featureDef.flag}`,
-          flags: {
-            [MODULE_ID]: {
-              managed: true,
-              featureFlag: featureDef.flag,
-              effectKey: key
+        for (const effectDef of featureDef.effects) {
+          const key = `${featureDef.flag}_${effectDef.label}`;
+          desiredEffects.set(key, {
+            ...effectDef,
+            origin: classUuid || `${MODULE_ID}.${featureDef.flag}`,
+            flags: {
+              [MODULE_ID]: {
+                managed: true,
+                featureFlag: featureDef.flag,
+                effectKey: key
+              }
             }
-          }
-        });
+          });
+        }
       }
     }
 

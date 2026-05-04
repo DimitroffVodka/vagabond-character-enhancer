@@ -353,6 +353,7 @@ import { RaisePerks } from "./perk-features/raise-perks.mjs";
 import { BriarHealerManager } from "./perk-features/briar-healer.mjs";
 import { EncumbranceManager, computeQuantityAwareOccupiedSlots } from "./encumbrance/encumbrance-manager.mjs";
 import { BerserkImmunities } from "./status-rules/berserk-immunities.mjs";
+import { SmokeTest } from "./smoke-test/index.mjs";
 
 /* -------------------------------------------- */
 /*  Chat Context Menu (must register at top      */
@@ -1923,6 +1924,7 @@ Hooks.once("ready", async () => {
     rescan: (actor) => FeatureDetector.scan(actor),
     rescanAll: () => FeatureDetector.scanAll(),
     getFlags: (actor) => actor.getFlag(MODULE_ID, "features"),
+    smokeTest: (opts) => SmokeTest.run(opts),
     virtuoso: (actor) => BardFeatures.useVirtuoso(actor),
     stepUp: (actor) => DancerFeatures.performStepUp(actor),
     /** API for Vagabond Crawler: get Step Up menu data for a dancer actor */
