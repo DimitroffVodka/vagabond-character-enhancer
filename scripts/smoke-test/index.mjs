@@ -34,6 +34,7 @@ export const SmokeTest = {
       await import("./tests/tier-b/casters.mjs"),
       await import("./tests/tier-b/specialists.mjs"),
       await import("./tests/tier-c/perks.mjs"),
+      await import("./tests/tier-c/spells.mjs"),
     ];
     return all.flatMap(m => m.tests);
   }
