@@ -3,11 +3,14 @@
  * Test discovery (Tier A/B/C aggregation) is filled in by Tasks 5-12.
  */
 import { Runner } from "./runner.mjs";
+import { emitOutput } from "./output.mjs";
 
 export const SmokeTest = {
   async run(opts = {}) {
     const tests = await this._discoverTests();
-    return Runner.run(tests, opts);
+    const result = await Runner.run(tests, opts);
+    if (!opts.silent) await emitOutput(result);
+    return result;
   },
 
   async _discoverTests() {
