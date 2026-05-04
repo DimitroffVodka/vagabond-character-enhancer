@@ -1,5 +1,5 @@
 import { MODULE_ID, log } from "../utils.mjs";
-import { FIXTURE_DEFS, FIXTURE_FOLDER_NAME, FIXTURE_PREFIX, PACKS } from "./fixture-defs.mjs";
+import { FIXTURE_DEFS, FIXTURE_FOLDER_NAME, PACKS } from "./fixture-defs.mjs";
 
 const SMOKE_FLAG = "smokeTestFixture";
 
@@ -20,6 +20,7 @@ export const Fixtures = {
     if (this._cache.has(shortName)) return this._cache.get(shortName);
     const def = FIXTURE_DEFS[shortName];
     if (!def) return null;
+    // TODO: populate _cache on get() lookup so post-reload calls stay fast
     return game.actors.getName(def.name);
   },
 
@@ -84,6 +85,7 @@ export const Fixtures = {
     if (!def.ancestryName) return;
     const existing = actor.items.find(i => i.type === "ancestry" && i.name === def.ancestryName);
     if (existing) return;
+    // TODO: remove stale ancestry items when ancestryName changes (mirror _syncClass pattern)
     const pack = game.packs.get(PACKS.ancestries);
     if (!pack) { log("SmokeTest", `Missing pack: ${PACKS.ancestries}`); return; }
     const idx = await pack.getIndex();
