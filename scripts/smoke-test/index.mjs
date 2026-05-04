@@ -24,6 +24,8 @@ export const SmokeTest = {
       await import("./tests/tier-a/encumbrance-fx.mjs"),
       await import("./tests/tier-b/martial.mjs"),
       await import("./tests/tier-b/skirmisher.mjs"),
+      await import("./tests/tier-b/casters.mjs"),
+      await import("./tests/tier-b/specialists.mjs"),
     ];
     return modules.flatMap(m => m.tests);
   }
