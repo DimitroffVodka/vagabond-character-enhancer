@@ -35,7 +35,7 @@ export const Runner = {
       return { ...base, status: "skip", durationMs: 0, skipReason: test.skipReason ?? null };
     }
 
-    const fixtures = this._collectFixtures(test.usesFixtures ?? []);
+    const fixtures = this._collectFixtures(test.usesFixtures ?? [], test.id);
     const snapshot = this._snapshotFixtures(fixtures);
     const chatBaseline = game.messages.size;
     const consoleToken = ConsoleWatcher.snapshot();
@@ -63,7 +63,7 @@ export const Runner = {
         await this._restoreFixtures(snapshot);
         await this._trimNewChat(chatBaseline);
       } catch (cleanupErr) {
-        log("SmokeTest", `Cleanup error in ${test.id}: ${cleanupErr.message}`);
+        console.warn(`${MODULE_ID} | SmokeTest | Cleanup error in ${test.id}:`, cleanupErr);
       }
       base.durationMs = Math.round(performance.now() - start);
       if (base.durationMs > 5000) {
@@ -73,11 +73,12 @@ export const Runner = {
     return base;
   },
 
-  _collectFixtures(names) {
+  _collectFixtures(names, testId) {
     const out = {};
     for (const n of names) {
       const a = Fixtures.get(n);
       if (a) out[n] = a;
+      else console.warn(`${MODULE_ID} | SmokeTest | Fixture "${n}" not found — test "${testId}" will likely fail`);
     }
     return out;
   },
@@ -89,6 +90,7 @@ export const Runner = {
         name,
         actorId: actor.id,
         flagsModule: foundry.utils.deepClone(actor.flags?.[MODULE_ID] ?? {}),
+        // TODO: snapshot/restore non-spellIds focus fields (focus.value, focus.max bonus AE consumption) if any test mutates them
         spellIds: [...(actor.system?.focus?.spellIds ?? [])],
         hp: actor.system?.health?.value,
         statuses: [...(actor.statuses ?? [])],
