@@ -1,9 +1,9 @@
 # Vagabond Magic System — Rules Reference & Open Questions
 
-**Status:** Draft v0.4 — adds Mana economy details, range table, anchored Areas, Hold Action with Cast, stealth-by-spell, damage-typing interactions, Imbue + Attack Crit, status stacking, and full class-feature carveouts
+**Status:** Draft v0.5 — adds rulebook page references throughout (citing book page numbers from the Core Rulebook PDF)
 **Date:** 2026-05-05
 **Sources cited:**
-- Core Rulebook ch. 05_Magic (`01_Spells.md`, `02_Spell List.md`)
+- **Core Rulebook PDF** — page numbers below refer to printed book page numbers (PDF page = book page + 4 due to 4-page front-matter offset). Markdown source mirror at `Core Rulebook/05_Magic/`.
 - Vagabond FAQ Doc v1
 - "Vagabond // Pulp Fantasy RPG | More FAQ & Design Notes" video
 - Class entries for casting-tradition references
@@ -17,6 +17,8 @@ If something below misrepresents intent, please correct it — the goal is share
 ---
 
 ## 1. Cast-Time Rules
+
+*Magic chapter starts on book p. 90.*
 
 ### 1.1 Three choices on every cast
 On every cast, the Hero declares:
@@ -32,6 +34,8 @@ Made only when an unwilling Being is among the spell's current targets. No check
 Base 1d6. +1d6 per additional Mana spent on damage.
 
 ### 1.4 Casting tradition determines the Cast Check stat
+*Each class entry in chapter 03 specifies the Cast Skill (book p. 31–88).*
+
 | Tradition | Stat / Skill | Example classes |
 |---|---|---|
 | Arcane | Reason / Arcana | Wizard, Magus |
@@ -41,6 +45,7 @@ Base 1d6. +1d6 per additional Mana spent on damage.
 | Primal | Awareness / Mysticism | Druid, Luminary |
 
 ### 1.5 Mana economy
+*Class-specific Mana formulas in each class entry (book p. 31–88). Rests / Mana restoration on book p. 11. Studied dice on book p. 19.*
 
 **Mana progression** (per casting class):
 
@@ -73,6 +78,8 @@ Per Q40, every spell has a **Damage Base** field:
 - **Damage Base: -** : The spell is **purely effect-only**. There is no damage component; the caster cannot pay Mana to add damage to such spells.
 
 ### 1.8 Trinket / free-hand requirement
+*Trinkets section: book p. 92.*
+
 Caster must have at least one hand free or holding a Trinket to cast.
 
 - **Trinket persistence:** Trinkets are 1-Slot, 1H Items used as a magical channel. They are not consumed by casting.
@@ -85,6 +92,8 @@ Caster must have at least one hand free or holding a Trinket to cast.
 ---
 
 ## 2. Delivery Types
+
+*Delivery rules and the cost table are on book p. 90.*
 
 ### 2.1 Cost & scaling table (RAW)
 
@@ -134,12 +143,14 @@ Per Q15–Q19 and Q23, Area deliveries are 3D shapes blocked by walls, floors, a
 - Vertical extent matters in principle but the game is played in 2D — altitude edge cases are generally ignored at the table.
 
 ### 2.4 Range — "in sight" interpretation
+*Distance definitions: Adventuring Overview, book p. 9.*
 
 Per Q22, the range terms used in delivery rules:
 
 - **"You can see" / "in sight"** = unlimited range, capped only by the caster's actual line of sight (and environmental constraints). A wizard atop a tower with a clear visual on a goblin half a mile away can target it.
-- **"Within Close"** = within 5' of the caster (Adventuring Overview ch. 02).
-- **"Within Far"** = within Far range (per Adventuring Overview's distance table).
+- **"Within Close"** = within 5' of the caster (book p. 9).
+- **"Within Near"** = 5 to 30 feet (book p. 9).
+- **"Within Far"** = beyond 30 feet, no upper bound (book p. 9). Effectively any distance, consistent with the sight-unlimited interpretation above.
 
 This interpretation means Cube, Sphere, Line, and Remote can target across very long distances when the caster has unobstructed visual.
 
@@ -177,6 +188,8 @@ Per Q13, Imbue's "+2 Mana per additional Target" lets the caster imbue **multipl
 
 ## 3. Duration & Focus
 
+*Duration & Focus section: book p. 90. Multi-focus rule: book p. 10. Status conditions: book p. 13.*
+
 ### 3.1 Default duration
 - **Damage** is instant.
 - **Effects** last until the caster's next Turn.
@@ -205,20 +218,22 @@ Practical translation (proposed):
 This split is a community-facing interpretation of the FAQ wording — see Q2 for confirmation.
 
 ### 3.5 Continual duration
+*"Continual" definition: book p. 90. Cast Crit benefit rule: Basics, book p. 8.*
+
 A spell with **Continual** duration requires no Focus and lasts until ended (no Action to end).
 
 **How a spell becomes Continual:**
-1. **Spell-specific Crit benefit.** Some spells list "Duration is continual" as their Crit benefit (per Basics ch. 01: on a Cast Crit, the caster may forgo 1 Luck to use the spell's listed Crit benefit). Spells with this benefit include: Amplify, Apoplex, Babble, Charm, Color, Confuse, Enflesh, Fear, Freeze, Mute. **It is not a universal rule for all Cast Crits** — other spells have different Crit benefits (e.g., Burn upgrades its Cd4 to Cd6; Light blinds chosen Beings in the zone).
+1. **Spell-specific Crit benefit.** Some spells list "Duration is continual" as their Crit benefit (per Basics, book p. 8: on a Cast Crit, the caster may forgo 1 Luck to use the spell's listed Crit benefit). Spells with this benefit include: Amplify, Apoplex, Babble, Charm, Color, Confuse, Enflesh, Fear, Freeze, Mute (book p. 93+). **It is not a universal rule for all Cast Crits** — other spells have different Crit benefits (e.g., Burn upgrades its Cd4 to Cd6; Light blinds chosen Beings in the zone).
 2. **Class features and perks** (see §7) — e.g., Witch Hex makes a chosen spell continual on a chosen target without Focus.
 3. **Spell-baseline duration.** A few spells may have Continual duration intrinsically per their description.
 
-**Generic Cast Crit benefit (when not forgoing Luck for the spell's Crit benefit):** Per Basics ch. 01, deal damage equal to the casting Stat to the Target(s).
+**Generic Cast Crit benefit (when not forgoing Luck for the spell's Crit benefit):** Per Basics (book p. 8), deal damage equal to the casting Stat to the Target(s).
 
 ### 3.6 Damage does not break focus (FAQ)
 Taking damage does not break focus. This is not 5E concentration.
 
 ### 3.7 One focused effect at a time (default)
-Per Adventuring Overview ch. 02 line 53, focus ends early if you drop it or if you focus on another effect. The default cap is **one focused effect at a time**. Focusing on a new spell ends the prior focus.
+Per Adventuring Overview (book p. 10): focus ends early if you drop it or if you focus on another effect. The default cap is **one focused effect at a time**. Focusing on a new spell ends the prior focus.
 
 **Class-feature carveouts to the one-focus default:** see §7.
 
@@ -246,6 +261,8 @@ Per Q14:
 ## 4. Combat Interactions
 
 ### 4.1 Group Turn Initiative
+*Turn Order: Adventuring Overview, book p. 14.*
+
 Heroes act as a single group, then monsters act as a single group, then the next round begins. Within a group's turn, members can move and take actions in any order they like.
 
 **Implication for focus:** the per-round Maintain-Focus check fires once per round at the **start of the hero group's turn** (or the monster's, for NPC casters), not on a per-individual-turn basis since there isn't one.
@@ -257,6 +274,7 @@ Armor does **not** reduce spell damage. Spells aren't "attacks" mechanically.
 Block and Dodge are attack defenses only. They do not apply to spell damage.
 
 ### 4.4 Saves vs spell effects
+*Save Difficulties: Hero Creation, book p. 22.*
 
 **Heroes save; NPCs do not.** Saves are a Hero-side mechanic for defending against incoming harm. NPCs are never the saving party — when a Hero casts at an unwilling NPC, the Hero's Cast Check is the only roll; on pass, the spell's effect applies.
 
@@ -277,10 +295,10 @@ Per Q26, the ways to interrupt or undo another caster's spell:
 
 | Mechanism | Source | How it works |
 |---|---|---|
-| **Dispel spell** | Magic ch. 05 | Cast targeting an active magic effect; on pass, the effect is suspended for the Dispel's duration (1 round, or until focus drops). On a Cast Crit, the effect is completely dispelled (unless it's a Relic Power). The dispelled effect is treated as an unwilling Target — Dispel always triggers a Cast Check. |
-| **Magus — Block Cast** | Class feature | The Magus can Block Casts that target them, if the cast calls for a Reflex Save or has Touch / Remote delivery. On a Block Crit, the effect is dispelled. |
-| **Monster abilities** | Bestiary | E.g., Flail Snail Reflective Shell (d6: 1 reflects, 2-3 dispels, 4-6 normal); Artificials' Antimagic Vulnerability (Dazed Cd4 if Dispel-targeted); Cryptid Cloak of Darkness dispels magic light. |
-| **Status with "unless dispelled"** | Adventuring | Some environmental effects (Dread Wave, Psychic Stun) apply statuses removed only by Dispel. |
+| **Dispel spell** | Magic ch., book p. 94 | Cast targeting an active magic effect; on pass, the effect is suspended for the Dispel's duration (1 round, or until focus drops). On a Cast Crit, the effect is completely dispelled (unless it's a Relic Power). The dispelled effect is treated as an unwilling Target — Dispel always triggers a Cast Check. |
+| **Magus — Block Cast** | Class feature, book p. 47 | The Magus can Block Casts that target them, if the cast calls for a Reflex Save or has Touch / Remote delivery. On a Block Crit, the effect is dispelled. |
+| **Monster abilities** | Bestiary, book p. 113+ | E.g., Flail Snail Reflective Shell (d6: 1 reflects, 2-3 dispels, 4-6 normal); Artificials' Antimagic Vulnerability (Dazed Cd4 if Dispel-targeted); Cryptid Cloak of Darkness dispels magic light. |
+| **Status with "unless dispelled"** | Adventuring, book p. 26 | Some environmental effects (Dread Wave, Psychic Stun) apply statuses removed only by Dispel. |
 
 **Note on Dispel duration:** Dispel uses standard spell duration rules — 1 round unless the caster Focuses (then until focus drops) or crits (complete dispel of non-Relic effects).
 
@@ -311,6 +329,8 @@ Per Q30, casting and Stealth are **per-spell**. Whether a cast breaks Stealth de
 ---
 
 ## 5. Imbue — Special Rules
+
+*Imbue delivery: book p. 90. FAQ video clarifications cited in §5.3 and §5.4.*
 
 ### 5.1 Cast model (FAQ: weapon-as-conduit)
 The spell is cast onto a willing Being's weapon within Far. The weapon becomes a conduit until discharged or expired (see Q5). On hit, the imbue may discharge into the target.
@@ -349,9 +369,11 @@ Multiple separate casts can stack imbues onto the same weapon. Each stacked imbu
 Each ruling below was decided after walking through the rulebook, FAQ, and creator-clarification video. Items still pending creator confirmation are marked **PENDING**. Items locked by RAW or FAQ evidence are marked **RAW** or **FAQ**.
 
 ### Q1 — "Unless you specify otherwise" for Area deliveries — **PENDING**
+*Source: book p. 90 (Magic / Delivery).*
+
 **Scenario:** Wizard casts Burn as a Sphere centered on a melee scrum: 3 goblins + 1 fighter ally are in the sphere.
 
-**RAW (Core Rulebook 05_Magic/01_Spells):** Area deliveries "Target everything in it unconditionally, unless you specify otherwise." Aura's own description carves out caster choice. The other Areas (Cone, Cube, Glyph, Line, Sphere) do not.
+**RAW (book p. 90):** Area deliveries "Target everything in it unconditionally, unless you specify otherwise." Aura's own description carves out caster choice. The other Areas (Cone, Cube, Glyph, Line, Sphere) do not.
 
 The phrase **"unless you specify otherwise"** has two reasonable readings:
 
@@ -398,12 +420,14 @@ This ruling has the largest single impact on module behavior — if Reading A is
 ---
 
 ### Q5 — Status persistence for those leaving the zone — **RAW**
+*Sources: Burn spell (book p. 93), Fear spell (book p. 95), Status conditions (book p. 13), Duration rule (book p. 90).*
+
 **Scenario:** A Burning goblin runs out of a focused Sphere of Burn. A Frightened goblin runs out of a focused Sphere of Fear.
 
 **RAW evidence:**
 - Burn spell text: "This Burning Status does not require Focus." Burning's own Cd4 + dousing rules govern duration.
 - Fear spell text: target is Frightened "for the duration, ending early if you Cast this Spell again." Duration here = focus duration.
-- General duration rule: effects last until the caster's next Turn unless the caster Focuses to sustain.
+- General duration rule (book p. 90): effects last until the caster's next Turn unless the caster Focuses to sustain.
 
 **Decision:** Spell-applied statuses persist per the spell's own duration text and the status's own rules. **Zone position does not gate persistence.** Burning is governed by its Cd4 + dousing. Frightened (from Fear) lasts as long as the wizard maintains focus, regardless of where the goblin runs to. Leaving the Area does NOT end an applied status.
 
@@ -460,13 +484,15 @@ This ruling has the largest single impact on module behavior — if Reading A is
 ---
 
 ### Q11 — Multiple simultaneous focuses — **RAW**
+*Source: Adventuring Overview, book p. 10.*
+
 **Scenario:** A caster wants to maintain focus on two different spells at once.
 
-**RAW (Adventuring Overview ch. 02 line 53):** Focus ends early if you drop it or focus on another effect.
+**RAW (book p. 10):** Focus ends early if you drop it or focus on another effect.
 
 **Decision:** Default cap is **one focused effect at a time**. Focusing on a new spell ends any prior focus. Class features are the explicit exception:
 - **Witch — Hex (4th lvl):** allows half-Witch-level (rounded up) spells to be made continual on chosen targets *without* focus. These do not consume the focus slot.
-- **Revelator — Aura's Boon (4th lvl):** allows simultaneous focus on one Spell-as-Aura and one Spell-as-Imbue.
+- **Revelator — Paragon's Aura (4th lvl):** allows simultaneous focus on one Spell-as-Aura and one Spell-as-Imbue.
 
 Anything else that grants extended focus must come from a class feature, perk, or Continual duration.
 
@@ -714,36 +740,36 @@ See §4.6.
 The base rules above are modified by specific class features and perks. This section enumerates every carveout that affects the magic system, so they're easy to find when implementing or interpreting an unusual case.
 
 ### Focus / Duration carveouts
-- **Witch — Hex (4th lvl):** "Choose for the effects of a Spell you Cast (not the damage) to become continual for one of the Targets until you use this Feature on a different Target. This does not require your Focus." Capped at half Witch level (rounded up) simultaneous Hex'd spells.
-- **Revelator — Aura's Boon (4th lvl):** Cast as 10' Aura for no Mana, and may focus on one Spell-as-Aura plus one Spell-as-Imbue at the same time.
-- **Wizard — Manifold Mind (4th lvl):** Focus on up to **2 Spells** simultaneously. At 8th level, up to **3 Spells**.
+- **Witch — Hex (4th lvl)** *(book p. 61)*: "Choose for the effects of a Spell you Cast (not the damage) to become continual for one of the Targets until you use this Feature on a different Target. This does not require your Focus." Capped at half Witch level (rounded up) simultaneous Hex'd spells.
+- **Revelator — Paragon's Aura (4th lvl)** *(book p. 53)*: Cast as 10' Aura for no Mana, and may focus on one Spell-as-Aura plus one Spell-as-Imbue at the same time.
+- **Wizard — Manifold Mind (4th lvl)** *(book p. 63)*: Focus on up to **2 Spells** simultaneously. At 8th level, up to **3 Spells**.
 
 ### Cost / Crit / Damage carveouts
-- **Wizard — Sculpt Spell (2nd lvl):** -1 Mana on Spell delivery cost.
-- **Wizard — Archwizard (10th lvl):** -2 Mana on Spell delivery cost (supersedes Sculpt Spell).
-- **Sorcerer — Spell-Slinger (2nd lvl):** Cast Crit on natural 19-20 (vs. baseline 20 only). Spell damage uses d8 instead of d6 (scales for all spell damage dice — base + bonus).
-- **Sorcerer — Overpowered (10th lvl):** Cast Crit on natural 18-20. Caster may take 2 Fatigue to regain Cd6 Mana per turn and bypass the per-cast Mana cap.
+- **Wizard — Sculpt Spell (2nd lvl)** *(book p. 63)*: -1 Mana on Spell delivery cost.
+- **Wizard — Archwizard (10th lvl)** *(book p. 63)*: -2 Mana on Spell delivery cost (supersedes Sculpt Spell).
+- **Sorcerer — Spell-Slinger (2nd lvl)** *(book p. 57)*: Cast Crit on natural 19-20 (vs. baseline 20 only). Spell damage uses d8 instead of d6 (scales for all spell damage dice — base + bonus).
+- **Sorcerer — Overpowered (10th lvl)** *(book p. 57)*: Cast Crit on natural 18-20. Caster may take 2 Fatigue to regain Cd6 Mana per turn and bypass the per-cast Mana cap.
 
 ### Multi-cast carveouts
-- **Sorcerer — Quickening (4th lvl):** Skip Move to Cast a Spell. No Mana can be spent on this Cast (floor-cast only). Effectively grants a second cast per turn.
-- **Sorcerer — Spell Twinning (8th lvl):** If you Cast the same Spell twice in a turn, the second Cast Check is Favored.
+- **Sorcerer — Quickening (4th lvl)** *(book p. 57)*: Skip Move to Cast a Spell. No Mana can be spent on this Cast (floor-cast only). Effectively grants a second cast per turn.
+- **Sorcerer — Spell Twinning (8th lvl)** *(book p. 57)*: If you Cast the same Spell twice in a turn, the second Cast Check is Favored.
 
 ### Mana resource carveouts
-- **Sorcerer — Tap (1st lvl):** Reduce Max HP to gain Mana (2× the reduction) when you Cast. Reduction ends on Rest. Lethal HP reduction resolves the cast before death; body vaporizes.
-- **Wizard — Mana regeneration:** Regains Mana on **Rest *or Study*** (Wizards have a unique Study activity that restores Mana).
+- **Sorcerer — Tap (1st lvl)** *(book p. 57)*: Reduce Max HP to gain Mana (2× the reduction) when you Cast. Reduction ends on Rest. Lethal HP reduction resolves the cast before death; body vaporizes.
+- **Wizard — Mana regeneration** *(book p. 63)*: Regains Mana on **Rest *or Study*** (Wizards have a unique Study activity that restores Mana).
 
 ### Spell knowledge carveouts
-- **Wizard — Extracurricular (6th lvl):** Spend a Studied die to Cast any one Spell — **even a Spell you don't know** — with that casting. Exception to Q29's "known spells only" rule.
-- **Wizard — Page Master (1st lvl):** Includes the Bookworm Perk; on a successful cast, spend a Studied die to add it to the damage or healing roll.
+- **Wizard — Extracurricular (6th lvl)** *(book p. 63)*: Spend a Studied die to Cast any one Spell — **even a Spell you don't know** — with that casting. Exception to Q29's "known spells only" rule.
+- **Wizard — Page Master (1st lvl)** *(book p. 63)*: Includes the Bookworm Perk; on a successful cast, spend a Studied die to add it to the damage or healing roll.
 
 ### Trinket carveouts
-- **Gish perk:** Allows a caster to use a Weapon as a Trinket. Additionally, when casting a Spell with Imbue delivery on a Weapon they have Equipped, they may make an attack with that Weapon as part of the same Action.
+- **Gish perk** *(book p. 68)*: Allows a caster to use a Weapon as a Trinket. Additionally, when casting a Spell with Imbue delivery on a Weapon they have Equipped, they may make an attack with that Weapon as part of the same Action.
 
 ### Imbue carveouts
-- **Levitate-Imbue perk:** When you cast Levitate as Imbue on a 2-slot-or-less Item to grant 30' Fly Speed, the Imbue persists without Focus until you Imbue another Item this way.
+- **Levitate-Imbue perk** *(book p. 73)*: When you cast Levitate as Imbue on a 2-slot-or-less Item to grant 30' Fly Speed, the Imbue persists without Focus until you Imbue another Item this way.
 
 ### Glyph carveouts
-- **Snareroot Trapper perk:** Cast Sprout with a Glyph delivery for no additional Mana and without Focusing. One Sprout-Glyph active at a time.
+- **Snareroot Trapper perk** *(book p. 72)*: Cast Sprout with a Glyph delivery for no additional Mana and without Focusing. One Sprout-Glyph active at a time.
 
 (More carveouts likely exist across all 20 classes — to be enumerated in a future doc pass.)
 
@@ -824,7 +850,78 @@ These rulings, if changed by Taron, would prompt revisions:
 
 ---
 
+## Page Reference Index
+
+Quick lookup for the rulebook citations used in this document. Page numbers are **printed book page numbers** (PDF page = book page + 4 in the Interactive PDF release).
+
+### Core mechanics
+
+| Rule | Book p |
+|---|---|
+| Crit / Cast Crit benefit ("Stat-bonus damage OR spell's listed Crit benefit") | 8 |
+| Distance definitions (Close / Near / Far) | 9 |
+| Multi-focus rule ("Focus ends early if you drop it or focus on another effect") | 10 |
+| Rests & Mana restoration | 11 |
+| Status conditions (Burning, Charmed, Confused, Dazed, Incapacitated, etc.) | 13 |
+| Turn Order / Group Turn ("Heroes take the first Turn") | 14 |
+| Statuses listed in Adventuring Overview ("unless dispelled" tags) | 26 |
+| Save Difficulties (Endure / Reflex / Will formulas) | 22 |
+| Studied dice (Study downtime activity) | 19 |
+
+### Magic chapter (book p. 90+)
+
+| Rule | Book p |
+|---|---|
+| Casting overview, three cast choices, Cast Check rule | 90 |
+| Damage scaling (1d6 base, +1d6 per Mana) | 90 |
+| Effect, Delivery cost & scaling table, Duration, Focus, Continual | 90 |
+| All delivery descriptions (Aura, Cone, Cube, Glyph, Imbue, Line, Remote, Sphere, Touch) | 90 |
+| Trinkets section | 92 |
+
+### Spell list (book p. 93+)
+
+| Spell | Book p |
+|---|---|
+| Burn | 93 |
+| Charm | 93 |
+| Dispel | 94 |
+| Fear | 95 |
+| Life | 96 |
+| Polymorph | 97 |
+
+### Class features (book p. 31–88)
+
+| Class / Feature | Book p |
+|---|---|
+| Sorcerer (full class — Spell-Slinger, Quickening, Spell Twinning, Tap, Overpowered) | 57 |
+| Witch — Hex (4th lvl) | 61 |
+| Wizard — Sculpt Spell, Manifold Mind, Extracurricular, Archwizard, Page Master | 63 |
+| Revelator — Paragon's Aura (4th lvl) | 53 |
+| Magus — Block Cast | 47 |
+
+### Perks (book p. 64+)
+
+| Perk | Book p |
+|---|---|
+| Gish (Weapons-as-Trinkets) | 68 |
+| Bookworm (Studied dice) | 67 |
+| Snareroot Trapper (Sprout Glyph w/o Focus) | 72 |
+| Levitate-Imbue | 73 |
+
+### Relics & magic items (book p. 99+)
+
+| Item | Book p |
+|---|---|
+| Relics chapter overview | 99 |
+| Spell Scroll (consumable, free cast) | 100+ |
+| Spell Book (Trinket + Arcana check to cast) | 100+ |
+| Scroll, Protection (10' Aura, anti-Hellspawn/Undead/Divines/Fae) | 100+ |
+| Manasteal relic powers | 100+ |
+
+---
+
 ## Document Changelog
+- **0.5 (2026-05-05):** Added book-page references throughout (Magic, Adventuring Overview, Hero Creation, Class entries, Perks). Added a Page Reference Index at the end of the doc for quick lookup. Renamed "Aura's Boon" to its actual name "Paragon's Aura" in §7. Source mapping clarified: PDF page = book page + 4 (4-page front-matter offset).
 - **0.4 (2026-05-05):** Folded in Q30–Q47 decisions across §1 (Mana economy, target types, damage type & "Damage Base"), §2 (anchored vs caster-following Areas, range table integration), §4 (Damage typing / Immune-Weak interactions, Hold Action with Cast, Stealth-by-spell), §5 (Imbue + Attack Crit), §7 (full class-feature carveouts: Wizard Manifold Mind / Extracurricular / Sculpt Spell / Archwizard / Page Master, Sorcerer Spell-Slinger / Quickening / Spell Twinning / Tap / Overpowered, plus Wizard Study-as-Mana-regen), §8 (Studied dice mechanic). Added Q30–Q47 entries to Decided Rulings. Added Polymorph focus-cost sidebar to §3.3. Refined §4.4 Saves with Hero-side-only clarification.
 - **0.3 (2026-05-05):** Major expansion. Added §1.5 Trinket detail, §2.3–2.7 (Area shape physical model, range interpretation, Line scaling math, Cube placement, Imbue multi-weapon), §3.10 (status conditions affecting casting/focus), §4.4 (NPC saves clarification), §4.5 (Counterspell & Dispel mechanisms), §5.6–5.7 (multi-weapon Imbue and stacking recap), §8 (Spell Knowledge & Relic Exceptions). Added Q13–Q29 to Decided Rulings. Renumbered Implementation Implications to §9. Renamed Magic Weapon perk to its actual name (Gish) in §7.
 - **0.2 (2026-05-04):** Walked through Q1–Q12 with project lead. Locked decisions for all 12 questions. Added §3.7 (default one focused effect), §3.8 (focus & Incapacitation), §3.9 (focus check failure), and §7 (class & perk carveouts). Renumbered Implementation Implications to §8. Items still PENDING creator confirmation: Q1 reading, Q7 Held-Action sub-question, Q8 cannot-pay sub-questions.
