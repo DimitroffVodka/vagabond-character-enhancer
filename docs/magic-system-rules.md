@@ -1,6 +1,6 @@
 # Vagabond Magic System — Rules Reference & Open Questions
 
-**Status:** Draft v0.5 — adds rulebook page references throughout (citing book page numbers from the Core Rulebook PDF)
+**Status:** Draft v0.6 — comprehensive sweep of all magic-related rules (full class casting features for Druid/Luminary/Magus/Revelator/Witch, damage typing philosophy, spell acquisition rates, plus several factual corrections)
 **Date:** 2026-05-05
 **Sources cited:**
 - **Core Rulebook PDF** — page numbers below refer to printed book page numbers (PDF page = book page + 4 due to 4-page front-matter offset). Markdown source mirror at `Core Rulebook/05_Magic/`.
@@ -64,6 +64,25 @@ Base 1d6. +1d6 per additional Mana spent on damage.
 - **Manasteal Relics** (consumable kills): d4 / 2d4 / 3d4 Mana per tier on a kill with the relic weapon.
 - **Sorcerer — Tap** (1st lvl): reduce Max HP to gain Mana (2× the reduction). Reduction ends on Rest.
 
+### 1.5b Spell acquisition rate per class
+
+Casting classes gain their starting spells at 1st level and acquire additional spells automatically on level-up.
+
+| Class | Starting | Required | Auto-gain rate | Total at 10th lvl |
+|---|---|---|---|---|
+| Druid | 4 | Polymorph | +1 every 2 levels | 8 |
+| Luminary | 4 | Life, Light | +1 every 2 levels | 8 |
+| Sorcerer | 4 | — | +1 every 2 levels | 8 |
+| Witch | 4 | — | +1 every 2 levels | 8 |
+| Wizard | 4 | — | +1 every 2 levels | 8 |
+| Magus | 2 | Ward | +1 every 3 levels | 5 |
+| Revelator | 2 | Exalt | +1 every 3 levels | 5 |
+
+Other paths to a known spell:
+- **Elf — Naturally Attuned** (Ancestry): 1 spell at character creation, cast with chosen Skill
+- **Spell-granting perks** (e.g., book p. 69 perk): 1 chosen spell + chosen Cast Skill; takeable multiple times
+- **Wizard — Study activity** (book p. 19): may be used to swap a Class Feature choice, including a known Spell
+
 ### 1.6 Targets — what counts as a Target
 Per Q37, a "Target" can be:
 - **Beings** — Heroes, NPCs, animals, monsters
@@ -71,10 +90,13 @@ Per Q37, a "Target" can be:
 - **Empty space** — placement origins for Area deliveries (Sphere, Cube, Line, Glyph) can be empty space; the Area exists at that location for its duration regardless of whether anyone is currently in it
 
 ### 1.7 Damage type & "Damage Base"
+*See Basics, book p. 8: "Rather than specific damage types, the GM decides if an Ability applies to a source of damage."*
 
-Per Q40, every spell has a **Damage Base** field:
+Vagabond does not maintain a fixed catalog of damage types. The GM decides whether a target's Immune / Weak / Armor-bypass effect applies to the actual narrative source of the damage. For weapons, damage is described narratively (piercing / slashing / blunt). **Spells are more specific**: their **Damage Base** field hints at the narrative source for GM judgment.
 
-- **Typed Damage Base** (e.g., Burn = Fire): The spell can deal damage at the standard 1d6 base / +1d6 per Mana scaling. Damage uses the listed type, which interacts with target Immune / Weak status (§4.6).
+Per Q40, every spell has a Damage Base field:
+
+- **Typed Damage Base** (e.g., Burn = Fire): The spell can deal damage at the standard 1d6 base / +1d6 per Mana scaling. The named source (Fire, Cold, Shock, etc.) is what the GM uses when deciding Immune / Weak applicability (§4.6).
 - **Damage Base: -** : The spell is **purely effect-only**. There is no damage component; the caster cannot pay Mana to add damage to such spells.
 
 ### 1.8 Trinket / free-hand requirement
@@ -296,7 +318,8 @@ Per Q26, the ways to interrupt or undo another caster's spell:
 | Mechanism | Source | How it works |
 |---|---|---|
 | **Dispel spell** | Magic ch., book p. 94 | Cast targeting an active magic effect; on pass, the effect is suspended for the Dispel's duration (1 round, or until focus drops). On a Cast Crit, the effect is completely dispelled (unless it's a Relic Power). The dispelled effect is treated as an unwilling Target — Dispel always triggers a Cast Check. |
-| **Magus — Block Cast** | Class feature, book p. 47 | The Magus can Block Casts that target them, if the cast calls for a Reflex Save or has Touch / Remote delivery. On a Block Crit, the effect is dispelled. |
+| **Magus — Spell Parry** (2nd lvl) | Class feature, book p. 47 | The Magus can Block Casts that target them, if the cast calls for a Reflex Save or has Touch / Remote delivery. On a Block Crit, the effect is dispelled. |
+| **Magus — Spell Surge** (6th, 10th lvl) | Class feature, book p. 47 | When the Magus passes a Spell Parry by 10+ (8+ at 10th level), they can reflect the Cast back at the caster. |
 | **Monster abilities** | Bestiary, book p. 113+ | E.g., Flail Snail Reflective Shell (d6: 1 reflects, 2-3 dispels, 4-6 normal); Artificials' Antimagic Vulnerability (Dazed Cd4 if Dispel-targeted); Cryptid Cloak of Darkness dispels magic light. |
 | **Status with "unless dispelled"** | Adventuring, book p. 26 | Some environmental effects (Dread Wave, Psychic Stun) apply statuses removed only by Dispel. |
 
@@ -740,7 +763,7 @@ See §4.6.
 The base rules above are modified by specific class features and perks. This section enumerates every carveout that affects the magic system, so they're easy to find when implementing or interpreting an unusual case.
 
 ### Focus / Duration carveouts
-- **Witch — Hex (4th lvl)** *(book p. 61)*: "Choose for the effects of a Spell you Cast (not the damage) to become continual for one of the Targets until you use this Feature on a different Target. This does not require your Focus." Capped at half Witch level (rounded up) simultaneous Hex'd spells.
+- **Witch — Hex (1st lvl)** *(book p. 61)*: "Choose for the effects of a Spell you Cast (not the damage) to become continual for one of the Targets until you use this Feature on a different Target. This does not require your Focus." Capped at half Witch level (rounded up) simultaneous Hex'd spells.
 - **Revelator — Paragon's Aura (4th lvl)** *(book p. 53)*: Cast as 10' Aura for no Mana, and may focus on one Spell-as-Aura plus one Spell-as-Imbue at the same time.
 - **Wizard — Manifold Mind (4th lvl)** *(book p. 63)*: Focus on up to **2 Spells** simultaneously. At 8th level, up to **3 Spells**.
 
@@ -771,7 +794,37 @@ The base rules above are modified by specific class features and perks. This sec
 ### Glyph carveouts
 - **Snareroot Trapper perk** *(book p. 72)*: Cast Sprout with a Glyph delivery for no additional Mana and without Focusing. One Sprout-Glyph active at a time.
 
-(More carveouts likely exist across all 20 classes — to be enumerated in a future doc pass.)
+### Druid carveouts *(book p. 37)*
+- **Tempest Within (2nd lvl):** Reduce Cold, Fire, and Shock damage taken by (half Druid Level) per damage die.
+- **Innervate (4th lvl):** Action to give a Close Being some of your Mana, or to end one of [Charmed, Confused, Frightened, Sickened] on a Close Being (or yourself).
+- **Ancient Growth (6th lvl):** While focusing a self-only Polymorph, may focus 1 additional Spell. Beast attacks while polymorphed count as (+1) Relic; bonus increases every 6 Druid levels.
+- **Savagery (8th lvl):** +1 Armor while polymorphed.
+
+### Luminary carveouts *(book p. 45)*
+- **Radiant Healer (1st lvl):** Includes Assured Healer perk; healing rolls of your Spells can Explode on their highest value.
+- **Overheal (2nd lvl):** Excess HP from healing redirects to caster or a visible Being.
+- **Ever-Cure (4th lvl):** When you restore HP, may end one of [Charmed, Confused, Dazed, Frightened, Sickened] on the target.
+- **Revivify (6th lvl):** Life Spell can revive Beings dead up to 1 hour. If the Luminary dies, they auto-revive once per day.
+- **Saving Grace (8th lvl):** Healing rolls also Explode on a 2 (in addition to the highest value).
+- **Life-Giver (10th lvl):** Beings revived by the Luminary start at 4 Fatigue (or lower if they had less); Life doesn't add Fatigue when used by this Luminary.
+
+### Magus carveouts *(book p. 47)*
+- **Spell Parry (2nd lvl):** Block Casts that include the Magus as a Target if the cast calls for Reflex / Touch / Remote. Crit-Block dispels the effect.
+- **Arcane Recall (4th lvl):** Action to swap a Spell Known (not Ward). Once per Rest, or take 1 Fatigue between uses.
+- **Spell Surge (6th lvl, 10th lvl):** Pass a Spell Parry by 10+ to reflect the Cast back at the caster. At 10th level, threshold drops to 8+.
+- **Aegis Obscura (8th lvl):** Magus and the Target of their Ward Spell have Allsight; both take half damage from magic-based sources.
+
+### Revelator carveouts *(book p. 53)*
+- **Lay on Hands (2nd lvl):** Touch a Being to restore (d6 + Level) HP. Action or skip Move. Twice per Rest.
+- **Divine Resolve (6th lvl):** Immune to Blinded / Paralyzed / Sickened. Lay on Hands cures these statuses on its target as well.
+
+### Witch carveouts *(book p. 61)*
+- **Ritualism (2nd, 10th lvl):** 10-minute Ritual once per Shift; twice per Shift at 10th level.
+- **Things Betwixt (4th lvl):** Once per Scene, Action or skip Move to become Invisible until next turn (requires Focus).
+- **Coventry (6th lvl):** Can Cast Spells that Near Allies can Cast (borrows ally spell pool). **Major exception to Q29's known-spells-only rule.**
+- **Widdershins (8th lvl):** Hex target is Weak to caster's damage (does not ignore Immunity); caster's Spells ignore the Hex target's Status Immunities.
+
+(Class casting rules are still being filled in — feature names and pages confirmed against the rulebook PDF.)
 
 ---
 
@@ -893,11 +946,13 @@ Quick lookup for the rulebook citations used in this document. Page numbers are 
 
 | Class / Feature | Book p |
 |---|---|
+| Druid — Tempest Within / Innervate / Ancient Growth / Savagery / Force of Nature | 37 |
+| Magus — Spell Parry / Arcane Recall / Spell Surge / Aegis Obscura | 47 |
+| Luminary — Radiant Healer / Overheal / Ever-Cure / Revivify / Saving Grace / Life-Giver | 45 |
+| Revelator — Lay on Hands / Paragon's Aura / Divine Resolve | 53 |
 | Sorcerer (full class — Spell-Slinger, Quickening, Spell Twinning, Tap, Overpowered) | 57 |
-| Witch — Hex (4th lvl) | 61 |
-| Wizard — Sculpt Spell, Manifold Mind, Extracurricular, Archwizard, Page Master | 63 |
-| Revelator — Paragon's Aura (4th lvl) | 53 |
-| Magus — Block Cast | 47 |
+| Witch — Hex (1st) / Ritualism / Things Betwixt / Coventry / Widdershins | 61 |
+| Wizard — Sculpt Spell / Manifold Mind / Extracurricular / Archwizard / Page Master | 63 |
 
 ### Perks (book p. 64+)
 
@@ -921,6 +976,7 @@ Quick lookup for the rulebook citations used in this document. Page numbers are 
 ---
 
 ## Document Changelog
+- **0.6 (2026-05-05):** Comprehensive magic sweep. Added §1.5b Spell acquisition rate per class (full table + secondary sources). Refactored §1.7 with damage-typing philosophy from Basics ch. 01 (RAW: GM-decides; no fixed damage type taxonomy). Major §7 expansion: Druid carveouts (Tempest Within, Innervate, Ancient Growth, Savagery), Luminary carveouts (Radiant Healer, Overheal, Ever-Cure, Revivify, Saving Grace, Life-Giver), Magus carveouts (Spell Parry, Arcane Recall, Spell Surge, Aegis Obscura), Revelator carveouts (Lay on Hands, Divine Resolve), Witch carveouts (Ritualism, Things Betwixt, Coventry, Widdershins). Page Reference Index updated. **Corrections:** Witch's Hex is **1st level**, not 4th. Magus's counterspell feature is named **Spell Parry**, not "Block Cast". Magus also has **Spell Surge** for reflecting cast on Block-by-10+/8+ — added to §4.5.
 - **0.5 (2026-05-05):** Added book-page references throughout (Magic, Adventuring Overview, Hero Creation, Class entries, Perks). Added a Page Reference Index at the end of the doc for quick lookup. Renamed "Aura's Boon" to its actual name "Paragon's Aura" in §7. Source mapping clarified: PDF page = book page + 4 (4-page front-matter offset).
 - **0.4 (2026-05-05):** Folded in Q30–Q47 decisions across §1 (Mana economy, target types, damage type & "Damage Base"), §2 (anchored vs caster-following Areas, range table integration), §4 (Damage typing / Immune-Weak interactions, Hold Action with Cast, Stealth-by-spell), §5 (Imbue + Attack Crit), §7 (full class-feature carveouts: Wizard Manifold Mind / Extracurricular / Sculpt Spell / Archwizard / Page Master, Sorcerer Spell-Slinger / Quickening / Spell Twinning / Tap / Overpowered, plus Wizard Study-as-Mana-regen), §8 (Studied dice mechanic). Added Q30–Q47 entries to Decided Rulings. Added Polymorph focus-cost sidebar to §3.3. Refined §4.4 Saves with Hero-side-only clarification.
 - **0.3 (2026-05-05):** Major expansion. Added §1.5 Trinket detail, §2.3–2.7 (Area shape physical model, range interpretation, Line scaling math, Cube placement, Imbue multi-weapon), §3.10 (status conditions affecting casting/focus), §4.4 (NPC saves clarification), §4.5 (Counterspell & Dispel mechanisms), §5.6–5.7 (multi-weapon Imbue and stacking recap), §8 (Spell Knowledge & Relic Exceptions). Added Q13–Q29 to Decided Rulings. Renumbered Implementation Implications to §9. Renamed Magic Weapon perk to its actual name (Gish) in §7.
