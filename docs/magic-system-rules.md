@@ -1,6 +1,6 @@
 # Vagabond Magic System — Rules Reference & Open Questions
 
-**Status:** Draft v0.6 — comprehensive sweep of all magic-related rules (full class casting features for Druid/Luminary/Magus/Revelator/Witch, damage typing philosophy, spell acquisition rates, plus several factual corrections)
+**Status:** Draft v0.7 — citation audit: book is the primary authority throughout body sections; Q references demoted to decision-rationale pointers ("see §6 Qxx") only where the book is silent or ambiguous
 **Date:** 2026-05-05
 **Sources cited:**
 - **Core Rulebook PDF** — page numbers below refer to printed book page numbers (PDF page = book page + 4 due to 4-page front-matter offset). Markdown source mirror at `Core Rulebook/05_Magic/`.
@@ -54,11 +54,11 @@ Base 1d6. +1d6 per additional Mana spent on damage.
 | Wizard, Sorcerer, Druid, Witch, Luminary | 4 × Class Level | Casting Stat + (Level/2, rounded up) |
 | Magus, Revelator | 2 × Class Level | Casting Stat + (Level/2, rounded up) |
 
-**Per-cast Mana cap** (Q45) is the maximum Mana spendable on a single cast at cast time. The on-hit Mana for Imbue is paid later and does not count against the cap.
+**Per-cast Mana cap** is the maximum Mana spendable on a single cast at cast time (book p. 31–88, defined per class). The on-hit Mana for Imbue is paid later and does not count against the cap.
 
-**0-Mana casting** (Q33) — A caster can configure any spell to fit their available Mana. Cannot attempt a cast whose total Mana cost exceeds the caster's current Mana. A caster with 0 Mana can still cast at the floor: 1d6 damage **OR** the spell's effect (only one — both costs 1 Mana), with a 0-Mana delivery (Touch / Remote single-target / Imbue base).
+**0-Mana casting** — A caster can configure any spell to fit their available Mana (book p. 90: cast choices include damage, effect, and delivery, each independently priced). Cannot attempt a cast whose total Mana cost exceeds the caster's current Mana. A caster with 0 Mana can still cast at the floor: 1d6 damage **OR** the spell's effect (only one — both costs 1 Mana), with a 0-Mana delivery (Touch / Remote single-target / Imbue base).
 
-**Mana restoration** (Q32):
+**Mana restoration** (book p. 11):
 - **Rest** (Shift of low activity, fed and rested): Mana restored to maximum. If HP already max, removes 1 Fatigue instead.
 - **Wizard — Study** (unique): also restores Mana.
 - **Manasteal Relics** (consumable kills): d4 / 2d4 / 3d4 Mana per tier on a kill with the relic weapon.
@@ -84,7 +84,9 @@ Other paths to a known spell:
 - **Wizard — Study activity** (book p. 19): may be used to swap a Class Feature choice, including a known Spell
 
 ### 1.6 Targets — what counts as a Target
-Per Q37, a "Target" can be:
+*Inferred from Magic chapter delivery descriptions (book p. 90).*
+
+A "Target" can be:
 - **Beings** — Heroes, NPCs, animals, monsters
 - **Items / Objects** — Imbue specifically targets a Weapon; damage spells with a typed Damage Base may target objects (a wooden door, a campfire) where it makes physical sense
 - **Empty space** — placement origins for Area deliveries (Sphere, Cube, Line, Glyph) can be empty space; the Area exists at that location for its duration regardless of whether anyone is currently in it
@@ -94,7 +96,7 @@ Per Q37, a "Target" can be:
 
 Vagabond does not maintain a fixed catalog of damage types. The GM decides whether a target's Immune / Weak / Armor-bypass effect applies to the actual narrative source of the damage. For weapons, damage is described narratively (piercing / slashing / blunt). **Spells are more specific**: their **Damage Base** field hints at the narrative source for GM judgment.
 
-Per Q40, every spell has a Damage Base field:
+Every spell has a Damage Base field (book p. 90):
 
 - **Typed Damage Base** (e.g., Burn = Fire): The spell can deal damage at the standard 1d6 base / +1d6 per Mana scaling. The named source (Fire, Cold, Shock, etc.) is what the GM uses when deciding Immune / Weak applicability (§4.6).
 - **Damage Base: -** : The spell is **purely effect-only**. There is no damage component; the caster cannot pay Mana to add damage to such spells.
@@ -136,18 +138,18 @@ Caster must have at least one hand free or holding a Trinket to cast.
 | Delivery | Default zone | Targeting |
 |---|---|---|
 | Aura | 10' radius sphere from caster's center, blocked by walls/ground | Caster picks targets in zone (explicit in description) |
-| Cone | 15' 3D wedge in front of caster, expanding 1:1 (width = length at the far end) | All in zone (see Q1) |
-| Cube | 5' cube placed at center of any visible grid tile; +1 Mana per additional independent 5' cube | All in zone (see Q1) |
+| Cone | 15' 3D wedge in front of caster, expanding 1:1 (width = length at the far end) | All in zone (caster discretion ambiguous — see §6 Q1) |
+| Cube | 5' cube placed at center of any visible grid tile; +1 Mana per additional independent 5' cube | All in zone (caster discretion ambiguous — see §6 Q1) |
 | Glyph | 5' square glyph placed within Close on a visible target; when triggered, cast in a 5' cube from the glyph, then the glyph disappears | Single trigger window |
 | Imbue | Weapon equipped by a willing Being within Far; +2 Mana per additional weapon (multi-weapon) | Whoever the wielder hits |
-| Line | Caster picks any visible starting point and direction; line is 5'×30'×10' base | All in zone (see Q1) |
+| Line | Caster picks any visible starting point and direction; line is 5'×30'×10' base | All in zone (caster discretion ambiguous — see §6 Q1) |
 | Remote | Single Being target chosen at range; +1 Mana per additional independent target | Single target each |
-| Sphere | 5' radius sphere centered at any visible empty space | All in zone (see Q1) |
+| Sphere | 5' radius sphere centered at any visible empty space | All in zone (caster discretion ambiguous — see §6 Q1) |
 | Touch | Single target within Close (5'), or self | Single target |
 
 ### 2.3 Area shapes — physical model
 
-Per Q15–Q19 and Q23, Area deliveries are 3D shapes blocked by walls, floors, and ceilings:
+Area deliveries are 3D shapes blocked by walls, floors, and ceilings. Specific shape interpretations decided in §6 (Q15-Q23):
 
 | Delivery | Shape | Placement |
 |---|---|---|
@@ -159,15 +161,15 @@ Per Q15–Q19 and Q23, Area deliveries are 3D shapes blocked by walls, floors, a
 | Sphere | 3D sphere of given radius | Center placed at any visible empty space |
 
 **Universal rules for 3D Area shapes:**
-- No Area penetrates walls, floors, or ceilings (Q16). The shape is truncated at solid surfaces.
+- No Area penetrates walls, floors, or ceilings. The shape is truncated at solid surfaces. *(Decision rationale: §6 Q16 — RAW silent on penetration.)*
 - The caster cannot place an Area's center inside a solid object.
-- **Anchored vs caster-following (Q36):** Aura is the **only** delivery that follows the caster — its 10' sphere moves with them. **All other Areas are anchored once cast.** Cone emanates from the caster at cast time, but the resulting cone-shape is locked to that origin and direction; the cone does not rotate or follow if the caster moves. Cube, Sphere, Line, Glyph all stay where they were placed. A Sphere placed in a doorway stays in the doorway when the caster moves away.
+- **Anchored vs caster-following:** Aura is the **only** delivery whose description has it self-anchored to the caster (book p. 90: *"10' radius from you"*). All other Areas are anchored to their placement spot once cast. Cone emanates from the caster at cast time, but the resulting cone-shape is locked to that origin and direction; the cone does not rotate or follow if the caster moves. Cube, Sphere, Line, Glyph all stay where they were placed. *(Decision rationale: §6 Q36.)*
 - Vertical extent matters in principle but the game is played in 2D — altitude edge cases are generally ignored at the table.
 
 ### 2.4 Range — "in sight" interpretation
 *Distance definitions: Adventuring Overview, book p. 9.*
 
-Per Q22, the range terms used in delivery rules:
+The range terms used in delivery rules:
 
 - **"You can see" / "in sight"** = unlimited range, capped only by the caster's actual line of sight (and environmental constraints). A wizard atop a tower with a clear visual on a goblin half a mile away can target it.
 - **"Within Close"** = within 5' of the caster (book p. 9).
@@ -178,9 +180,9 @@ This interpretation means Cube, Sphere, Line, and Remote can target across very 
 
 ### 2.5 Line scaling — order of operations
 
-RAW: base 2 Mana. Length scaling: +1 Mana per 10' extra length. Width/height upgrade: doubles the cost (per +5' width or +10' height).
+RAW (book p. 90): base 2 Mana. Length scaling: +1 Mana per 10' extra length. Width/height upgrade: doubles the cost (per +5' width or +10' height).
 
-Per Q21, **PEMDAS applies** (per the rulebook's general Order-of-Operations rule):
+**PEMDAS applies** (per the rulebook's general Order-of-Operations rule):
 
 1. Apply width and height doublings first (multiplication).
 2. Then add length scaling on top (addition).
@@ -200,11 +202,11 @@ Worked examples:
 
 ### 2.6 Cube scaling — independent placement
 
-Per RAW, Cube costs +1 Mana per additional 5' cube. Per Q18 each additional cube is placed **independently** anywhere within sight — they do not need to be contiguous. This makes Cube a multi-spot AOE strike (each cube hits everything in its 5' volume). Compare to Remote (+1 per target single-Being-each).
+RAW (book p. 90): Cube costs +1 Mana per additional 5' cube. Each additional cube is placed **independently** anywhere within sight — they do not need to be contiguous. This makes Cube a multi-spot AOE strike (each cube hits everything in its 5' volume). Compare to Remote (+1 per target single-Being-each). *(Independence interpretation: §6 Q18.)*
 
 ### 2.7 Imbue scaling — multiple weapons
 
-Per Q13, Imbue's "+2 Mana per additional Target" lets the caster imbue **multiple willing wielders' weapons in a single cast**. Each imbued weapon then independently delivers the spell when its wielder hits. The 1-Mana on-hit cost is paid per weapon-discharge per the standard Imbue rules (see §5).
+Imbue's "+2 Mana per additional Target" (book p. 90) lets the caster imbue **multiple willing wielders' weapons in a single cast**. Each imbued weapon then independently delivers the spell when its wielder hits. The 1-Mana on-hit cost is paid per weapon-discharge per the standard Imbue rules (see §5). *(Multi-weapon interpretation: §6 Q13.)*
 
 ---
 
@@ -237,7 +239,7 @@ Practical translation (proposed):
 | Persistent status condition (Burning, Frightened, Restrained) | Once applied, lasts per its own status rules | No |
 | Restorative or transformative effect (Life heal, regrow tissue) | No — one-shot at cast | Yes — re-pay effect cost each round to recur |
 
-This split is a community-facing interpretation of the FAQ wording — see Q2 for confirmation.
+This split is a community-facing interpretation of the FAQ wording. *(See §6 Q2 for the categorization decision.)*
 
 ### 3.5 Continual duration
 *"Continual" definition: book p. 90. Cast Crit benefit rule: Basics, book p. 8.*
@@ -266,8 +268,7 @@ Incapacitated explicitly prevents focusing. Therefore any condition that include
 On a failed Maintain-Focus Cast Check, the spell ends. The 1 Mana spent on the attempt is lost (paid for the attempt, not the result). Effects already applied to targets persist per their own rules.
 
 ### 3.10 Status conditions affecting casting and focus
-
-Per Q14:
+*Status definitions: Adventuring Overview, book p. 13. Dazed nuance per §6 Q14.*
 
 | Status | Effect on casting | Effect on focus |
 |---|---|---|
@@ -313,7 +314,7 @@ The caster's stats / level / spell cost do not affect the save's Difficulty. A g
 
 ### 4.5 Counterspell & Dispel mechanisms
 
-Per Q26, the ways to interrupt or undo another caster's spell:
+The ways to interrupt or undo another caster's spell:
 
 | Mechanism | Source | How it works |
 |---|---|---|
@@ -326,24 +327,27 @@ Per Q26, the ways to interrupt or undo another caster's spell:
 **Note on Dispel duration:** Dispel uses standard spell duration rules — 1 round unless the caster Focuses (then until focus drops) or crits (complete dispel of non-Relic effects).
 
 ### 4.6 Damage type — Immune / Weak interactions
+*Immune / Weak rules: Basics, book p. 8. Spells' Damage Base: book p. 90.*
 
-Per Q46, spell damage with a typed Damage Base interacts with target Immune / Weak status:
+Spell damage with a typed Damage Base interacts with target Immune / Weak status:
 
 - **Immune to type → no damage taken.** Status effects tied to the spell may also be gated by immunity (e.g., Burn's Burning condition only applies *"if the Target isn't immune to Fire"*).
 - **Weak to type → extra damage die.** The "ignores Armor" facet of Weak is moot for spells (since armor doesn't reduce spell damage anyway per §4.2), but the bonus die does apply.
 - **Damage Base: -** spells (effect-only, see §1.7) have no damage type and never trigger Immune/Weak interactions.
 
 ### 4.7 Hold Action with a Cast
+*Hold Action: Encounters, book p. 14.*
 
-Per Q31, the **Hold** Action ("Use an Action or Move on an Off-Turn") can be used to defer a Cast Action to the off-turn:
+The **Hold** Action ("Use an Action or Move on an Off-Turn") can be used to defer a Cast Action to the off-turn:
 
 1. **A Cast can be Held** — Cast is an Action, so any Action-deferred via Hold can be a Cast.
 2. **No declared trigger required.** The caster picks any moment during the off-turn to release the Held Cast. (No "if X happens, I cast Y" reservation.)
 3. **Damage / interrupts do not cancel a Held Cast.** A Held Action is just a timing shift — the caster still has their Action to spend; damage taken in the meantime does not undo it. (Becoming Incapacitated would still prevent acting per §3.10.)
 
 ### 4.8 Stealth & casting
+*RAW silent. Decision rationale: §6 Q30.*
 
-Per Q30, casting and Stealth are **per-spell**. Whether a cast breaks Stealth depends on the spell's actual effect:
+Casting and Stealth are **per-spell**. Whether a cast breaks Stealth depends on the spell's actual effect:
 
 - A 30' Line of fire shooting from your hands obviously reveals you.
 - A subtle Touch on yourself in shadow does not.
@@ -356,7 +360,7 @@ Per Q30, casting and Stealth are **per-spell**. Whether a cast breaks Stealth de
 *Imbue delivery: book p. 90. FAQ video clarifications cited in §5.3 and §5.4.*
 
 ### 5.1 Cast model (FAQ: weapon-as-conduit)
-The spell is cast onto a willing Being's weapon within Far. The weapon becomes a conduit until discharged or expired (see Q5). On hit, the imbue may discharge into the target.
+The spell is cast onto a willing Being's weapon within Far (book p. 90). The weapon becomes a conduit until discharged or expired. On hit, the imbue may discharge into the target.
 
 ### 5.2 Cast Check
 The Attack Check made by the wielder doubles as the Cast Check.
@@ -370,20 +374,20 @@ Multiple spells can be imbued onto the same weapon. Each imbue is its own cast a
 ### 5.5 Damage and effect choices
 Per RAW cast rules (§1.1), the damage dice and effect intent are chosen at cast. The 1-Mana delivery cost is the only cost deferred to the on-hit moment.
 
-### 5.6 Multi-weapon Imbue (Q13)
-Imbue's "+2 Mana per additional Target" cost lets the caster Imbue **multiple willing wielders' weapons** in a single cast. Each imbued weapon independently delivers the spell when its wielder hits. The caster must still expend Focus to maintain the Imbue past their next turn (per Q6); a single focus slot covers all weapons imbued from the same cast.
+### 5.6 Multi-weapon Imbue
+Imbue's "+2 Mana per additional Target" cost (book p. 90) lets the caster Imbue **multiple willing wielders' weapons** in a single cast. Each imbued weapon independently delivers the spell when its wielder hits. The caster must still expend Focus to maintain the Imbue past their next turn; a single focus slot covers all weapons imbued from the same cast. *(Multi-weapon interpretation: §6 Q13. Focus requirement: §6 Q6.)*
 
-### 5.7 Imbue + Attack Crit (Q34)
+### 5.7 Imbue + Attack Crit
 
-When the wielder makes a natural-20 Attack Check with an imbued weapon, the same roll is **both** an Attack Crit and a Cast Crit (because the Attack Check IS the Cast Check for Imbue). Two separate Crit rewards apply:
+When the wielder makes a natural-20 Attack Check with an imbued weapon, the same roll is **both** an Attack Crit and a Cast Crit (because the Attack Check IS the Cast Check for Imbue, book p. 90). Two separate Crit rewards apply:
 
 - **Weapon-attack Crit:** Standard attack-crit reward (Stat-bonus damage from the attack), per Basics ch. 01.
-- **Spell Crit:** The wielder may forgo 1 Luck for either Stat-bonus damage on the spell **or** the spell's listed Crit benefit. **The wielder decides** which spell-crit reward to take (they made the crit).
+- **Spell Crit:** The wielder may forgo 1 Luck for either Stat-bonus damage on the spell **or** the spell's listed Crit benefit. **The wielder decides** which spell-crit reward to take (they made the crit). *(Decision rationale: §6 Q34.)*
 
 Both rewards stack on the same hit.
 
 ### 5.8 Stacking (FAQ) — recap
-Multiple separate casts can stack imbues onto the same weapon. Each stacked imbue is its own cast and its own Action. Per Q8, on a successful hit all stacked imbues fire simultaneously; each costs its own 1 Mana on hit (paid by either the caster or the wielder). The behavior when an imbue's payer can't afford the on-hit Mana is **PENDING** — see §6 Q8.
+Multiple separate casts can stack imbues onto the same weapon (creator FAQ Doc v1). Each stacked imbue is its own cast and its own Action. On a successful hit all stacked imbues fire simultaneously; each costs its own 1 Mana on hit (paid by either the caster or the wielder). The behavior when an imbue's payer can't afford the on-hit Mana is **PENDING** — see §6 Q8.
 
 ---
 
@@ -524,7 +528,7 @@ Anything else that grants extended focus must come from a class feature, perk, o
 ### Q12 — Focus check failure — **DECIDED**
 **Scenario:** Caster fails the per-round focus Cast Check.
 
-**Decision:** The spell ends immediately. The 1 Mana spent on the attempt is **lost** — paid for the attempt, not the result. Effects already applied to targets persist per their own rules (see Q5 for status persistence; once applied, they don't un-apply because focus ended).
+**Decision:** The spell ends immediately. The 1 Mana spent on the attempt is **lost** — paid for the attempt, not the result. Effects already applied to targets persist per their own rules (status persistence rationale in Q5; once applied, they don't un-apply because focus ended).
 
 ---
 
@@ -554,7 +558,7 @@ Anything else that grants extended focus must come from a class feature, perk, o
 ---
 
 ### Q17 — Cone shape — **DECIDED**
-**Decision:** Cone is a 3D wedge expanding 1:1 (width = length at the far end). 15' base = 15' long, 15' wide at the end. Per Q23 scaling, the cone's width grows proportionally with length.
+**Decision:** Cone is a 3D wedge expanding 1:1 (width = length at the far end). 15' base = 15' long, 15' wide at the end. The cone's width grows proportionally with length (Q23 scaling decision below).
 
 ---
 
@@ -592,7 +596,7 @@ Anything else that grants extended focus must come from a class feature, perk, o
 ---
 
 ### Q24 — Remote multi-target placement — **DECIDED**
-**Decision:** Each Remote target selected independently; targets do not need to cluster. Targets must each be within sight per Q22.
+**Decision:** Each Remote target selected independently; targets do not need to cluster. Targets must each be within sight (sight interpretation per Q22).
 
 ---
 
@@ -615,7 +619,7 @@ Anything else that grants extended focus must come from a class feature, perk, o
 **Decision:**
 - Touch range = within Close (5'), or self.
 - Touch on an unwilling target requires a normal Cast Check; no separate attack roll. (Imbue is the only delivery that substitutes Attack Check for Cast Check.)
-- Self-Touch = always willing, no Cast Check (per Q10).
+- Self-Touch = always willing, no Cast Check (Q10).
 
 ---
 
@@ -709,7 +713,7 @@ Caster's stats / level / spell cost do not influence the save's Difficulty. See 
 - **Near** = 5 to 30 feet
 - **Far** = beyond 30 feet (no upper bound in RAW)
 
-"Within Far" effectively means any distance, consistent with the sight-unlimited interpretation (Q22).
+"Within Far" effectively means any distance, consistent with the sight-unlimited interpretation (see §6 Q22).
 
 ---
 
@@ -829,8 +833,9 @@ The base rules above are modified by specific class features and perks. This sec
 ---
 
 ## 8. Spell Knowledge & Relic Exceptions
+*Spell-learning rules are spread across class entries (book p. 31–88) and ancestry entries.*
 
-Per Q29, casters can only cast Spells they know. There is no "any spell, any caster" model.
+Casters can only cast Spells they know. There is no "any spell, any caster" model.
 
 ### 8.1 Sources of known spells
 - **Class progression:** Each class entry lists which spells the class learns at which levels.
@@ -850,8 +855,9 @@ The casting tradition (Arcane / Divine / Glamour / Occult / Primal — see §1.4
 | **Scroll, Protection** (consumable) | Anyone reads to create a 10' Aura that moves with them for 1 Hour, granting Favor on Saves vs designated Beings (Hellspawn/Undead, or Divines/Fae, depending on the scroll's name). |
 
 ### 8.4 Studied dice (general mechanic)
+*Source: Downtime, book p. 19.*
 
-Per Q44, **Studied dice** are general-purpose downtime tokens, not specific to spells:
+**Studied dice** are general-purpose downtime tokens, not specific to spells:
 - Earned by the **Study** downtime activity.
 - Spend a Studied die for **Favor on a d20 roll** within the next day.
 - Must spend before the roll resolves.
@@ -976,6 +982,7 @@ Quick lookup for the rulebook citations used in this document. Page numbers are 
 ---
 
 ## Document Changelog
+- **0.7 (2026-05-05):** Citation audit. Restructured all body-section references so the **rulebook page** is the primary authority. Q references demoted to decision-rationale pointers (e.g., "*Decision rationale: §6 Q15*") only where the book is silent or interpretation is needed. Body sections §1–§5 and §7 now read as RAW summaries with their book pages cited inline; §6 remains the decision log; §9 keeps Q references for module implementation mapping.
 - **0.6 (2026-05-05):** Comprehensive magic sweep. Added §1.5b Spell acquisition rate per class (full table + secondary sources). Refactored §1.7 with damage-typing philosophy from Basics ch. 01 (RAW: GM-decides; no fixed damage type taxonomy). Major §7 expansion: Druid carveouts (Tempest Within, Innervate, Ancient Growth, Savagery), Luminary carveouts (Radiant Healer, Overheal, Ever-Cure, Revivify, Saving Grace, Life-Giver), Magus carveouts (Spell Parry, Arcane Recall, Spell Surge, Aegis Obscura), Revelator carveouts (Lay on Hands, Divine Resolve), Witch carveouts (Ritualism, Things Betwixt, Coventry, Widdershins). Page Reference Index updated. **Corrections:** Witch's Hex is **1st level**, not 4th. Magus's counterspell feature is named **Spell Parry**, not "Block Cast". Magus also has **Spell Surge** for reflecting cast on Block-by-10+/8+ — added to §4.5.
 - **0.5 (2026-05-05):** Added book-page references throughout (Magic, Adventuring Overview, Hero Creation, Class entries, Perks). Added a Page Reference Index at the end of the doc for quick lookup. Renamed "Aura's Boon" to its actual name "Paragon's Aura" in §7. Source mapping clarified: PDF page = book page + 4 (4-page front-matter offset).
 - **0.4 (2026-05-05):** Folded in Q30–Q47 decisions across §1 (Mana economy, target types, damage type & "Damage Base"), §2 (anchored vs caster-following Areas, range table integration), §4 (Damage typing / Immune-Weak interactions, Hold Action with Cast, Stealth-by-spell), §5 (Imbue + Attack Crit), §7 (full class-feature carveouts: Wizard Manifold Mind / Extracurricular / Sculpt Spell / Archwizard / Page Master, Sorcerer Spell-Slinger / Quickening / Spell Twinning / Tap / Overpowered, plus Wizard Study-as-Mana-regen), §8 (Studied dice mechanic). Added Q30–Q47 entries to Decided Rulings. Added Polymorph focus-cost sidebar to §3.3. Refined §4.4 Saves with Hero-side-only clarification.
