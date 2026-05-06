@@ -70,6 +70,16 @@ function _recordCastUseFx(actorId, spellId, useFx) {
   setTimeout(() => _castUseFxBySpell.delete(key), 5 * 60_000);
 }
 
+/** Read the most recent recorded useFx for an actor+spell, or null if no
+ *  record exists (entry expired, or this cast didn't go through the recorded
+ *  paths). Returns the boolean recorded value when present. Used by the
+ *  fallback imbue-button path to honor the original cast's Effect choice. */
+function _getCastUseFx(actorId, spellId) {
+  if (!actorId || !spellId) return null;
+  const key = `${actorId}:${spellId}`;
+  return _castUseFxBySpell.has(key) ? _castUseFxBySpell.get(key) : null;
+}
+
 /**
  * Apply the imbue's spell `causedStatuses` (and `critCausedStatuses` on a
  * crit) to all targets of a weapon attack. Reads the spell-effect payload
@@ -1853,6 +1863,10 @@ Hooks.once("ready", async () => {
      *  StatusHelper.processCausedStatuses. Used by the Talent cast pipeline
      *  (talent-cast.mjs) so gating works the same way it does for spells. */
     recordCastUseFx: _recordCastUseFx,
+    /** Read the most recent recorded useFx for an actor+spell, or null. Used
+     *  by the imbue-button fallback path to honor the original cast's Effect
+     *  choice when re-imbuing through a system-posted spell card. */
+    getCastUseFx: _getCastUseFx,
     detector: FeatureDetector,
     barbarian: BarbarianFeatures,
     bard: BardFeatures,

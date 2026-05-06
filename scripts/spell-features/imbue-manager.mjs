@@ -16,12 +16,21 @@
  *
  * On miss: nothing. Imbue persists on the weapon.
  *
- * DURATION
+ * DURATION (per `docs/magic-system-rules.md` §Q6)
  * ────────
- * In combat: imbue expires at the END of the round it was cast in unless the
- * caster is focusing on the spell. Caster maintains via the system's standard
- * spell-focus mechanism (clicking the focus star on the spell card / sheet);
- * we read `actor.system.focus.spellIds`.
+ * Imbue persists until any of these end-conditions:
+ *   - The imbue DISCHARGES on a successful delivered hit (caster paid the
+ *     1 Mana and the rider rode the attack). Cleared by `_annotateWeaponAttackCard`
+ *     after the spell-dice/effect annotation lands.
+ *   - The caster drops focus on the spell.
+ *   - Focus is otherwise broken (Incapacitated, Unconscious, etc.).
+ *   - In-combat, no-focus casts also expire at the end of the cast round
+ *     (general "Effects last until next turn" rule, focus-extended otherwise).
+ *
+ * In combat without focus: imbue expires at the END of the round it was cast
+ * in. Caster maintains via the system's standard spell-focus mechanism
+ * (clicking the focus star on the spell card / sheet); we read
+ * `actor.system.focus.spellIds`.
  *
  * Out of combat: imbue REQUIRES focus to stick — handleImbueCast aborts with
  * a notification if the caster isn't focusing. There's no round tick to
@@ -31,6 +40,13 @@
  *   - Delete the imbue AE on the wielder (player clicks the AE icon)
  *   - Caster drops focus on the spell → all imbues from that cast clear past
  *     their round-window
+ *
+ * Why discharge consumes (issue #1 follow-up): off-turn-attack perks like
+ * Check Hook and Interceptor used to re-trigger the rider every off-turn
+ * swing because the imbue was modeled as a "standing buff" that persisted
+ * across attacks within its window. §Q6 lists "the imbue discharges" as an
+ * end-condition, so a successful delivery now consumes the imbue and the
+ * next attack with that weapon does plain damage.
  *
  * COMBINED DAMAGE ROLL
  * ────────────────────
@@ -221,18 +237,20 @@ export const ImbueManager = {
   /* -------------------------------------------- */
 
   /**
-   * After any attack with the imbued weapon. RAW: imbue is a standing buff on
-   * the weapon, NOT consumed by attacking. Each hit gives the caster the
-   * option to spend 1 Mana to deliver the spell ride-along; misses do nothing.
-   * The imbue persists until end of round (or longer if caster is focusing).
+   * After any attack with the imbued weapon. Per `docs/magic-system-rules.md`
+   * §Q6, a successful delivered hit DISCHARGES the imbue and ends it; the
+   * actual `clearImbue` call lives in `_annotateWeaponAttackCard` so it runs
+   * after the spell-dice append and chat-card annotation are committed (see
+   * file header for path-timing rationale).
    *
    * Behavior here:
    *   HIT  + caster can pay (alive, conscious, ≥1 mana, or already-paid fallback):
    *           deduct mana from caster, set delivery-authorized sentinel,
-   *           stash annotation data, force-auto-roll the combined damage.
+   *           stash annotation data. Imbue is consumed downstream by
+   *           `_annotateWeaponAttackCard` once the card is annotated.
    *   HIT  + caster cannot pay:
    *           skip annotation + spell-dice append, post chat note explaining
-   *           why, weapon does normal damage. Imbue stays.
+   *           why, weapon does normal damage. Imbue STAYS for next attempt.
    *   MISS:  do nothing. Imbue stays. (No more "wasted" card.)
    *
    * @param {object} ctx - { item, actor, rollResult }
@@ -309,9 +327,17 @@ export const ImbueManager = {
     // weapon attack card. Without this, an effect-only spell like Charm
     // wouldn't apply ANYTHING on hit — the system reads the WEAPON's
     // causedStatuses (always empty) at apply time, never the spell's.
+    //
+    // Gate on `imbue.useFx`: if the player cast with "Include Effect" off
+    // (paid for damage only), don't carry the Effect through. Without this
+    // gate, a damage-only Burn imbue would still apply Burning on hit.
+    // Captured at cast time and stored on the imbue flag, NOT read live
+    // from `_castUseFxBySpell` here — that map could expire (5 min TTL) for
+    // long-running focus-sustained imbues.
     const spell = caster.items.get(imbue.spellId);
-    const spellCausedStatuses = spell?.system?.causedStatuses ?? [];
-    const spellCritCausedStatuses = spell?.system?.critCausedStatuses ?? [];
+    const fxAllowed = imbue.useFx ?? true; // legacy imbues without the flag default true
+    const spellCausedStatuses = fxAllowed ? (spell?.system?.causedStatuses ?? []) : [];
+    const spellCritCausedStatuses = fxAllowed ? (spell?.system?.critCausedStatuses ?? []) : [];
 
     // Stash annotation data so createChatMessage can tag the attack card.
     const dieSize = imbue.dieSize || 6;
@@ -519,6 +545,23 @@ export const ImbueManager = {
       [`flags.${MODULE_ID}.imbueStatusContext`]: imbueStatusContext
     });
     log("Imbue", `${actor.name}: annotated ${pending.spellName} (${typeLabel}) on attack card${imbueStatusContext.causedStatuses.length ? ` — ${imbueStatusContext.causedStatuses.length} status entry/entries embedded for apply-time` : ""}`);
+
+    // Consume the imbue on discharge (§Q6: imbue ends when it discharges).
+    // We only reach this point on a successful authorized delivery — misses
+    // never set FLAG_PENDING (onPostRollAttack returns early on miss), and
+    // denied deliveries (caster can't pay) likewise skip FLAG_PENDING and
+    // post a "cannot deliver" chat note instead. So clearing here is correct
+    // for all "the rider landed" cases and never fires for whiffs.
+    //
+    // Auto-roll path: weapon.rollDamage() ran inside VagabondChatCard.weaponAttack
+    // before ChatMessage.create, so the imbue flag was already consumed by
+    // the rollDamage patch's spell-dice append. Manual click path: spell dice
+    // are baked into data-damage-formula above, so the button doesn't need
+    // the imbue flag anymore. Clearing now is safe in both paths.
+    //
+    // Fixes the off-turn-double-fire bug where Check Hook / Interceptor
+    // perks gave a second attack with the same imbue, re-triggering the rider.
+    await this.clearImbue(actor);
   },
 
   /* -------------------------------------------- */
@@ -548,6 +591,13 @@ export const ImbueManager = {
     const damageDice = diceMatch ? parseInt(diceMatch[1]) : 0;
     const dieSize = diceMatch ? parseInt(diceMatch[2]) : 6;
 
+    // Read the recorded cast-time useFx so the button-click fallback honors
+    // whether the player paid for the Effect at cast. Default true if no
+    // record (e.g., system-direct cast bypassed VCE's recorder) — preserves
+    // legacy behavior in that edge case.
+    const recordedUseFx = game.vagabondCharacterEnhancer?.getCastUseFx?.(actor.id, spell.id);
+    const useFx = recordedUseFx === null || recordedUseFx === undefined ? true : recordedUseFx;
+
     const imbueData = JSON.stringify({
       spellId: spell.id,
       spellName: spell.name,
@@ -556,6 +606,7 @@ export const ImbueManager = {
       damageDice,
       dieSize,
       hasEffect: true,
+      useFx,
       effectDesc: spell.system.description || ""
     }).replace(/"/g, "&quot;");
 
@@ -721,6 +772,10 @@ export const ImbueManager = {
       damageDice: spellData.damageDice,
       dieSize: spellData.dieSize || 6,
       hasEffect: spellData.hasEffect,
+      // Player's "Include Effect" choice from cast time. onPostRollAttack
+      // gates the spell's causedStatuses on this — false means the imbue
+      // delivers damage only, no Burning/Frightened/etc. ride-along.
+      useFx: spellData.useFx ?? true,
       effectDesc: spellData.effectDesc,
       casterId: caster.id,
       // Deferred-delivery metadata (RAW: 1 Mana paid on hit, not at cast time)
@@ -916,6 +971,12 @@ export const ImbueManager = {
       damageDice: spellHasDamage ? (state.damageDice ?? 1) : 0,
       dieSize,
       hasEffect: true,
+      // Player's "Include Effect" toggle at cast time. We capture this NOW so
+      // the on-hit apply path can gate the spell's causedStatuses correctly —
+      // without it, an imbue cast as "damage only" would still apply Burning /
+      // Frightened / etc. on hit because the apply path used to read
+      // spell.system.causedStatuses live with no gate.
+      useFx: !!state.useFx,
       effectDesc: spell.system.description || "",
       pendingDeliveryCost: PENDING_DELIVERY,
       castInCombat: inCombat,

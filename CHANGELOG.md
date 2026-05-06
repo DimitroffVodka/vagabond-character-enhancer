@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.4.14 — Imbue discharge-on-hit + Effect gating
+
+Two follow-up fixes on top of v0.4.13's RAW rewrite — both surfaced in live play.
+
+### Imbue discharges on a delivered hit (consumes the imbue)
+
+Bug user reported: off-turn-attack perks like **Check Hook** and **Interceptor** could re-trigger the imbue rider on every off-turn swing, because the imbue was modeled as a "standing buff that persists across attacks within its window." Per `docs/magic-system-rules.md` §Q6 the imbue ends when it discharges — so a successful authorized delivery now consumes it, and the next attack with that weapon does plain damage until the caster re-imbues.
+
+`_annotateWeaponAttackCard` now calls `clearImbue` after the spell-dice append + chat-card annotation are committed. Misses never reach this path (early-return in `onPostRollAttack`); denied deliveries (caster can't pay the 1 Mana) likewise skip annotation and post a "cannot deliver" note instead — so clearing here only fires for "the rider landed" cases. Imbue stays for the next swing on misses and on can't-pay.
+
+### Effect gating: damage-only imbues stop applying status effects on hit
+
+Bug: an imbue cast with **Include Effect** off (paid for damage only) was still applying the spell's `causedStatuses` (Burning, Frightened, Charmed, etc.) on hit, because the apply path read `spell.system.causedStatuses` live without checking the player's cast-time toggle.
+
+Fix: `useFx` is now captured at cast time and stored on the imbue flag itself (not read live from the 5-min-TTL `_castUseFxBySpell` map — needed for long-running focus-sustained imbues that outlive the map). `onPostRollAttack` gates `spellCausedStatuses` and `spellCritCausedStatuses` on `imbue.useFx ?? true` (legacy imbues without the flag default to true to preserve old behavior). The fallback button path (`_storeImbueDataOnCard`) reads via the new `game.vagabondCharacterEnhancer.getCastUseFx(actorId, spellId)` API.
+
+Verified live: Burn imbue with Include Effect = false → hit deals damage, no Burning AE. Burn imbue with Include Effect = true → hit deals damage AND applies Burning. Off-turn Check Hook second attack with already-discharged imbue → plain weapon damage, no double-fire.
+
+---
+
 ## v0.4.13 — Imbue RAW rewrite + rules-correctness pass
 
 Reworked the Imbue spell delivery from "pay everything upfront, mandatory delivery on hit, consumed on attack" to a faithful read of the rulebook entry — and along the way caught and fixed three other rules-of-the-system issues that were independent of Imbue.
