@@ -1886,6 +1886,12 @@ Hooks.once("ready", async () => {
     auraEnd: (actor) => AuraManager.deactivate(actor),
     layOnHands: (actor) => RevelatorFeatures.useLayOnHands(actor),
     setDraconicResilience: (actor) => DrakenFeatures.promptResilienceChoice(actor),
+    /** Sorcerer Tap (L1): sacrifice Max HP for 2× Mana. Reduction persists
+     *  until Rest. See class-features/sorcerer-tap.mjs for the dialog and
+     *  the vaporize-on-death edge case (RAW: cast resolves first). */
+    tap: (actor) => SorcererFeatures.tap.openDialog(actor),
+    tapClear: (actor) => SorcererFeatures.tap.clearTap(actor),
+    tapReduction: (actor) => SorcererFeatures.tap.getCurrentReduction(actor),
     /** Mark a weapon item as an area attack — bypasses the single-target / range
      *  validation in RangeValidator. Use for breath weapons, cone/spray attacks,
      *  or any custom weapon that hits multiple targets in an area.
