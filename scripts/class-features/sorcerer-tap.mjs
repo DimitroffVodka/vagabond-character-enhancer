@@ -324,11 +324,24 @@ export const SorcererTap = {
   /**
    * Reset Tap on rest. The detection lives in the createChatMessage hook
    * registered in registerHooks; this is the actual reset action.
+   *
+   * Order-of-ops note: the system's rest action restores HP to whatever max
+   * was at the moment of rest — but Tap reduction is still active at that
+   * point, so HP gets clamped to the reduced max (e.g. 36 instead of 40).
+   * After clearTap removes the AE the max bumps back up, but `health.value`
+   * is still at the old reduced cap. So we top up `health.value` to the new
+   * (post-clear) max here. Manual clearTap via API doesn't trigger this —
+   * undoing Tap shouldn't be a free heal.
    */
   async _resetOnRest(actor) {
     const reduction = this.getCurrentReduction(actor);
     if (reduction === 0) return;
     await this.clearTap(actor);
-    log("SorcererTap", `${actor.name}: rest detected — Tap reduction cleared.`);
+    // Refill HP to the post-clear max (the rest action capped it short).
+    const newMax = actor.system?.health?.max ?? 0;
+    if (newMax > 0) {
+      await actor.update({ "system.health.value": newMax });
+    }
+    log("SorcererTap", `${actor.name}: rest detected — Tap reduction cleared, HP topped up to ${newMax}.`);
   }
 };
