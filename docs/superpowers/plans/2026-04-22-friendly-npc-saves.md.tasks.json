@@ -1,0 +1,67 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-22-friendly-npc-saves.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 0: Flag helper module (save-routing.mjs)",
+      "status": "completed",
+      "description": "**Goal:** Centralized read/write/resolve helpers for the controller flags.\n\n**Files:** Create `scripts/companion/save-routing.mjs`.\n\n**Verify:** Import module in Foundry console; exercise setController/getController/resolveSaveRoller/clearController on a PC + NPC.\n\n```json:metadata\n{\"files\": [\"scripts/companion/save-routing.mjs\"], \"verifyCommand\": \"manual: import module in Foundry console and exercise set/get/resolve/clear\", \"acceptanceCriteria\": [\"Constants exported\", \"getController returns object or null\", \"resolveSaveRoller resolves PC and skill label\", \"setController/clearController atomic\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 1: Extend socket-relay with setActorFlag op",
+      "status": "completed",
+      "description": "**Goal:** Player-triggered writes to flags on GM-owned actors.\n\n**Files:** Modify `scripts/socket-relay.mjs`.\n\n**Verify:** As player, call gmRequest(\"setActorFlag\", ...) on GM-owned NPC and confirm flag lands.\n\n```json:metadata\n{\"files\": [\"scripts/socket-relay.mjs\"], \"verifyCommand\": \"manual: run gmRequest from player console, confirm flag lands\", \"acceptanceCriteria\": [\"setActorFlag op handler registered\", \"scope guard enforced\", \"null value unsets\", \"Player can write via proxy\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 2: Save-routing patch module (replacement handlers)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** Replacement handleSaveRoll + handleSaveReminderRoll that route flagged NPCs to controller PC.\n\n**Files:** Create `scripts/companion/save-routing-patch.mjs`.\n\n**Verify:** After Task 3 install, smoke test per plan.\n\n```json:metadata\n{\"files\": [\"scripts/companion/save-routing-patch.mjs\"], \"verifyCommand\": \"manual: attack flagged NPC, confirm roll + damage attribution\", \"acceptanceCriteria\": [\"patchedHandleSaveRoll exported\", \"patchedHandleSaveReminderRoll exported\", \"Unflagged behavior unchanged\", \"Flagged NPC routes correctly\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 3: Install save-routing patch in ready hook",
+      "status": "completed",
+      "blockedBy": [3],
+      "description": "**Goal:** Replace system save handlers with patched versions at load.\n\n**Files:** Modify `scripts/vagabond-character-enhancer.mjs`.\n\n**Verify:** `VagabondDamageHelper.handleSaveRoll.name === \"patchedHandleSaveRoll\"`; run smoke tests.\n\n```json:metadata\n{\"files\": [\"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"manual: reload world, check patched handler installed, run smoke test\", \"acceptanceCriteria\": [\"Patch installed in ready\", \"Character regression check passes\", \"Flagged NPC smoke test passes\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 4: Set Save Controller dialog + NPC sheet button",
+      "status": "completed",
+      "blockedBy": [1, 2],
+      "description": "**Goal:** Manual UX to stamp controller flags via NPC sheet button.\n\n**Files:** Create `scripts/companion/controller-dialog.mjs`, `templates/controller-dialog.hbs`; modify `scripts/vagabond-character-enhancer.mjs`.\n\n**Verify:** Button on NPC sheet; dialog save/clear writes flags.\n\n```json:metadata\n{\"files\": [\"scripts/companion/controller-dialog.mjs\", \"templates/controller-dialog.hbs\", \"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"manual: open NPC sheet, click button, save/clear/reopen\", \"acceptanceCriteria\": [\"Header button present on NPC only\", \"Dialog Save writes flags\", \"Dialog Clear removes flags\", \"GM-proxy fallback works\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 5: Auto-stamp controller flags from summoner",
+      "status": "completed",
+      "blockedBy": [1, 2],
+      "description": "**Goal:** Stamp controller flags after Summoner placeToken (around line 964).\n\n**Files:** Modify `scripts/class-features/summoner.mjs`.\n\n**Verify:** Summon creature; flags present on token actor.\n\n```json:metadata\n{\"files\": [\"scripts/class-features/summoner.mjs\"], \"verifyCommand\": \"manual: summon creature, check flags on token actor\", \"acceptanceCriteria\": [\"Flags present post-summon\", \"Non-fatal on error\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 6: Auto-stamp controller flags from familiar",
+      "status": "completed",
+      "blockedBy": [1, 2],
+      "description": "**Goal:** Same as Task 5 for Familiar perk (around line 394).\n\n**Files:** Modify `scripts/perk-features/familiar.mjs`.\n\n**Verify:** Conjure familiar; flags present on token actor.\n\n```json:metadata\n{\"files\": [\"scripts/perk-features/familiar.mjs\"], \"verifyCommand\": \"manual: conjure familiar, check flags on token actor\", \"acceptanceCriteria\": [\"Flags present post-ritual\", \"Non-fatal on error\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 7: End-to-end test matrix",
+      "status": "completed",
+      "blockedBy": [4, 5, 6, 7],
+      "description": "**Goal:** Walk the 16-row test matrix in live Foundry.\n\n**Verify:** All 16 scenarios pass. See plan Task 7 for the table.\n\n```json:metadata\n{\"files\": [], \"verifyCommand\": \"manual: walk the 16-row test matrix from plan Task 7\", \"acceptanceCriteria\": [\"All 16 scenarios pass\", \"No regressions on character/unflagged paths\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 8: Changelog + version bump",
+      "status": "completed",
+      "blockedBy": [8],
+      "description": "**Goal:** User-visible release notes and module version bump (v0.3.3 → v0.3.4).\n\n**Files:** Modify `CHANGELOG.md`, `module.json`.\n\n**Verify:** `git diff HEAD~1 module.json CHANGELOG.md` shows expected changes.\n\n```json:metadata\n{\"files\": [\"CHANGELOG.md\", \"module.json\"], \"verifyCommand\": \"git diff module.json CHANGELOG.md\", \"acceptanceCriteria\": [\"CHANGELOG entry added\", \"Version bumped\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-22T00:00:09Z"
+}

@@ -4,97 +4,97 @@
     {
       "id": 0,
       "subject": "Task 0: Module Integration Scaffold",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** Create scripts/smoke-test/ tree with stub SmokeTest API on game.vagabondCharacterEnhancer, verify clean module load.\n\n**Files:**\n- Create: scripts/smoke-test/index.mjs\n- Modify: scripts/vagabond-character-enhancer.mjs\n\n**Verify:** typeof game.vagabondCharacterEnhancer.smokeTest === 'function' and stub returns empty result shape.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/index.mjs\", \"scripts/vagabond-character-enhancer.mjs\"], \"verifyCommand\": \"mcp evaluate: typeof game.vagabondCharacterEnhancer.smokeTest\", \"acceptanceCriteria\": [\"smokeTest is function\", \"returns empty summary shape\", \"no console errors on load\"]}\n```"
     },
     {
       "id": 1,
       "subject": "Task 1: Fixture Definitions and Builder",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** Implement six fixture actor specs and idempotent builder.\n\n**Files:**\n- Create: scripts/smoke-test/fixture-defs.mjs\n- Create: scripts/smoke-test/fixtures.mjs\n\n**Verify:** Fixtures.ensureAll() creates folder and six fixtures; second invocation is no-op.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/fixture-defs.mjs\", \"scripts/smoke-test/fixtures.mjs\"], \"verifyCommand\": \"mcp evaluate: Fixtures.ensureAll() then check folder + actors\", \"acceptanceCriteria\": [\"ensureAll creates folder + 6 fixtures\", \"re-run is no-op\", \"each fixture has declared class/items/spells\"]}\n```"
     },
     {
       "id": 2,
       "subject": "Task 2: Assertions and Console Watcher",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** Implement createAssert() collecting helper and ConsoleWatcher with snapshot/collect.\n\n**Files:**\n- Create: scripts/smoke-test/assertions.mjs\n- Create: scripts/smoke-test/console-watcher.mjs\n\n**Verify:** assert(false, msg) records failure without throwing; ConsoleWatcher captures errors via wrapped console.error.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/assertions.mjs\", \"scripts/smoke-test/console-watcher.mjs\"], \"verifyCommand\": \"mcp evaluate: createAssert + ConsoleWatcher snapshot/collect roundtrip\", \"acceptanceCriteria\": [\"assert collects failures without throwing\", \"ConsoleWatcher snapshot/collect returns errors since snapshot\"]}\n```"
     },
     {
       "id": 3,
       "subject": "Task 3: Sequential Runner with Snapshot/Restore",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1, 2],
       "description": "**Goal:** Build runner: discovers tests, sequential execution, per-test fixture snapshot/restore, result collection.\n\n**Files:**\n- Create: scripts/smoke-test/runner.mjs\n- Modify: scripts/smoke-test/index.mjs\n\n**Verify:** Runner.run with 4 demo tests (pass/fail/error/skip) produces correct status for each.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/runner.mjs\", \"scripts/smoke-test/index.mjs\"], \"verifyCommand\": \"mcp evaluate: Runner.run with demo test array\", \"acceptanceCriteria\": [\"4 demo tests produce pass/fail/error/skip statuses\", \"snapshot/restore is robust\", \"throwing test does not crash runner\", \"tier and pattern filters work\"]}\n```"
     },
     {
       "id": 4,
       "subject": "Task 4: Output (Console Table + Chat Banner)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** Format suite results into console.table and GM-only ChatMessage banner.\n\n**Files:**\n- Create: scripts/smoke-test/output.mjs\n- Modify: scripts/smoke-test/index.mjs\n\n**Verify:** Suite run creates GM-whispered ChatMessage with correct color banner.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/output.mjs\", \"scripts/smoke-test/index.mjs\"], \"verifyCommand\": \"mcp evaluate: smokeTest() then check messages.contents.at(-1).content\", \"acceptanceCriteria\": [\"console.table prints rows\", \"ChatMessage whispered to GM only\", \"banner color matches outcome (green/yellow/red)\"]}\n```"
     },
     {
       "id": 5,
       "subject": "Task 5: Tier A — Boot + Focus Tests",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4],
       "description": "**Goal:** Author 7 tests: 3 boot + 4 focus tests per spec section 6.\n\n**Files:**\n- Create: scripts/smoke-test/tests/tier-a/boot.mjs\n- Create: scripts/smoke-test/tests/tier-a/focus.mjs\n- Modify: scripts/smoke-test/index.mjs\n\n**Verify:** smokeTest({tier:'a', pattern:/^(boot|focus)\\./}) → total 7, passed 7.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/tests/tier-a/boot.mjs\", \"scripts/smoke-test/tests/tier-a/focus.mjs\", \"scripts/smoke-test/index.mjs\"], \"verifyCommand\": \"mcp evaluate: smokeTest({tier:'a', pattern:/^(boot|focus)\\\\./}).summary\", \"acceptanceCriteria\": [\"7 tests defined\", \"all 7 pass on clean world\", \"_discoverTests aggregates from tier files\"]}\n```"
     },
     {
       "id": 6,
       "subject": "Task 6: Tier A — Companion + Spell Systems Tests",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** Author 9 tests: 4 companion + 5 spell systems (imbue, bless, ward, hex).\n\n**Files:**\n- Create: scripts/smoke-test/tests/tier-a/companion.mjs\n- Create: scripts/smoke-test/tests/tier-a/spells.mjs\n- Modify: scripts/smoke-test/index.mjs\n\n**Verify:** filtered run returns 9 tests, all pass.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/tests/tier-a/companion.mjs\", \"scripts/smoke-test/tests/tier-a/spells.mjs\", \"scripts/smoke-test/index.mjs\"], \"verifyCommand\": \"mcp evaluate: smokeTest({tier:'a', pattern:/^(companion|imbue|bless|ward|hex)\\\\./}).summary\", \"acceptanceCriteria\": [\"9 tests defined and passing\", \"no new console errors\"]}\n```"
     },
     {
       "id": 7,
       "subject": "Task 7: Tier A — Aura/Polymorph/Brawl + Detection/AE + Encumbrance/FX",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [6],
       "description": "**Goal:** Author final 9 Tier A tests across three subsystem groups, complete Tier A (25 total).\n\n**Files:**\n- Create: scripts/smoke-test/tests/tier-a/aura-polymorph-brawl.mjs\n- Create: scripts/smoke-test/tests/tier-a/detection-ae.mjs\n- Create: scripts/smoke-test/tests/tier-a/encumbrance-fx.mjs\n- Modify: scripts/smoke-test/index.mjs\n\n**Verify:** smokeTest({tier:'a'}).summary → total 25, passed 25.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/tests/tier-a/aura-polymorph-brawl.mjs\", \"scripts/smoke-test/tests/tier-a/detection-ae.mjs\", \"scripts/smoke-test/tests/tier-a/encumbrance-fx.mjs\", \"scripts/smoke-test/index.mjs\"], \"verifyCommand\": \"mcp evaluate: smokeTest({tier:'a'}).summary\", \"acceptanceCriteria\": [\"25 Tier A tests passing\", \"no console errors\"]}\n```"
     },
     {
       "id": 8,
       "subject": "Task 8: Class-Swap Helper for TestPC",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** Add Fixtures.swapClass(actorName, className, level) for Tier B class-per-test setup.\n\n**Files:**\n- Modify: scripts/smoke-test/fixtures.mjs\n\n**Verify:** swapClass to Barbarian level 5; assert single class item + barbarian_* flags.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/fixtures.mjs\"], \"verifyCommand\": \"mcp evaluate: swapClass + assert classes/flags\", \"acceptanceCriteria\": [\"swapClass replaces class items\", \"runs feature-detector rescan\", \"idempotent on re-run with same class\"]}\n```"
     },
     {
       "id": 9,
       "subject": "Task 9: Tier B — Martial + Skirmisher Classes (8 tests)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7, 8],
       "description": "**Goal:** Author 8 class signature tests: Barbarian, Fighter, Monk, Pugilist, Rogue, Gunslinger, Hunter, Dancer.\n\n**Files:**\n- Create: scripts/smoke-test/tests/tier-b/martial.mjs\n- Create: scripts/smoke-test/tests/tier-b/skirmisher.mjs\n- Modify: scripts/smoke-test/runner.mjs (add setup hook)\n- Modify: scripts/smoke-test/index.mjs\n\n**Verify:** smokeTest({tier:'b', pattern:/^(barbarian|fighter|monk|pugilist|rogue|gunslinger|hunter|dancer)\\./}).summary → total 8, passed >= 6.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/tests/tier-b/martial.mjs\", \"scripts/smoke-test/tests/tier-b/skirmisher.mjs\", \"scripts/smoke-test/runner.mjs\", \"scripts/smoke-test/index.mjs\"], \"verifyCommand\": \"mcp evaluate: smokeTest({tier:'b', pattern:/^(martial|skirmisher pattern)/}).summary\", \"acceptanceCriteria\": [\"8 tests defined\", \"setup hook in runner\", \">= 6 of 8 pass\"]}\n```"
     },
     {
       "id": 10,
       "subject": "Task 10: Tier B — Caster + Specialist Classes (12 tests)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [9],
       "description": "**Goal:** Author 12 class signature tests: Wizard, Magus, Sorcerer, Druid, Revelator, Witch, Luminary, Alchemist, Bard, Merchant, Summoner, Vanguard.\n\n**Files:**\n- Create: scripts/smoke-test/tests/tier-b/casters.mjs\n- Create: scripts/smoke-test/tests/tier-b/specialists.mjs\n- Modify: scripts/smoke-test/index.mjs\n\n**Verify:** smokeTest({tier:'b'}).summary → total 20, passed >= 15.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/tests/tier-b/casters.mjs\", \"scripts/smoke-test/tests/tier-b/specialists.mjs\", \"scripts/smoke-test/index.mjs\"], \"verifyCommand\": \"mcp evaluate: smokeTest({tier:'b'}).summary\", \"acceptanceCriteria\": [\"12 caster/specialist tests defined\", \"full Tier B (20) passing >= 15\"]}\n```"
     },
     {
       "id": 11,
       "subject": "Task 11: Tier C — Perk Generator",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [8],
       "description": "**Goal:** Auto-generate flag-presence smoke tests for every PERK_REGISTRY entry.\n\n**Files:**\n- Create: scripts/smoke-test/tier-c-config.mjs\n- Create: scripts/smoke-test/tests/tier-c/perks.mjs\n- Modify: scripts/smoke-test/index.mjs\n\n**Verify:** smokeTest({tier:'c', pattern:/^perk\\./}) generates ~95-104 tests, most pass.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/tier-c-config.mjs\", \"scripts/smoke-test/tests/tier-c/perks.mjs\", \"scripts/smoke-test/index.mjs\"], \"verifyCommand\": \"mcp evaluate: smokeTest({tier:'c', pattern:/^perk\\\\./}).summary\", \"acceptanceCriteria\": [\"all PERK_REGISTRY entries get tests\", \"skip table consulted\", \"override table consulted\", \"flag + AE assertions per entry\"]}\n```"
     },
     {
       "id": 12,
       "subject": "Task 12: Tier C — Spell Generator + Spell Assertions",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [11],
       "description": "**Goal:** Generate per-spell-manager smoke tests with handler blocks per manager.\n\n**Files:**\n- Create: scripts/smoke-test/spell-assertions.mjs\n- Create: scripts/smoke-test/tests/tier-c/spells.mjs\n- Modify: scripts/smoke-test/index.mjs\n\n**Verify:** smokeTest({tier:'c', pattern:/^spell\\./}) → total ~9-10 tests, most pass.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/spell-assertions.mjs\", \"scripts/smoke-test/tests/tier-c/spells.mjs\", \"scripts/smoke-test/index.mjs\"], \"verifyCommand\": \"mcp evaluate: smokeTest({tier:'c', pattern:/^spell\\\\./}).summary\", \"acceptanceCriteria\": [\"per-manager handlers in spell-assertions.mjs\", \"~9-10 spell tests generated\", \"polymorph in skip table\"]}\n```"
     },
     {
       "id": 13,
       "subject": "Task 13: Final Suite Run + README Section",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [10, 12],
       "description": "**Goal:** Run full suite, triage, populate skip table, document.\n\n**Files:**\n- Modify: scripts/smoke-test/tier-c-config.mjs\n- Create: docs/smoke-test.md\n\n**Verify:** smokeTest() runs end-to-end, pass rate >= 80%, duration < 2 minutes, docs exist.\n\n```json:metadata\n{\"files\": [\"scripts/smoke-test/tier-c-config.mjs\", \"docs/smoke-test.md\"], \"verifyCommand\": \"mcp evaluate: smokeTest().summary then check duration and pass rate\", \"acceptanceCriteria\": [\"full suite passes >= 80%\", \"duration < 120s\", \"docs page covers run/filter/output/extending\"]}\n```"
     }
