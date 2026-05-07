@@ -54,8 +54,12 @@ export const SorcererTap = {
     Hooks.on("renderApplicationV2", (app, html) => this._injectCastDialogLink(app, html));
 
     // Rest detection — same content-match pattern as Revelator Lay on Hands.
+    // We skip messages flagged as our own (Tap chat notes can mention "rest"
+    // in their wording and would otherwise self-trigger this reset, undoing
+    // the Tap on every cumulative cast).
     Hooks.on("createChatMessage", (message) => {
       if (!game.user.isGM) return;
+      if (message.getFlag(MODULE_ID, "tapMessage")) return;
       const content = message.content || "";
       if (!/\brest(s|ed|ing)?\b/i.test(content)) return;
       const speakerActorId = message.speaker?.actor;
@@ -168,12 +172,17 @@ export const SorcererTap = {
 
     await actor.update(updates);
 
-    // Chat note for the table.
+    // Chat note for the table. Tagged with our own flag so the rest-detection
+    // hook ignores it — otherwise the word "rest" anywhere in the wording
+    // would self-trigger _resetOnRest and undo the Tap immediately. Also
+    // worded as "Total reduction so far" instead of "this Rest" to be belt-
+    // and-suspenders against future regex changes.
     const manaGained = hpAmount * 2;
     await ChatMessage.create({
       speaker: ChatMessage.getSpeaker({ actor }),
       content: `<strong>Sorcerer: Tap</strong> — sacrificed ${hpAmount} Max HP for ${manaGained} Mana.
-                ${total > hpAmount ? `<em>Cumulative reduction this Rest: ${total}.</em>` : ""}`
+                ${total > hpAmount ? `<em>Total reduction so far: ${total}.</em>` : ""}`,
+      flags: { [MODULE_ID]: { tapMessage: true } }
     });
 
     log("SorcererTap", `${actor.name}: tapped ${hpAmount} HP → +${manaGained} Mana (cumulative reduction: ${total})`);
