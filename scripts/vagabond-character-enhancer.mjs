@@ -449,6 +449,22 @@ Hooks.once("init", () => {
       document.head.appendChild(style);
     }
     if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+    // Body has its OWN scroll separate from window.scrollX. Foundry can leave
+    // body.scrollLeft = 220 (DPR-scaled offset) after a bridge reload, which
+    // pushes #interface and #board to x=-220 — left sidebar disappears off
+    // screen. CSS overflow:hidden blocks user-initiated scroll but not
+    // programmatic, so we explicitly reset both axes here. A scroll-listener
+    // snaps it back if anything re-scrolls body later in the load.
+    if (document.body) {
+      document.body.scrollLeft = 0;
+      document.body.scrollTop = 0;
+      document.body.addEventListener("scroll", () => {
+        if (document.body.scrollLeft || document.body.scrollTop) {
+          document.body.scrollLeft = 0;
+          document.body.scrollTop = 0;
+        }
+      }, { passive: true });
+    }
   } catch (e) {
     console.warn(`${MODULE_ID} | bridge-reload viewport repair failed:`, e);
   }
