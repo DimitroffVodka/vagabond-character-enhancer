@@ -1,5 +1,44 @@
 # Changelog
 
+## v0.4.15 — Sorcerer Tap + reload-viewport repair + smoke harness fix
+
+### Sorcerer Tap (L1 class feature)
+
+Implements Tap per RAW: sacrifice N Max HP for 2N Mana. Cumulative reduction persists until Rest, then auto-clears via chat-message content match (same pattern as Revelator Lay on Hands).
+
+**UX (Option C):** sheet button injected on the Tap feature row + speculative `[Tap]` link on the cast dialog. Both entry points open the same dialog, which double-confirms when the requested reduction would drop current HP to 0 (vaporize edge — RAW: cast resolves before death). Player can also call `game.vagabondCharacterEnhancer.tap(actor)` directly.
+
+**Mechanics:** managed Active Effect on `system.health.bonus[]` (mode 2 ADD with `-N`, same array-bonus pattern as Merchant Deep Pockets). HP value clamps to post-AE max only when it exceeds. Mana gain uncapped — system data-prep clamps if it does. On rest: AE removed, HP topped up to new (post-clear) max so the rest-action restore doesn't leave HP capped at the reduced level.
+
+**API:** `game.vagabondCharacterEnhancer.tap(actor)` / `.tapClear(actor)` / `.tapReduction(actor)`.
+
+Fixes shipped together to make Tap stable in live play:
+- HP clamp post-AE (no double-subtraction).
+- Refill HP to full on rest-triggered clear (rest's HP-restore happens before our AE removal, so we top up).
+- Self-trigger prevention: Tap chat messages now carry a `tapMessage` flag; rest-detection hook skips them. Without this, the cumulative-tap chat note containing the word "Rest" would self-trigger `_resetOnRest` and undo the Tap immediately.
+- Removed `autofocus` from the dialog input — browsers auto-scroll focused elements into view, which combined with body's quirky scroll behavior could push the entire UI up and make the character sheet unusable.
+- AE icon switched from `skull-energy-blue` to `heart-glowing-red` (life-force theme).
+
+### Reload-viewport repair
+
+`foundry-mcp-bridge` appends `?_mcpReload=<ts>` to the URL when reloading via its tool. Foundry derives a body CSS class from the URL, so the class becomes literally `game?_mcpReload=<ts>` instead of `game`. CSS rules keyed on `body.game` (notably the overflow lock) stop matching — document becomes horizontally scrollable, the HUD overhang scrolls it ~1000px right, and the entire UI ends up off-screen left.
+
+Two-pronged init-time repair:
+1. Strip any `game?...` class and ensure clean `game` is present.
+2. Inject `html, body { overflow: hidden !important }` so the document can't scroll regardless of class state.
+
+Plus a follow-up for vertical scroll: `document.body.scrollLeft / scrollTop` is set to non-zero by Foundry's startup after a bridge reload (DPR-scaled offset, ~220px on a 1.25 DPR display). CSS `overflow: hidden` blocks user-initiated scroll but **not** programmatic. Effect: `#interface` and `#board` render at x=−220, the left sidebar (`#scene-controls`) at x=−204 — off-screen. Fix: reset both axes in the same init block, plus a scroll-listener that snaps body back if anything re-scrolls it later in the load.
+
+### Smoke harness — Tier C dialog suppression
+
+Tier C auto-generates one test per `PERK_REGISTRY` entry. Perks with `system.choiceConfig.type !== "none"` (Magical Secret, New Training, Advancement) triggered the system's `PerkChoiceDialog` on item create — awaited and never resolved by the test runner, leading to 3+ blocking dialogs piling up per smoke run and breaking the screen.
+
+Fix: override `choiceConfig.type` to `"none"` before `createEmbeddedDocuments`. Per the system's `documents/item.mjs`, the very first early-return is `if (!this.system.choiceConfig || this.system.choiceConfig.type === 'none') return;` — so this skips all choice processing (no dialog, no UUID resolution, no auto-delete). Pre-filling `selected` was insufficient because the system still tried to apply the choice and rejected synthetic values. Tier C only asserts that the feature flag lands after rescan, not that the choice plumbing works — so neutering the choice path is fine.
+
+Verified: 3 previously-broken dialog perks now pass with 0 leaked dialogs, 0 console errors.
+
+---
+
 ## v0.4.14 — Imbue discharge-on-hit + Effect gating
 
 Two follow-up fixes on top of v0.4.13's RAW rewrite — both surfaced in live play.
