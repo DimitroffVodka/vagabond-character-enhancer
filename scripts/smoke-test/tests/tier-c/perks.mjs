@@ -40,7 +40,21 @@ function _makePerkTest(perkName, entry) {
         return;
       }
       const doc = await pack.getDocument(found._id);
-      const created = await a.createEmbeddedDocuments("Item", [doc.toObject()]);
+      // Suppress the system's PerkChoiceDialog (Magical Secret, New Training,
+      // Advancement, etc.) by overriding `choiceConfig.type` to "none" before
+      // create. Per system documents/item.mjs the very first early-return is:
+      //   if (!this.system.choiceConfig || this.system.choiceConfig.type === 'none') return;
+      // — so this skips ALL choice processing (no dialog, no UUID resolution,
+      // no auto-delete). Pre-filling `selected` was insufficient because the
+      // system still tried to apply the choice and rejected our synthetic value.
+      // Tier C asserts only that the feature flag lands after rescan, not that
+      // the choice plumbing works — so neutering the choice path is fine.
+      const data = doc.toObject();
+      const choiceType = data?.system?.choiceConfig?.type;
+      if (choiceType && choiceType !== "none") {
+        data.system.choiceConfig.type = "none";
+      }
+      const created = await a.createEmbeddedDocuments("Item", [data]);
       if (!created?.length) {
         assert(false, `Failed to create perk item "${perkName}" on TestPC`);
         return;
