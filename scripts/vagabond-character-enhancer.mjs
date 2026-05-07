@@ -423,6 +423,38 @@ Hooks.on("getHeaderControlsActorSheetV2", (app, controls) => {
 /* -------------------------------------------- */
 
 Hooks.once("init", () => {
+  // ----- Bridge-reload viewport repair --------------------------------------
+  // foundry-mcp-bridge appends `?_mcpReload=<ts>` to the URL when reloading.
+  // Foundry derives a body CSS class from window.location.pathname-ish, so the
+  // class becomes literally `game?_mcpReload=<ts>` instead of `game`. CSS
+  // rules keyed on `body.game` (notably the overflow lock) stop matching, the
+  // document becomes horizontally scrollable, the HUD overhang scrolls it
+  // ~1000px right, and the entire UI ends up off-screen left.
+  //
+  // Two-pronged fix:
+  //   1) Strip any stray `game?...` class and ensure clean `game` is present.
+  //   2) Belt-and-suspenders: inject `html, body { overflow: hidden }` CSS so
+  //      the document can't scroll regardless of class state.
+  try {
+    const body = document.body;
+    if (body) {
+      const bad = [...body.classList].filter(c => c.startsWith("game?"));
+      bad.forEach(c => body.classList.remove(c));
+      if (!body.classList.contains("game")) body.classList.add("game");
+    }
+    if (!document.getElementById(`${MODULE_ID}-overflow-lock`)) {
+      const style = document.createElement("style");
+      style.id = `${MODULE_ID}-overflow-lock`;
+      style.textContent = "html, body { overflow: hidden !important; }";
+      document.head.appendChild(style);
+    }
+    // Defensive: if a prior reload left the doc scrolled, snap back to 0,0.
+    if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+  } catch (e) {
+    console.warn(`${MODULE_ID} | bridge-reload viewport repair failed:`, e);
+  }
+  // ---------------------------------------------------------------------------
+
   // Register module settings
   game.settings.register(MODULE_ID, "enableClassFeatures", {
     name: "Enable Class Feature Automation",
