@@ -98,7 +98,7 @@ export const SorcererTap = {
            ${currentReduction > 0 ? `| <em>Tap reduction this Rest: −${currentReduction} Max HP</em>` : ""}</p>
         <div class="form-group">
           <label>Sacrifice Max HP:</label>
-          <input type="number" name="hpAmount" value="1" min="1" max="${currentHP}" step="1" autofocus />
+          <input type="number" name="hpAmount" value="1" min="1" max="${currentHP}" step="1" />
         </div>
         <p style="font-size:0.85em;opacity:0.8;">
           Each HP sacrificed grants <strong>2 Mana</strong>. Reduction ends on Rest.
