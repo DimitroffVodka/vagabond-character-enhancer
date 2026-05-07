@@ -223,7 +223,7 @@ export const SorcererTap = {
 
     await actor.createEmbeddedDocuments("ActiveEffect", [{
       name: `Tap Reduction (−${total} Max HP)`,
-      img: "icons/magic/death/skull-energy-blue.webp",
+      img: "icons/magic/life/heart-glowing-red.webp",
       changes: [
         { key: "system.health.bonus", mode: 2, value: `-${total}` }
       ],
