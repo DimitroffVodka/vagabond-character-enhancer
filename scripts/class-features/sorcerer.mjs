@@ -4,7 +4,6 @@
  */
 
 import { MODULE_ID, log } from "../utils.mjs";
-import { SorcererTap } from "./sorcerer-tap.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -19,12 +18,9 @@ export const SORCERER_REGISTRY = {
   },
 
   // L1: Tap — Metamagic Perk + reduce Max HP to regain Mana
-  // STATUS: module — sheet button + cast-dialog link, managed AE on system.health.bonus
-  // See scripts/class-features/sorcerer-tap.mjs for the dialog + reduction logic.
-  // The Metamagic Perk grant itself is handled by the perk-features registry —
-  // Tap just sets `sorcerer_tap` and the player adds Metamagic to their perk list.
+  // STATUS: flavor — needs custom UI for HP→Mana conversion
   "tap": {
-    class: "sorcerer", level: 1, flag: "sorcerer_tap", status: "module",
+    class: "sorcerer", level: 1, flag: "sorcerer_tap", status: "flavor",
     description: "Gain Metamagic Perk. Reduce Max HP to regain Mana (2× the reduction). Restores on Rest."
   },
 
@@ -87,10 +83,6 @@ export const SORCERER_REGISTRY = {
 export const SorcererFeatures = {
 
   registerHooks() {
-    SorcererTap.registerHooks();
     log("Sorcerer","Hooks registered.");
-  },
-
-  /** Sub-feature accessor for API exposure in the main entry point. */
-  tap: SorcererTap
+  }
 };
