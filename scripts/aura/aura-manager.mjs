@@ -119,6 +119,15 @@ export const AuraManager = {
     // Clean up auras on combat end
     Hooks.on("deleteCombat", () => AuraManager._cleanupAllAuras());
 
+    // v14 region-based generic auras fire this hook via their executeScript
+    // behavior body. The behavior runs in a sandbox and can't directly
+    // call into VCE modules, so it broadcasts an intent here and the real
+    // tick resolution happens in module scope.
+    Hooks.on("vagabondCharacterEnhancer.regionAuraTick", (ctx) => {
+      AuraManager._handleRegionAuraEvent(ctx).catch(err =>
+        console.warn(`${MODULE_ID} | regionAuraTick error:`, err));
+    });
+
     // Round change: (1) deactivate auras whose source focus has dropped,
     // (2) tick damageTick / effectTick generic auras against hostiles in
     // range. Combined into one hook so the focus check happens BEFORE the
@@ -872,6 +881,224 @@ export const AuraManager = {
     } catch (err) {
       log("AuraManager", `Region path failed for Exalt on ${actor.name}; falling back to legacy. ${err.message}`);
       return false;
+    }
+  },
+
+  /**
+   * v14 region-based generic aura activation (Burn-style damage/effect
+   * ticks, Talent auras like Pyrokinesis). Replaces the legacy
+   * MeasuredTemplate + manual `_tickAura` containment scan + token-move
+   * re-tick plumbing with a Region whose `executeScript` behavior fires
+   * a custom hook on token entry / move-in / round start. The hook is
+   * caught by `_handleRegionAuraEvent` which dispatches to the existing
+   * cast resolution pipeline.
+   *
+   * Same activeAura flag shape as the legacy `activateGeneric`, with
+   * `regionId` (the Region) replacing `templateId` (the template) and
+   * `isRegionAura: true` as the path marker.
+   *
+   * @param {Actor} actor
+   * @param {object} spec - same shape as `activateGeneric`
+   * @returns {Promise<boolean>} true on success
+   */
+  async _activateGenericAsRegion(actor, spec) {
+    const token = AuraManager._getCasterToken(actor);
+    if (!token) return false;
+
+    try {
+      const scene = canvas.scene;
+      const radius = spec.radius ?? 10;
+      const distance = scene.grid?.distance || 5;
+      const radiusPx = radius * scene.grid.size / distance;
+      const center = token.getCenterPoint?.() ?? {
+        x: (token.document?.x ?? 0) + ((token.document?.width ?? 1) * scene.grid.size) / 2,
+        y: (token.document?.y ?? 0) + ((token.document?.height ?? 1) * scene.grid.size) / 2,
+      };
+
+      // executeScript body — runs in a sandboxed context where `this`
+      // is the window global (NOT the behavior). The reliable accessors
+      // are off the event payload: `event.region` is the region doc,
+      // `event.data.token` is the affected token, `event.name` is the
+      // event name. We forward to a module-scope hook that owns the
+      // real tick resolution.
+      const tickScript = `Hooks.callAll("vagabondCharacterEnhancer.regionAuraTick", { regionId: event.region.id, event });`;
+
+      const [region] = await scene.createEmbeddedDocuments("Region", [{
+        name: `${spec.itemName} Aura — ${actor.name}`,
+        visibility: 2,
+        color: spec.templateColor ?? "#9b6bff",
+        attachment: { token: token.id },
+        shapes: [{ type: "circle", x: center.x, y: center.y, radius: radiusPx, hole: false, gridBased: false }],
+        behaviors: [{
+          type: "executeScript",
+          name: "VCE Generic Aura Tick",
+          system: {
+            // `tokenMoveIn` covers tokens walking into the radius — the
+            // common case for hostiles wandering into a Burn aura.
+            // `tokenRoundStart` fires per-token at combat round start
+            // while they're inside the region (per-round tick).
+            // We intentionally do NOT subscribe to `tokenEnter` even
+            // though it sounds like the canonical "entry" event:
+            // tokenEnter + tokenMoveIn both fire for the same movement,
+            // and async handler races mean both dispatch concurrently
+            // — double-ticking the same target. Initial in-range tokens
+            // at region-create time are caught by the activation-time
+            // first tick instead.
+            events: ["tokenMoveIn", "tokenRoundStart"],
+            source: tickScript,
+          },
+        }],
+        flags: {
+          [MODULE_ID]: {
+            auraOwner: actor.id,
+            sourceItemId: spec.sourceItemId,
+            sourceItemType: spec.sourceItemType ?? "talent",
+            generic: true,
+          },
+        },
+      }]);
+
+      const auraData = {
+        generic: true,
+        isRegionAura: true,
+        behavior: spec.behavior,
+        sourceItemId: spec.sourceItemId,
+        sourceItemType: spec.sourceItemType ?? "talent",
+        itemName: spec.itemName,
+        itemImg: spec.itemImg,
+        castConfig: spec.castConfig,
+        focusTalentId: spec.focusTalentId ?? null,
+        focusSpellId: spec.focusSpellId ?? null,
+        radius,
+        tokenId: token.id,
+        regionId: region.id,
+        tickedThisRound: spec.initialTickedActorIds ?? [],
+      };
+      await actor.setFlag(MODULE_ID, "activeAura", auraData);
+
+      // Post chat notification (same shape as activateGeneric).
+      ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2" data-card-type="aura-activate">
+          <div class="card-body">
+            <header class="card-header">
+              <div class="header-icon">
+                <img src="${spec.itemImg ?? "icons/svg/aura.svg"}" alt="${spec.itemName ?? "Aura"}">
+              </div>
+              <div class="header-info">
+                <h3 class="header-title">${spec.itemName ?? "Aura"}</h3>
+                <div class="metadata-tags-row">
+                  <div class="meta-tag tag-skill"><i class="fas fa-circle"></i><span>${radius}' Radius</span></div>
+                </div>
+              </div>
+            </header>
+            <section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                ${actor.name} casts <strong>${spec.itemName ?? "Aura"}</strong> as a ${radius}' Aura.
+              </div>
+              <div class="card-buttons" style="margin-top:0.5rem; text-align:center;">
+                <button data-action="vce-aura-deactivate" data-actor-id="${actor.id}" class="card-button">
+                  <i class="fas fa-times"></i> End Aura
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>`,
+        speaker: ChatMessage.getSpeaker({ actor }),
+      });
+
+      // Activation-time first tick — the region's tokenEnter event only
+      // fires on subsequent entries, not for tokens already standing in
+      // the area when the region is created. Reuse `_tickAura` to hit
+      // anyone already in range.
+      if (spec.behavior === "damageTick" || spec.behavior === "effectTick" || spec.behavior === "instant") {
+        // Synthesize a template-like object so the legacy tick reads
+        // its position from the region shape.
+        const fakeTemplate = { t: "circle", x: center.x, y: center.y, distance: radius };
+        await AuraManager._tickAura(actor, { ...auraData, _regionFakeTemplate: fakeTemplate });
+      }
+
+      log("AuraManager", `Activated generic aura "${spec.itemName}" (region path, ${spec.behavior}, ${radius}') for ${actor.name}`);
+      return true;
+    } catch (err) {
+      log("AuraManager", `Region path failed for generic aura on ${actor.name}; falling back to legacy. ${err.message}`);
+      return false;
+    }
+  },
+
+  /**
+   * Handle a region-aura tick event fired from a Region's executeScript
+   * behavior. Looks up the caster + validates the aura is still active,
+   * then dispatches a single-target tick against the entering token.
+   *
+   * We DON'T go through `_tickAura`'s containment scan — when a region
+   * fires `tokenEnter` / `tokenMoveIn` the token's new position hasn't
+   * always propagated to the canvas placeable yet (animation timing),
+   * so a position-based containment check can falsely report the token
+   * as out-of-range. The region itself has already decided the token
+   * is in the region (that's why the event fired); we trust that and
+   * dispatch directly to the cast resolution.
+   */
+  async _handleRegionAuraEvent(ctx) {
+    if (!game.user.isGM) return;
+    const { regionId, event } = ctx ?? {};
+    if (!regionId || !event) return;
+
+    const region = canvas.scene?.regions?.get(regionId);
+    if (!region) return;
+
+    const ownerActorId = region.getFlag(MODULE_ID, "auraOwner");
+    const actor = ownerActorId && game.actors.get(ownerActorId);
+    if (!actor) return;
+
+    const auraState = actor.getFlag(MODULE_ID, "activeAura");
+    if (!auraState?.isRegionAura) return;
+
+    const eventToken = event.data?.token ?? event.token;
+    if (!eventToken) return;
+
+    // Resolve the target actor — works for both Token placeables and
+    // TokenDocuments (event payload is typically a TokenDocument).
+    const targetActor = eventToken.actor ?? eventToken.document?.actor ?? null;
+    if (!targetActor) return;
+
+    // Skip self-application — the caster shouldn't damage themselves
+    // with their own Burn aura.
+    if (targetActor.id === actor.id) return;
+
+    // Only hit hostile dispositions, mirroring the legacy `_tickAura`
+    // semantics. The region itself doesn't filter by disposition.
+    const tokenDoc = eventToken.document ?? eventToken;
+    if (tokenDoc.disposition !== CONST.TOKEN_DISPOSITIONS.HOSTILE) return;
+
+    // Dedup: tokenEnter and tokenMoveIn often both fire for the same
+    // entry; tokenRoundStart can race too. Coalesce via tickedThisRound.
+    const tickedSet = new Set(auraState.tickedThisRound ?? []);
+    if (tickedSet.has(targetActor.id)) return;
+
+    const sourceItem = actor.items.get(auraState.sourceItemId);
+    if (!sourceItem) return;
+
+    // Dispatch directly to the per-target cast resolution. We need a
+    // Token *placeable* for the legacy code paths that read .actor /
+    // .document — resolve via the scene's placeables, falling back to
+    // synthesizing a minimal stand-in if the placeable isn't ready.
+    const placeable = canvas.tokens?.placeables?.find(p => p.id === tokenDoc.id)
+                   ?? tokenDoc.object
+                   ?? { actor: targetActor, document: tokenDoc, name: tokenDoc.name, id: tokenDoc.id };
+
+    try {
+      if (auraState.sourceItemType === "spell") {
+        await AuraManager._fireSpellTickAtTarget(actor, sourceItem, auraState.castConfig, placeable);
+      } else {
+        const { TalentCast } = await import("../talent/talent-cast.mjs");
+        await TalentCast.executeCast(actor, sourceItem, auraState.castConfig, { explicitTargets: [placeable], skipFocus: true });
+      }
+      // Update tickedThisRound so concurrent tokenEnter / tokenMoveIn /
+      // tokenRoundStart events for the same target don't double-tick.
+      tickedSet.add(targetActor.id);
+      await actor.setFlag(MODULE_ID, "activeAura.tickedThisRound", [...tickedSet]);
+    } catch (err) {
+      console.warn(`${MODULE_ID} | Region aura tick on ${tokenDoc.name} failed:`, err);
     }
   },
 
@@ -1654,6 +1881,16 @@ export const AuraManager = {
       return { success: false, error: "no-token" };
     }
 
+    // v14 region path. Replaces the legacy MeasuredTemplate + per-tick
+    // containment scan with a Region whose executeScript behavior fires
+    // tokenEnter / tokenMoveIn / tokenRoundStart events into the
+    // `vagabondCharacterEnhancer.regionAuraTick` hook. Falls through to
+    // the legacy path on any failure (incompatible scene config, region
+    // permissions, etc.).
+    if (await AuraManager._activateGenericAsRegion(actor, spec)) {
+      return { success: true };
+    }
+
     const radius = spec.radius ?? 10;
     const fillColor   = spec.templateColor  ?? "#9b6bff"; // psychic-purple default
     const borderColor = spec.templateBorder ?? "#5e3a8e";
@@ -1774,7 +2011,13 @@ export const AuraManager = {
     // auto-deactivate (instant). Buff behavior doesn't reach this path.
     if (auraState.behavior === "buff") return;
 
-    const template = canvas.scene?.templates?.get(auraState.templateId);
+    // Source of position truth: legacy path reads from a MeasuredTemplate
+    // doc on the scene; v14 region path passes a synthetic
+    // `_regionFakeTemplate` (with x/y/distance) because the region has no
+    // template — its shape lives inside the region document. Either way
+    // we end up with the same shape contract for `_tokensInsideTemplate`.
+    const template = auraState._regionFakeTemplate
+      ?? canvas.scene?.templates?.get(auraState.templateId);
     if (!template) return;
 
     const sourceItem = actor.items.get(auraState.sourceItemId);
@@ -1806,11 +2049,16 @@ export const AuraManager = {
     // filter to hostiles (cast check required per the user's rule call).
     // Skip the caster themselves so a Pyrokinesis aura doesn't roast you.
     const inRange = AuraManager._tokensInsideTemplate(template, movedTokenOverride, { x: templateCx, y: templateCy });
-    const hostiles = inRange.filter(tok =>
+    let hostiles = inRange.filter(tok =>
       tok.actor
       && tok.actor.id !== actor.id
       && tok.document?.disposition === CONST.TOKEN_DISPOSITIONS.HOSTILE
     );
+    // Region path: single-token event (tokenEnter / tokenMoveIn / token
+    // RoundStart) restricts the tick to one specific actor.
+    if (auraState._onlyActorId) {
+      hostiles = hostiles.filter(tok => tok.actor.id === auraState._onlyActorId);
+    }
     if (hostiles.length === 0) return;
 
     // `tickedThisRound` is the set of actor IDs already hit by this aura
