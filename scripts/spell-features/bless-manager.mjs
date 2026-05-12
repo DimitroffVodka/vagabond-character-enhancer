@@ -70,14 +70,13 @@ export const BlessManager = {
         const targetNames = targets.map(t => t.actorName).join(", ");
         const modeLabel = mode === "allies" ? "+d4 Saves" : "Silvered Weapons";
 
-        const confirmed = await Dialog.confirm({
-          title: "Bless Request",
+        const confirmed = await foundry.applications.api.DialogV2.confirm({
+          window: { title: "Bless Request" },
           content: `<p><strong>${caster.name}</strong> wants to cast Bless (${modeLabel}) on:</p>
             <p><strong>${targetNames}</strong></p>
             <p>Apply the effect?</p>`,
-          yes: () => true,
-          no: () => false,
-          defaultYes: true
+          rejectClose: false,
+          modal: false,
         });
 
         if (confirmed) {

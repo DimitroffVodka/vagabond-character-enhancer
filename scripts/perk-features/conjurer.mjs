@@ -243,33 +243,35 @@ export const ConjurerPerk = {
       </div>`;
 
     await new Promise((resolve) => {
-      const d = new Dialog({
-        title: `${actor.name} — Conjurer`,
+      const d = new foundry.applications.api.DialogV2({
+        window: { title: `${actor.name} — Conjurer` },
+        position: { width: 600, height: 450 },
         content,
-        buttons: {
-          cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => resolve(null) }
-        },
-        default: "cancel",
-        render: (html) => {
-          html.find(".vce-conjurer-row").on("click", async (ev) => {
-            const idx = parseInt(ev.currentTarget.dataset.idx);
-            const selected = eligible[idx];
-            if (!selected) return;
-            const hd = selected.hd ?? 0;
-            if (currentMana < hd) {
-              ui.notifications.warn(`Not enough mana (need ${hd}).`);
-              return;
-            }
-            d.close();
-            await this._performConjure(actor, selected, hd);
-            resolve(selected);
-          });
-          html.find(".vce-conjurer-row").on("keydown", (ev) => {
-            if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.currentTarget.click(); }
+        buttons: [
+          { action: "cancel", icon: '<i class="fas fa-times"></i>', label: "Cancel", default: true, callback: () => resolve(null) },
+        ],
+        render: (event, dialog) => {
+          dialog.element.querySelectorAll(".vce-conjurer-row").forEach(row => {
+            row.addEventListener("click", async (ev) => {
+              const idx = parseInt(ev.currentTarget.dataset.idx);
+              const selected = eligible[idx];
+              if (!selected) return;
+              const hd = selected.hd ?? 0;
+              if (currentMana < hd) {
+                ui.notifications.warn(`Not enough mana (need ${hd}).`);
+                return;
+              }
+              d.close();
+              await this._performConjure(actor, selected, hd);
+              resolve(selected);
+            });
+            row.addEventListener("keydown", (ev) => {
+              if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); ev.currentTarget.click(); }
+            });
           });
         },
         close: () => resolve(null),
-      }, { width: 600, height: 450 });
+      });
       d.render(true);
     });
   },

@@ -717,23 +717,25 @@ export const ImbueManager = {
     `;
 
     return new Promise((resolve) => {
-      const d = new Dialog({
-        title: `${actor.name} — Imbue Weapon`,
+      const d = new foundry.applications.api.DialogV2({
+        window: { title: `${actor.name} — Imbue Weapon` },
+        position: { width: 360 },
         content,
-        buttons: {
-          cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => resolve(null) }
-        },
-        default: "cancel",
-        render: (html) => {
-          html.find(".vce-imbue-weapon-btn").on("click", async (ev) => {
-            const weaponId = ev.currentTarget.dataset.weaponId;
-            await this.applyImbue(actor, weaponId, spellData, opts);
-            d.close();
-            resolve(weaponId);
+        buttons: [
+          { action: "cancel", icon: '<i class="fas fa-times"></i>', label: "Cancel", default: true, callback: () => resolve(null) },
+        ],
+        render: (event, dialog) => {
+          dialog.element.querySelectorAll(".vce-imbue-weapon-btn").forEach(btn => {
+            btn.addEventListener("click", async (ev) => {
+              const weaponId = ev.currentTarget.dataset.weaponId;
+              await this.applyImbue(actor, weaponId, spellData, opts);
+              d.close();
+              resolve(weaponId);
+            });
           });
         },
-        close: () => resolve(null)
-      }, { width: 360 });
+        close: () => resolve(null),
+      });
       d.render(true);
     });
   },
@@ -1049,43 +1051,45 @@ export const ImbueManager = {
     `;
 
     return new Promise((resolve) => {
-      const d = new Dialog({
-        title: `Imbue — Choose ${pickCount} Target${pickCount > 1 ? "s" : ""}`,
+      const d = new foundry.applications.api.DialogV2({
+        window: { title: `Imbue — Choose ${pickCount} Target${pickCount > 1 ? "s" : ""}` },
+        position: { width: 360 },
         content,
-        buttons: {
-          confirm: {
+        buttons: [
+          {
+            action: "confirm",
             icon: '<i class="fas fa-check"></i>',
             label: "Confirm",
-            callback: (html) => {
-              const checked = [...html[0].querySelectorAll(".vce-wielder-pick:checked")];
+            default: true,
+            callback: (event, button, dialog) => {
+              const checked = [...dialog.element.querySelectorAll(".vce-wielder-pick:checked")];
               const picked = checked.map(c => candidates.find(a => a.id === c.dataset.actorId))
                 .filter(Boolean);
               resolve(picked);
-            }
+            },
           },
-          cancel: {
+          {
+            action: "cancel",
             icon: '<i class="fas fa-times"></i>',
             label: "Cancel",
-            callback: () => resolve([])
-          }
-        },
-        default: "confirm",
-        render: (html) => {
-          const el = html instanceof jQuery ? html[0] : html;
+            callback: () => resolve([]),
+          },
+        ],
+        render: (event, dialog) => {
+          const el = dialog.element;
           const statusEl = el.querySelector(".vce-imbue-pick-status");
           const boxes = [...el.querySelectorAll(".vce-wielder-pick")];
           const update = () => {
             const n = boxes.filter(b => b.checked).length;
             statusEl.textContent = `Selected: ${n} / ${pickCount}`;
-            // Cap at pickCount by disabling unchecked boxes once reached
             boxes.forEach(b => {
               if (!b.checked) b.disabled = n >= pickCount;
             });
           };
           boxes.forEach(b => b.addEventListener("change", update));
         },
-        close: () => resolve([])
-      }, { width: 360 });
+        close: () => resolve([]),
+      });
       d.render(true);
     });
   }

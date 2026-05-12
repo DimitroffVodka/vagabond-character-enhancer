@@ -77,13 +77,15 @@ export const PolymorphDialog = {
       </div>
     `;
 
-    const dialog = new Dialog({
-      title: `Polymorph — ${actor.name} (Level ${actor.system.attributes?.level?.value ?? 1})`,
+    const dialog = new foundry.applications.api.DialogV2({
+      window: { title: `Polymorph — ${actor.name} (Level ${actor.system.attributes?.level?.value ?? 1})` },
       content,
-      buttons: {
-        cancel: {
+      buttons: [
+        {
+          action: "cancel",
           icon: '<i class="fas fa-times" aria-hidden="true"></i>',
           label: "Cancel",
+          default: true,
           callback: () => {
             // If they cancel, drop focus on Polymorph
             const spellIds = actor.system.focus?.spellIds ?? [];
@@ -94,14 +96,12 @@ export const PolymorphDialog = {
             if (filtered.length !== spellIds.length) {
               actor.update({ "system.focus.spellIds": filtered });
             }
-          }
-        }
-      },
-      default: "cancel",
-      render: (html) => {
+          },
+        },
+      ],
+      render: (event, dialog) => {
         let selected = false;
-        // Normalize html — Foundry V1 passes jQuery, V2 may pass HTMLElement
-        const el = html instanceof HTMLElement ? html : html[0];
+        const el = dialog.element;
 
         const selectBeast = (row) => {
           if (selected) return;
@@ -109,8 +109,6 @@ export const PolymorphDialog = {
           const beast = sorted.find(b => b.name === beastName);
           if (beast) {
             selected = true;
-            const domNode = dialog.element?.[0] || dialog.element;
-            if (domNode?.remove) domNode.remove();
             try { dialog.close({ force: true }); } catch(e) { /* already removed */ }
             onSelect(beast);
           }
@@ -137,11 +135,12 @@ export const PolymorphDialog = {
             }
           });
         });
-      }
-    }, {
-      width: Math.min(700, window.innerWidth - 40),
-      height: "auto",
-      classes: ["vce-polymorph-dialog"]
+      },
+      position: {
+        width: Math.min(700, window.innerWidth - 40),
+        height: "auto",
+      },
+      classes: ["vce-polymorph-dialog"],
     });
 
     dialog.render(true);

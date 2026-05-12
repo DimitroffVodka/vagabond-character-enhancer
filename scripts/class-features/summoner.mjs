@@ -914,91 +914,85 @@ export const SummonerFeatures = {
     `;
 
     return new Promise((resolve) => {
-      const d = new Dialog({
-        title: `${actor.name} — Conjure Summon`,
+      const d = new foundry.applications.api.DialogV2({
+        window: { title: `${actor.name} — Conjure Summon` },
+        position: { width: 700, height: 500 },
         content,
-        buttons: {
-          cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => resolve(null) }
-        },
-        default: "cancel",
-        render: (html) => {
-          // Search filter
-          html.find(".vce-summon-search").on("input", (ev) => {
+        buttons: [
+          { action: "cancel", icon: '<i class="fas fa-times"></i>', label: "Cancel", default: true, callback: () => resolve(null) },
+        ],
+        render: (event, dialog) => {
+          const el = dialog.element;
+          const searchInput = el.querySelector(".vce-summon-search");
+          searchInput?.addEventListener("input", (ev) => {
             const query = ev.target.value.toLowerCase();
-            html.find(".vce-summon-row").each(function () {
-              const name = this.querySelector("strong")?.textContent?.toLowerCase() || "";
-              this.style.display = name.includes(query) ? "" : "none";
+            el.querySelectorAll(".vce-summon-row").forEach(row => {
+              const name = row.querySelector("strong")?.textContent?.toLowerCase() || "";
+              row.style.display = name.includes(query) ? "" : "none";
             });
           });
 
-          // Row click
-          html.find(".vce-summon-row").on("click", async (ev) => {
-            const idx = parseInt(ev.currentTarget.dataset.idx);
-            const selected = candidates[idx];
-            if (!selected) return;
-            if ((actor.system?.mana?.current ?? 0) < selected.hd) {
-              ui.notifications.warn(`Not enough mana! Need ${selected.hd}, have ${actor.system.mana.current}.`);
-              return;
-            }
-            d.close();
-            await this.conjureSummon(actor, selected);
-            resolve(selected);
-          });
-
-          // Keyboard navigation
-          html.find(".vce-summon-row").on("keydown", (ev) => {
-            if (ev.key === "Enter" || ev.key === " ") {
-              ev.preventDefault();
-              ev.currentTarget.click();
-            }
-          });
-
-          // Right-click: toggle Creature Codex membership (favorite)
-          html.find(".vce-summon-row").on("contextmenu", async (ev) => {
-            ev.preventDefault();
-            const row = ev.currentTarget;
-            const name = row.dataset.creatureName;
-            if (!name) return;
-            const current = actor.getFlag(MODULE_ID, "summonCodex") || [];
-            const isFav = current.includes(name);
-            const next = isFav ? current.filter(n => n !== name) : [...current, name];
-            await actor.setFlag(MODULE_ID, "summonCodex", next);
-
-            // Toggle star icon
-            const starCell = row.querySelector(".vce-summon-fav");
-            if (starCell) {
-              starCell.innerHTML = isFav
-                ? '<i class="far fa-star" style="opacity:0.35;" title="Right-click to favorite"></i>'
-                : '<i class="fas fa-star" style="color:#d4a843;" title="Favorited — right-click to unfavorite"></i>';
-            }
-
-            // Reorder tbody to reflect new favorite state
-            const tbody = row.parentElement;
-            if (!isFav) {
-              // Just favorited — move to top of favorites section (above all non-favs)
-              tbody.insertBefore(row, tbody.firstElementChild);
-            } else {
-              // Just unfavorited — move down to the top of the non-favorites section.
-              // Find the first row that is not favorited (by checking the new codex)
-              // and insert our row just before it.
-              let target = null;
-              for (const sib of tbody.children) {
-                if (sib === row) continue;
-                const sibName = sib.dataset.creatureName;
-                if (sibName && !next.includes(sibName)) { target = sib; break; }
+          el.querySelectorAll(".vce-summon-row").forEach(row => {
+            row.addEventListener("click", async (ev) => {
+              const idx = parseInt(ev.currentTarget.dataset.idx);
+              const selected = candidates[idx];
+              if (!selected) return;
+              if ((actor.system?.mana?.current ?? 0) < selected.hd) {
+                ui.notifications.warn(`Not enough mana! Need ${selected.hd}, have ${actor.system.mana.current}.`);
+                return;
               }
-              if (target) tbody.insertBefore(row, target);
-              else tbody.appendChild(row);
-            }
+              d.close();
+              await this.conjureSummon(actor, selected);
+              resolve(selected);
+            });
 
-            ui.notifications.info(`${isFav ? "Removed" : "Added"} ${name} ${isFav ? "from" : "to"} Creature Codex.`);
+            row.addEventListener("keydown", (ev) => {
+              if (ev.key === "Enter" || ev.key === " ") {
+                ev.preventDefault();
+                ev.currentTarget.click();
+              }
+            });
+
+            // Right-click: toggle Creature Codex membership (favorite)
+            row.addEventListener("contextmenu", async (ev) => {
+              ev.preventDefault();
+              const r = ev.currentTarget;
+              const name = r.dataset.creatureName;
+              if (!name) return;
+              const current = actor.getFlag(MODULE_ID, "summonCodex") || [];
+              const isFav = current.includes(name);
+              const next = isFav ? current.filter(n => n !== name) : [...current, name];
+              await actor.setFlag(MODULE_ID, "summonCodex", next);
+
+              const starCell = r.querySelector(".vce-summon-fav");
+              if (starCell) {
+                starCell.innerHTML = isFav
+                  ? '<i class="far fa-star" style="opacity:0.35;" title="Right-click to favorite"></i>'
+                  : '<i class="fas fa-star" style="color:#d4a843;" title="Favorited — right-click to unfavorite"></i>';
+              }
+
+              const tbody = r.parentElement;
+              if (!isFav) {
+                tbody.insertBefore(r, tbody.firstElementChild);
+              } else {
+                let target = null;
+                for (const sib of tbody.children) {
+                  if (sib === r) continue;
+                  const sibName = sib.dataset.creatureName;
+                  if (sibName && !next.includes(sibName)) { target = sib; break; }
+                }
+                if (target) tbody.insertBefore(r, target);
+                else tbody.appendChild(r);
+              }
+
+              ui.notifications.info(`${isFav ? "Removed" : "Added"} ${name} ${isFav ? "from" : "to"} Creature Codex.`);
+            });
           });
 
-          // Auto-focus search
-          setTimeout(() => html.find(".vce-summon-search").focus(), 50);
+          setTimeout(() => searchInput?.focus(), 50);
         },
-        close: () => resolve(null)
-      }, { width: 700, height: 500 });
+        close: () => resolve(null),
+      });
       d.render(true);
     });
   },
@@ -1032,15 +1026,15 @@ export const SummonerFeatures = {
       } else {
         // Offer choice
         freeConjure = await new Promise(resolve => {
-          new Dialog({
-            title: "Avatar Emergence",
+          new foundry.applications.api.DialogV2({
+            window: { title: "Avatar Emergence" },
             content: `<p>Use <strong>Avatar Emergence</strong> to conjure ${npcData.name} for free? (Once per Shift)</p>
               <p style="font-size:0.85em; opacity:0.7;">Otherwise costs ${cost} Mana.</p>`,
-            buttons: {
-              free: { icon: '<i class="fas fa-star"></i>', label: "Free (Avatar Emergence)", callback: () => resolve(true) },
-              mana: { icon: '<i class="fas fa-coins"></i>', label: `Pay ${cost} Mana`, callback: () => resolve(false) }
-            },
-            default: "free"
+            buttons: [
+              { action: "free", icon: '<i class="fas fa-star"></i>', label: "Free (Avatar Emergence)", default: true, callback: () => resolve(true) },
+              { action: "mana", icon: '<i class="fas fa-coins"></i>', label: `Pay ${cost} Mana`, callback: () => resolve(false) },
+            ],
+            close: () => resolve(false),
           }).render(true);
         });
       }
@@ -1116,14 +1110,14 @@ export const SummonerFeatures = {
     let useSecondNature = false;
     if (features?.summoner_secondNature) {
       useSecondNature = await new Promise(resolve => {
-        new Dialog({
-          title: "Second Nature",
+        new foundry.applications.api.DialogV2({
+          window: { title: "Second Nature" },
           content: `<p>How should <strong>${npcData.name}</strong> be maintained?</p>`,
-          buttons: {
-            focus: { icon: '<i class="fas fa-brain"></i>', label: "Focus (1 Mana/round)", callback: () => resolve(false) },
-            countdown: { icon: '<i class="fas fa-hourglass-half"></i>', label: "Cd4 Rounds (no focus)", callback: () => resolve(true) }
-          },
-          default: "focus"
+          buttons: [
+            { action: "focus", icon: '<i class="fas fa-brain"></i>', label: "Focus (1 Mana/round)", default: true, callback: () => resolve(false) },
+            { action: "countdown", icon: '<i class="fas fa-hourglass-half"></i>', label: "Cd4 Rounds (no focus)", callback: () => resolve(true) },
+          ],
+          close: () => resolve(false),
         }).render(true);
       });
     }

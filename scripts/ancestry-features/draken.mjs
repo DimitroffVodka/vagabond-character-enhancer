@@ -86,27 +86,29 @@ export const DrakenFeatures = {
     `;
 
     return new Promise((resolve) => {
-      const d = new Dialog({
-        title: `${actor.name} — Draconic Resilience`,
+      const d = new foundry.applications.api.DialogV2({
+        window: { title: `${actor.name} — Draconic Resilience` },
+        position: { width: 320 },
         content,
-        buttons: {
-          cancel: { icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => resolve(null) }
-        },
-        default: "cancel",
-        render: (html) => {
-          html.find(".vce-resilience-btn").on("click", async (ev) => {
-            const type = ev.currentTarget.dataset.type;
-            await actor.setFlag(MODULE_ID, FLAG_RESILIENCE_TYPE, type);
-            const label = type.charAt(0).toUpperCase() + type.slice(1);
-            log("Draken", `${actor.name} chose Draconic Resilience: ${label}`);
-            ui.notifications.info(`${actor.name}: Draconic Resilience set to ${label}`);
-            await this._syncResilienceAE(actor, type);
-            d.close();
-            resolve(type);
+        buttons: [
+          { action: "cancel", icon: '<i class="fas fa-times"></i>', label: "Cancel", default: true, callback: () => resolve(null) },
+        ],
+        render: (event, dialog) => {
+          dialog.element.querySelectorAll(".vce-resilience-btn").forEach(btn => {
+            btn.addEventListener("click", async (ev) => {
+              const type = ev.currentTarget.dataset.type;
+              await actor.setFlag(MODULE_ID, FLAG_RESILIENCE_TYPE, type);
+              const label = type.charAt(0).toUpperCase() + type.slice(1);
+              log("Draken", `${actor.name} chose Draconic Resilience: ${label}`);
+              ui.notifications.info(`${actor.name}: Draconic Resilience set to ${label}`);
+              await this._syncResilienceAE(actor, type);
+              d.close();
+              resolve(type);
+            });
           });
         },
-        close: () => resolve(null)
-      }, { width: 320 });
+        close: () => resolve(null),
+      });
       d.render(true);
     });
   },

@@ -271,8 +271,8 @@ export const WardManager = {
 
     // Show mana dialog
     const extraMana = await new Promise((resolve) => {
-      new Dialog({
-        title: `Ward — ${caster.name} protects ${targetActor.name}`,
+      new foundry.applications.api.DialogV2({
+        window: { title: `Ward — ${caster.name} protects ${targetActor.name}` },
         content: `
           <form>
             <div class="form-group">
@@ -288,24 +288,25 @@ export const WardManager = {
               </select>
             </div>
           </form>`,
-        buttons: {
-          cast: {
+        buttons: [
+          {
+            action: "cast",
             icon: '<i class="fas fa-shield-alt"></i>',
             label: "Cast Check",
-            callback: (html) => {
-              const el = html instanceof jQuery ? html[0] : html;
-              const val = parseInt(el.querySelector('[name="extraMana"]').value);
+            default: true,
+            callback: (event, button, dialog) => {
+              const val = parseInt(dialog.element.querySelector('[name="extraMana"]').value);
               resolve(val);
-            }
+            },
           },
-          skip: {
+          {
+            action: "skip",
             icon: '<i class="fas fa-forward"></i>',
             label: "Skip Ward",
-            callback: () => resolve(null)
-          }
-        },
-        default: "cast",
-        close: () => resolve(null)
+            callback: () => resolve(null),
+          },
+        ],
+        close: () => resolve(null),
       }).render(true);
     });
 

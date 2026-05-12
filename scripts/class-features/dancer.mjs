@@ -466,16 +466,17 @@ export const DancerFeatures = {
       </p>` : ""}
     `;
 
-    const confirmed = await Dialog.prompt({
-      title: "Step Up",
+    const confirmed = await foundry.applications.api.DialogV2.prompt({
+      window: { title: "Step Up" },
       content,
-      label: "Step Up!",
-      callback: (html) => {
-        const checked = html.find ? html.find("input[name='ally']:checked") : html.querySelectorAll("input[name='ally']:checked");
-        const checkedArr = html.find ? checked.toArray() : Array.from(checked);
-        return checkedArr.map(el => el.value);
+      ok: {
+        label: "Step Up!",
+        callback: (event, button, dialog) => {
+          const checked = dialog.element.querySelectorAll("input[name='ally']:checked");
+          return Array.from(checked).map(el => el.value);
+        },
       },
-      rejectClose: false
+      rejectClose: false,
     });
 
     if (!confirmed || confirmed.length === 0) return;
