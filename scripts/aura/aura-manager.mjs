@@ -269,6 +269,13 @@ export const AuraManager = {
       }
     }
 
+    // Ward: v14 region path (same architecture as Bless). Ward's damage
+    // reduction is handled reactively by WardManager via the wardAE flag,
+    // so detection is tag-based — same harmless caster-duplicate as Bless.
+    if (spellKey === "ward") {
+      if (await AuraManager._activateWardAsRegion(actor, radius)) return;
+    }
+
     // Create an Aura Effects-compatible AE on the caster
     // The auraeffects module handles propagation to nearby tokens automatically
     const aeData = {
@@ -556,6 +563,115 @@ export const AuraManager = {
       return true;
     } catch (err) {
       log("AuraManager", `Region path failed for Bless on ${actor.name}; falling back to legacy. ${err.message}`);
+      return false;
+    }
+  },
+
+  /**
+   * v14 region-based aura activation for Ward.
+   *
+   * Same shape as Bless: source AE on caster (tag: wardAE + wardCasterId)
+   * cloned to every in-range token by an applyActiveEffect behavior on a
+   * Region attached to the caster's token. WardManager's reactive damage
+   * reduction checks the wardAE flag presence, so the harmless caster-
+   * duplicate is fine here too.
+   *
+   * @param {Actor} actor - The caster
+   * @param {number} radius - Aura radius in feet
+   * @returns {Promise<boolean>} true if region path succeeded, false to fall through
+   */
+  async _activateWardAsRegion(actor, radius) {
+    const spellDef = AURA_SPELLS.ward;
+    const token = AuraManager._getCasterToken(actor);
+    if (!token) return false;
+
+    try {
+      const [sourceAE] = await actor.createEmbeddedDocuments("ActiveEffect", [{
+        name: `Ward (Aura: ${actor.name})`,
+        img: spellDef.icon,
+        origin: `Actor.${actor.id}`,
+        description: spellDef.description || "",
+        disabled: false,
+        statuses: ["warded"],
+        flags: {
+          [MODULE_ID]: {
+            managed: true,
+            auraTemplate: true,
+            auraSpell: "Ward",
+            auraBuff: actor.id,
+            wardAE: true,
+            wardCasterId: actor.id,
+          },
+        },
+        changes: [],
+      }]);
+
+      const scene = canvas.scene;
+      const distance = scene.grid?.distance || 5;
+      const radiusPx = radius * scene.grid.size / distance;
+      const center = token.getCenterPoint?.() ?? {
+        x: (token.document?.x ?? 0) + ((token.document?.width ?? 1) * scene.grid.size) / 2,
+        y: (token.document?.y ?? 0) + ((token.document?.height ?? 1) * scene.grid.size) / 2,
+      };
+
+      const [region] = await scene.createEmbeddedDocuments("Region", [{
+        name: `Ward Aura — ${actor.name}`,
+        visibility: 2,
+        color: spellDef.templateColor || "#4a90d9",
+        attachment: { token: token.id },
+        shapes: [{ type: "circle", x: center.x, y: center.y, radius: radiusPx, hole: false, gridBased: false }],
+        behaviors: [{
+          type: "applyActiveEffect",
+          name: "Ward Buff",
+          system: { effects: [sourceAE.uuid] },
+        }],
+        flags: { [MODULE_ID]: { auraOwner: actor.id, spellKey: "ward" } },
+      }]);
+
+      await actor.setFlag(MODULE_ID, "activeAura", {
+        spellKey: "ward",
+        radius,
+        tokenId: token.id,
+        regionId: region.id,
+        sourceAeId: sourceAE.id,
+      });
+
+      AuraManager._playAuraFX(token, spellDef, radius);
+
+      ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2" data-card-type="aura-activate">
+          <div class="card-body">
+            <header class="card-header">
+              <div class="header-icon"><img src="${spellDef.icon}" alt="${spellDef.label}"></div>
+              <div class="header-info">
+                <h3 class="header-title">${spellDef.label} Aura</h3>
+                <div class="metadata-tags-row">
+                  <div class="meta-tag tag-skill"><i class="fas fa-circle"></i><span>${radius}' Radius</span></div>
+                  <span class="tag-separator">//</span>
+                  <div class="meta-tag tag-standard"><i class="fas fa-shield-alt"></i><span>${spellDef.description}</span></div>
+                </div>
+              </div>
+            </header>
+            <section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                ${actor.name} activates <strong>${spellDef.label}</strong> as a ${radius}' Aura.<br>
+                <em>Allies within range receive damage reduction. Requires Focus.</em>
+              </div>
+              <div class="card-buttons" style="margin-top:0.5rem; text-align:center;">
+                <button data-action="vce-aura-deactivate" data-actor-id="${actor.id}" class="card-button">
+                  <i class="fas fa-times"></i> End Aura
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>`,
+        speaker: ChatMessage.getSpeaker({ actor }),
+      });
+
+      log("AuraManager", `Activated Ward aura (region path, ${radius}') for ${actor.name}`);
+      return true;
+    } catch (err) {
+      log("AuraManager", `Region path failed for Ward on ${actor.name}; falling back to legacy. ${err.message}`);
       return false;
     }
   },
