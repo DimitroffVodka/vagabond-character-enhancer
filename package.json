@@ -1,0 +1,14 @@
+{
+  "name": "vagabond-character-enhancer",
+  "version": "0.4.16",
+  "description": "Dev tooling for the Vagabond Character Enhancer FoundryVTT module. The module itself ships as ES modules with no build step — package.json exists only for linting.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint scripts"
+  },
+  "devDependencies": {
+    "eslint": "^9.18.0",
+    "globals": "^15.14.0"
+  }
+}

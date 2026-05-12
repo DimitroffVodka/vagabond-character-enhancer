@@ -1,0 +1,28 @@
+name: Lint
+
+# Catches the class of bug where a missing import becomes a runtime
+# ReferenceError that Foundry's async hook dispatcher swallows silently.
+# Failing this check before merge keeps "VCE half-loaded" states from
+# shipping. Warnings are tolerated; only ESLint errors fail the build.
+
+on:
+  push:
+    branches: [main, v14]
+  pull_request:
+    branches: [main, v14]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run ESLint (errors only)
+        run: npx eslint scripts --quiet

@@ -6,3 +6,6 @@ PLAN.md
 
 # LevelDB lock files
 packs/*/LOCK
+
+# Node / ESLint tooling (dev-only — module ships as ES modules with no build)
+node_modules/
