@@ -8,6 +8,7 @@
  *   const { actorId } = await gmRequest("importActor", { uuid: "Compendium.vagabond.bestiary.Actor.abc123" });
  *   const { tokenId } = await gmRequest("placeToken", { sceneId, tokenData: { ... } });
  *   await gmRequest("removeToken", { sceneId, tokenId });
+ *   await gmRequest("removeRegion", { sceneId, regionId });
  *   await gmRequest("deleteActor", { actorId });
  *   await gmRequest("setActorFlag", { actorId, scope, key, value });  // value:null unsets
  *   await gmRequest("updateActorFlags", { actorId, scope, flags: {key:value, ...} });
@@ -131,6 +132,20 @@ async function _handleRequest(data) {
         await scene.deleteEmbeddedDocuments("Token", existing);
       }
       return { ok: true, deleted: existing.length };
+    }
+
+    case "removeRegion": {
+      // Scene-level Region documents require GM permissions to delete.
+      // Non-GM aura casters route their `_deactivateRegion` through this
+      // action so the region (and its cascading AE clones on every token
+      // in range) actually gets removed.
+      const scene = game.scenes.get(data.sceneId);
+      if (!scene) return { error: "Scene not found" };
+      const region = scene.regions.get(data.regionId);
+      if (region) {
+        await scene.deleteEmbeddedDocuments("Region", [data.regionId]);
+      }
+      return { ok: true };
     }
 
     case "createActorAE": {

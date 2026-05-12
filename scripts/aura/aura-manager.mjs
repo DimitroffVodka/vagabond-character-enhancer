@@ -21,6 +21,7 @@
 
 import { MODULE_ID, log, onRenderChatMessage } from "../utils.mjs";
 import { uuidFor as catalogUuidFor } from "../active-effects-catalog.mjs";
+import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
 /*  Aura Spell Definitions                      */
@@ -673,9 +674,22 @@ export const AuraManager = {
     AuraManager._stopAuraFX(actor);
 
     if (auraState.regionId) {
+      // Scene-level Region documents require GM permissions to delete.
+      // Non-GM aura casters route through the socket-relay GM proxy so
+      // the region (and its cascading applyActiveEffect AE clones on
+      // every token in range) actually gets removed. Without the proxy,
+      // a player ending their own aura would silently fail to clean up.
       const region = canvas.scene?.regions?.get(auraState.regionId);
       if (region) {
-        try { await region.delete(); } catch { /* permission / already gone */ }
+        if (game.user.isGM) {
+          try { await region.delete(); } catch (err) { log("AuraManager", `Region delete failed: ${err.message}`); }
+        } else {
+          try {
+            await gmRequest("removeRegion", { sceneId: canvas.scene.id, regionId: auraState.regionId });
+          } catch (err) {
+            log("AuraManager", `Socket-relay removeRegion failed: ${err.message}`);
+          }
+        }
       }
     }
 
