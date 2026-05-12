@@ -23,6 +23,7 @@ Ship VCE on the `v14` branch with verified compatibility on Foundry v14.360 + Va
 - No API redesign.
 - No new automation, no docs restructure.
 - No bumping to `0.5.0` — this is a patch-level compatibility release.
+- **No adoption of the system's `vagabond.active-effects` compendium** (v5.7.0 / PR #57). Deferred to a separate architectural release — see "Follow-up" at the bottom for rationale.
 
 ## Phase 0 — Workspace setup
 
@@ -111,3 +112,33 @@ Triage doc is updated in-place in this spec file as Phase 2 progresses.
 ## Open questions
 
 None — proceed.
+
+## Follow-up (deferred, post-v14 release)
+
+### Adopt `vagabond.active-effects` system compendium
+
+Vagabond system v5.7.0 ships a 135-entry canonical AE compendium (PR #57, authored by us). The intent is for VCE and vagabond-crawler to clone from this pack via `fromUuid` instead of constructing AEs inline, eliminating cross-module drift. Stable migration anchor: `flags.vagabond.canonicalId` (readable slug like `"barbarian-rage"`, `"might-plus-1"`).
+
+**Pack contents:** 21 conditions, 32 buffs/bonuses, 9 debuffs, 7 weapon enhancements, 3 materials, 40 relic powers, 23 class features.
+
+**Overlap with VCE registries:** 23 class features (Rage DR tiers, Sneak Attack dice tiers, Bard Bravado/Climax, Sorcerer/Wizard variants, Exalted, Rage), ~10 status conditions including Grappling and Encumbered which were *sourced from* VCE's `scripts/status-effects.mjs` into the pack.
+
+**Why not in this release:**
+
+- **Application logic stays in VCE.** The compendium provides data blobs; deciding "this Barbarian at L1 gets Rage" is still `feature-detector.mjs`. Migration doesn't simplify any hook handler — they read `flags.vagabond-character-enhancer.*` regardless of AE source.
+- **Drift the PR description warns about is future drift, not current.** The 23 class-feature pack entries were authored by us in tandem with VCE's inline copies — they match today because they came from the same hand. The win is preventing future divergence, not fixing existing divergence.
+- **New failure surface.** `fromUuid` is async, hits the pack, can return null if the pack isn't loaded yet on world boot. Today's inline AEs are sync and free.
+- **Migration of existing actors required.** Live characters carry VCE-managed AEs created by the old inline path. Switching to compendium clones without a migration leaves both sources coexisting — the exact drift we're trying to eliminate. Until migration code lands, this is a regression.
+- **Workflow shift.** Today, tuning a VCE-managed AE is a VCE PR. After migration, it's a Vagabond-system PR. That's the right destination eventually but should be deliberate, not a side effect of a compat bump.
+
+**Right scope for a future release (call it v0.5.0):**
+
+1. Add `_resolveCanonicalAE(canonicalId)` helper in `feature-detector.mjs` — pack index lookup by `flags.vagabond.canonicalId`, returns cloned `toObject()`.
+2. Migrate status conditions first (smallest blast radius — VCE contributed Grappling/Encumbered upstream; close the loop by consuming).
+3. Migrate the 23 class features matching pack entries. Each registry entry's `effects` array becomes `effectsFromCompendium: ["canonical-id"]`; resolver expands at apply-time.
+4. Keep "Partial" features (e.g. Merchant Deep Pockets level scaling) as compendium-clone-then-mutate.
+5. Keep "Module-only" features (no pack equivalent) inline.
+6. World migration: on first load after v0.5.0, scan actors for VCE-managed AEs with canonicalId matches in the pack, delete-and-recreate from compendium clones. Gate behind a settings flag for opt-in rollout.
+7. Coordinate with vagabond-crawler — if crawler also adopts compendium consumption simultaneously, the interop benefit (e.g. crawler reacting to `canonicalId === "barbarian-rage"`) actually materializes.
+
+That release is the right shape for the architectural shift. This release is just the v14 compat bump.
