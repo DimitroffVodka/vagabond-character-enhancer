@@ -276,6 +276,15 @@ export const AuraManager = {
       if (await AuraManager._activateWardAsRegion(actor, radius)) return;
     }
 
+    // Exalt: v14 region path with shared-template-actor. Exalt has real
+    // AE `changes` (+1 Will saves) — putting the source on the caster
+    // would stack it twice (source + clone-on-self), so we keep the
+    // template on a dedicated hidden actor and let the region apply
+    // exactly one clone per in-range token (including caster).
+    if (spellKey === "exalt") {
+      if (await AuraManager._activateExaltAsRegion(actor, radius)) return;
+    }
+
     // Create an Aura Effects-compatible AE on the caster
     // The auraeffects module handles propagation to nearby tokens automatically
     const aeData = {
@@ -679,7 +688,9 @@ export const AuraManager = {
   /**
    * Tear down a region-based aura. Deletes the Region (which auto-removes
    * all cloned AEs from in-range tokens) and the source template AE on
-   * the caster. Caller is responsible for clearing the `activeAura` flag.
+   * the caster (if the path stored one there). Auras using a shared
+   * template-actor (Exalt) don't have a per-caster source AE to delete.
+   * Caller is responsible for clearing the `activeAura` flag.
    */
   async _deactivateRegion(actor, auraState) {
     AuraManager._stopAuraFX(actor);
@@ -699,6 +710,169 @@ export const AuraManager = {
     }
 
     await actor.unsetFlag(MODULE_ID, "activeAura");
+  },
+
+  /**
+   * Find or create the hidden template-actor that owns shared aura
+   * source AEs. Stat-changing auras (Exalt) reference template AEs on
+   * this actor instead of duplicating them on the caster — putting the
+   * source on the caster would let the source AE's `changes` stack with
+   * the caster's own region-clone, doubling the buff. The hidden actor
+   * sidesteps that.
+   *
+   * Bootstrap is GM-only (Actor.create requires it). Players read the
+   * UUID and the system's applyActiveEffect cloning is server-side, so
+   * OBSERVER ownership on the template actor is enough.
+   *
+   * Returns `null` if the actor doesn't exist yet and the current user
+   * isn't a GM — caller should fall through to the legacy path.
+   */
+  async _getOrCreateAuraTemplateActor() {
+    let actor = game.actors.find(a => a.getFlag(MODULE_ID, "auraTemplateActor"));
+    if (actor) return actor;
+    if (!game.user.isGM) return null;
+    try {
+      actor = await Actor.create({
+        name: "_VCE Aura Templates",
+        type: "npc",
+        img: "icons/svg/sun.svg",
+        ownership: { default: 1 }, // OBSERVER — players read, can't edit
+        flags: { [MODULE_ID]: { auraTemplateActor: true } },
+      });
+      return actor;
+    } catch (err) {
+      log("AuraManager", `Could not create template actor: ${err.message}`);
+      return null;
+    }
+  },
+
+  /**
+   * Ensure a shared template AE for the given aura key exists on the
+   * template-actor; create it if missing (GM only). Returns the AE
+   * document or `null` if bootstrap failed.
+   *
+   * The template AE itself is enabled — applyActiveEffect clones inherit
+   * the source's `disabled` state, so a disabled source produces
+   * disabled clones. We want active clones on the targets.
+   */
+  async _ensureSharedTemplateAE(spellKey) {
+    const tplActor = await AuraManager._getOrCreateAuraTemplateActor();
+    if (!tplActor) return null;
+    const existing = tplActor.effects.find(e => e.getFlag(MODULE_ID, "auraTemplateKey") === spellKey);
+    if (existing) return existing;
+    if (!game.user.isGM) return null;
+    const spellDef = AURA_SPELLS[spellKey];
+    if (!spellDef) return null;
+    const labelLc = spellDef.label.toLowerCase();
+    try {
+      const [ae] = await tplActor.createEmbeddedDocuments("ActiveEffect", [{
+        name: spellDef.label,
+        img: spellDef.icon,
+        description: spellDef.description || "",
+        disabled: false,
+        statuses: [labelLc.endsWith("ed") ? labelLc : `${labelLc}ed`],
+        flags: { [MODULE_ID]: { auraTemplate: true, auraTemplateKey: spellKey } },
+        changes: spellDef.changes || [],
+      }]);
+      return ae;
+    } catch (err) {
+      log("AuraManager", `Could not create template AE for ${spellKey}: ${err.message}`);
+      return null;
+    }
+  },
+
+  /**
+   * v14 region-based aura activation for Exalt.
+   *
+   * Unlike Bless / Ward (tag-based detection, caster-duplicate harmless),
+   * Exalt has real AE `changes` that would stack if the source AE lived
+   * on the caster. So this path references a shared template AE on a
+   * hidden actor (`_VCE Aura Templates`). The region's applyActiveEffect
+   * behavior clones that template onto every in-range token (including
+   * the caster) — exactly once per actor.
+   *
+   * @param {Actor} actor - The caster
+   * @param {number} radius - Aura radius in feet
+   * @returns {Promise<boolean>} true if region path succeeded, false to fall through
+   */
+  async _activateExaltAsRegion(actor, radius) {
+    const spellDef = AURA_SPELLS.exalt;
+    const token = AuraManager._getCasterToken(actor);
+    if (!token) return false;
+
+    const templateAE = await AuraManager._ensureSharedTemplateAE("exalt");
+    if (!templateAE) return false;
+
+    try {
+      const scene = canvas.scene;
+      const distance = scene.grid?.distance || 5;
+      const radiusPx = radius * scene.grid.size / distance;
+      const center = token.getCenterPoint?.() ?? {
+        x: (token.document?.x ?? 0) + ((token.document?.width ?? 1) * scene.grid.size) / 2,
+        y: (token.document?.y ?? 0) + ((token.document?.height ?? 1) * scene.grid.size) / 2,
+      };
+
+      const [region] = await scene.createEmbeddedDocuments("Region", [{
+        name: `Exalt Aura — ${actor.name}`,
+        visibility: 2,
+        color: spellDef.templateColor || "#FFD700",
+        attachment: { token: token.id },
+        shapes: [{ type: "circle", x: center.x, y: center.y, radius: radiusPx, hole: false, gridBased: false }],
+        behaviors: [{
+          type: "applyActiveEffect",
+          name: "Exalt Buff",
+          system: { effects: [templateAE.uuid] },
+        }],
+        flags: { [MODULE_ID]: { auraOwner: actor.id, spellKey: "exalt" } },
+      }]);
+
+      await actor.setFlag(MODULE_ID, "activeAura", {
+        spellKey: "exalt",
+        radius,
+        tokenId: token.id,
+        regionId: region.id,
+        // Intentionally no sourceAeId — template AE is shared and owned by
+        // the template-actor; never deleted at deactivate.
+      });
+
+      AuraManager._playAuraFX(token, spellDef, radius);
+
+      ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2" data-card-type="aura-activate">
+          <div class="card-body">
+            <header class="card-header">
+              <div class="header-icon"><img src="${spellDef.icon}" alt="${spellDef.label}"></div>
+              <div class="header-info">
+                <h3 class="header-title">${spellDef.label} Aura</h3>
+                <div class="metadata-tags-row">
+                  <div class="meta-tag tag-skill"><i class="fas fa-circle"></i><span>${radius}' Radius</span></div>
+                  <span class="tag-separator">//</span>
+                  <div class="meta-tag tag-standard"><i class="fas fa-sun"></i><span>${spellDef.description}</span></div>
+                </div>
+              </div>
+            </header>
+            <section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                ${actor.name} activates <strong>${spellDef.label}</strong> as a ${radius}' Aura.<br>
+                <em>Allies within range receive the buff. Requires Focus.</em>
+              </div>
+              <div class="card-buttons" style="margin-top:0.5rem; text-align:center;">
+                <button data-action="vce-aura-deactivate" data-actor-id="${actor.id}" class="card-button">
+                  <i class="fas fa-times"></i> End Aura
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>`,
+        speaker: ChatMessage.getSpeaker({ actor }),
+      });
+
+      log("AuraManager", `Activated Exalt aura (region path, ${radius}') for ${actor.name}`);
+      return true;
+    } catch (err) {
+      log("AuraManager", `Region path failed for Exalt on ${actor.name}; falling back to legacy. ${err.message}`);
+      return false;
+    }
   },
 
   /**
