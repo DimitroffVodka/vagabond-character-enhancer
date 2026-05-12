@@ -25,6 +25,16 @@ The sustain-tick path read `sheetStates[spell.id]?.damageDice >= 1` to decide wh
 
 `EffectOnlyHandler` assumed the system's chat card always included a damage button and bailed early if it didn't. Aura ticks with damageDice=0 produce cards with no damage button — the player had no UI to apply the spell's statuses. Now injects the Apply Effects button into the card's `action-buttons-container` when there's no damage button, hit-gated via the system's `.roll-result-banner.result-hit` class so a missed cast can't apply statuses.
 
+### `renderChatMessage` → `renderChatMessageHTML` migration
+
+v14 deprecates the `renderChatMessage` hook in favor of `renderChatMessageHTML`, which passes the chat card as a plain `HTMLElement` rather than a jQuery wrapper. The old hook still fires on v14 but emits a per-message deprecation warning, and is slated for removal in v15+.
+
+Introduces `onRenderChatMessage(callback)` helper in `scripts/utils.mjs` that feature-detects the Foundry version via `foundry.utils.isNewerVersion(game.version, "13.330")` and registers on the correct hook. The helper coerces `html` to a plain `HTMLElement` internally, so call sites can drop the `html instanceof jQuery ? html[0] : html` defensive guard.
+
+Migrates 15 call sites across 14 files: `aura-manager`, `brawl-intent`, `bless-manager`, `imbue-manager`, `effect-only-handler`, and the class-feature files for Barbarian, Bard (×2), Dancer, Hunter, Luminary, Revelator, Vanguard, Wizard, and Witch.
+
+Minimum Foundry compatibility stays at `13` since the new hook has existed since v13.331; v13.0–v13.330 users would need to pin to v0.4.15.
+
 ## v0.4.15 — Sorcerer Tap + reload-viewport repair + smoke harness fix
 
 ### Sorcerer Tap (L1 class feature)
