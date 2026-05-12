@@ -259,6 +259,13 @@ export const AuraManager = {
         // We flag it and handle weapon silvering when the aura effect is applied.
       } else {
         aeFlags[MODULE_ID].blessAE = true;
+        // v14 path: use a Region attached to the caster's token with an
+        // applyActiveEffect behavior. The region follows the caster
+        // natively (no updateToken hook), auto-applies the buff on
+        // entry, and auto-removes on exit. Replaces the legacy
+        // MeasuredTemplate + manual containment scan + per-round tick.
+        // Falls through to legacy path on failure or non-Bless-allies.
+        if (await AuraManager._activateBlessAlliesAsRegion(actor, radius)) return;
       }
     }
 
@@ -355,6 +362,30 @@ export const AuraManager = {
 
     const spellDef = AURA_SPELLS[auraState.spellKey];
 
+    // v14 region-based aura cleanup. If `regionId` is set the aura was
+    // activated via the new path; delete the region (which auto-removes
+    // all cloned AEs on in-range tokens) and the source AE on the caster.
+    if (auraState.regionId) {
+      await AuraManager._deactivateRegion(actor, auraState);
+      // Post the standard "ends aura" chat card and we're done — none of
+      // the legacy template/FX/buff cleanup applies in the region path.
+      ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2" data-card-type="aura-deactivate">
+          <div class="card-body">
+            <section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                <i class="fas fa-circle" style="opacity:0.4"></i>
+                ${actor.name} ends their <strong>${spellDef?.label || "Aura"}</strong>.
+              </div>
+            </section>
+          </div>
+        </div>`,
+        speaker: ChatMessage.getSpeaker({ actor }),
+      });
+      log("AuraManager", `Deactivated region-based aura for ${actor.name}`);
+      return;
+    }
+
     // Remove the aura AE from the caster (Aura Effects module handles propagation cleanup)
     if (auraState.aeId) {
       const ae = actor.effects.get(auraState.aeId);
@@ -398,6 +429,160 @@ export const AuraManager = {
     });
 
     log("AuraManager", `Deactivated aura for ${actor.name}`);
+  },
+
+  /**
+   * v14 region-based aura activation for Bless (allies mode).
+   *
+   * The historical AuraManager path uses a MeasuredTemplate + manual
+   * updateToken-driven follow + per-round containment scan to apply the
+   * blessAE flag AE to in-range allies. v14 supports Regions with
+   * `attachment.token` (region follows the token natively) and an
+   * `applyActiveEffect` behavior that auto-applies a cloned AE to every
+   * entering token and removes it on exit — replacing all of that custom
+   * plumbing with declarative region data.
+   *
+   * The source AE lives on the caster as a hidden template. The region's
+   * applyActiveEffect behavior clones it onto every in-range token. The
+   * caster ends up with two copies (the source + their own clone, since
+   * they're inside their own region) — harmless for Bless's tag-based
+   * detection (BlessManager.onPreRollSave checks for the flag's presence,
+   * not its count). Both source and all clones are removed when the
+   * region is deleted.
+   *
+   * @param {Actor} actor - The caster
+   * @param {number} radius - Aura radius in feet
+   * @returns {Promise<boolean>} true if region path succeeded, false to fall through
+   */
+  async _activateBlessAlliesAsRegion(actor, radius) {
+    const spellDef = AURA_SPELLS.bless;
+    const token = AuraManager._getCasterToken(actor);
+    if (!token) return false;
+
+    try {
+      // Source AE template — cloned by the region behavior onto every
+      // in-range token. statuses:["blessed"] gives the in-game icon;
+      // blessAE flag is the tag BlessManager.onPreRollSave looks for.
+      const [sourceAE] = await actor.createEmbeddedDocuments("ActiveEffect", [{
+        name: `Bless (Aura: ${actor.name})`,
+        img: spellDef.icon,
+        origin: `Actor.${actor.id}`,
+        description: spellDef.description || "",
+        disabled: false,
+        statuses: ["blessed"],
+        flags: {
+          [MODULE_ID]: {
+            managed: true,
+            auraTemplate: true,
+            auraSpell: "Bless",
+            auraBuff: actor.id,
+            blessAE: true,
+          },
+        },
+        changes: [],
+      }]);
+
+      const scene = canvas.scene;
+      // Convert feet → pixels via scene grid (grid.size px = grid.distance ft)
+      const distance = scene.grid?.distance || 5;
+      const radiusPx = radius * scene.grid.size / distance;
+      // `token` here is a Token *placeable* (canvas object), whose .x/.y/.width/.height
+      // refer to texture pixel positions — not what we want. Use getCenterPoint() for
+      // the scene-coordinate center point of the token, falling back to the token
+      // document's top-left + grid-cell-derived center if the placeable isn't on canvas.
+      const center = token.getCenterPoint?.() ?? {
+        x: (token.document?.x ?? 0) + ((token.document?.width ?? 1) * scene.grid.size) / 2,
+        y: (token.document?.y ?? 0) + ((token.document?.height ?? 1) * scene.grid.size) / 2,
+      };
+      const cx = center.x;
+      const cy = center.y;
+
+      const [region] = await scene.createEmbeddedDocuments("Region", [{
+        name: `Bless Aura — ${actor.name}`,
+        visibility: 2, // visible when Region layer active
+        color: spellDef.templateColor || "#87CEEB",
+        attachment: { token: token.id },
+        shapes: [{ type: "circle", x: cx, y: cy, radius: radiusPx, hole: false, gridBased: false }],
+        behaviors: [{
+          type: "applyActiveEffect",
+          name: "Bless Buff",
+          system: { effects: [sourceAE.uuid] },
+        }],
+        flags: { [MODULE_ID]: { auraOwner: actor.id, spellKey: "bless" } },
+      }]);
+
+      await actor.setFlag(MODULE_ID, "activeAura", {
+        spellKey: "bless",
+        blessMode: "allies",
+        radius,
+        tokenId: token.id,
+        regionId: region.id,
+        sourceAeId: sourceAE.id,
+      });
+
+      AuraManager._playAuraFX(token, spellDef, radius);
+
+      ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2" data-card-type="aura-activate">
+          <div class="card-body">
+            <header class="card-header">
+              <div class="header-icon"><img src="${spellDef.icon}" alt="${spellDef.label}"></div>
+              <div class="header-info">
+                <h3 class="header-title">${spellDef.label} Aura</h3>
+                <div class="metadata-tags-row">
+                  <div class="meta-tag tag-skill"><i class="fas fa-circle"></i><span>${radius}' Radius</span></div>
+                  <span class="tag-separator">//</span>
+                  <div class="meta-tag tag-standard"><i class="fas fa-sun"></i><span>${spellDef.description}</span></div>
+                </div>
+              </div>
+            </header>
+            <section class="content-body">
+              <div class="card-description" style="text-align:center;">
+                ${actor.name} activates <strong>${spellDef.label}</strong> as a ${radius}' Aura.<br>
+                <em>Allies within range receive the buff. Requires Focus.</em>
+              </div>
+              <div class="card-buttons" style="margin-top:0.5rem; text-align:center;">
+                <button data-action="vce-aura-deactivate" data-actor-id="${actor.id}" class="card-button">
+                  <i class="fas fa-times"></i> End Aura
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>`,
+        speaker: ChatMessage.getSpeaker({ actor }),
+      });
+
+      log("AuraManager", `Activated Bless aura (region path, ${radius}') for ${actor.name}`);
+      return true;
+    } catch (err) {
+      log("AuraManager", `Region path failed for Bless on ${actor.name}; falling back to legacy. ${err.message}`);
+      return false;
+    }
+  },
+
+  /**
+   * Tear down a region-based aura. Deletes the Region (which auto-removes
+   * all cloned AEs from in-range tokens) and the source template AE on
+   * the caster. Caller is responsible for clearing the `activeAura` flag.
+   */
+  async _deactivateRegion(actor, auraState) {
+    AuraManager._stopAuraFX(actor);
+
+    if (auraState.regionId) {
+      const region = canvas.scene?.regions?.get(auraState.regionId);
+      if (region) {
+        try { await region.delete(); } catch { /* permission / already gone */ }
+      }
+    }
+
+    if (auraState.sourceAeId) {
+      const ae = actor.effects.get(auraState.sourceAeId);
+      if (ae) {
+        try { await ae.delete(); } catch { /* ignore */ }
+      }
+    }
+
+    await actor.unsetFlag(MODULE_ID, "activeAura");
   },
 
   /**
