@@ -91,20 +91,7 @@ export const PSYCHIC_REGISTRY = {
   "mental fortress": {
     class: "psychic", level: 6, flag: "psychic_mentalFortress", status: "module",
     description: "Cannot be Berserk, Charmed, Confused, or Frightened against your will.",
-    effects: [{
-      label: "Mental Fortress",
-      icon: "icons/magic/control/control-influence-puppet.webp",
-      changes: [
-        // statusImmunities ADD mode (4) appends each name. Per the system's
-        // Divine Resolve fix in CHANGELOG v0.3.0+, each immunity must be
-        // a SEPARATE change entry — the system splits on commas internally
-        // but ADD mode of an array field needs distinct values.
-        { key: "system.statusImmunities", mode: 4, value: "berserk",    priority: null },
-        { key: "system.statusImmunities", mode: 4, value: "charmed",    priority: null },
-        { key: "system.statusImmunities", mode: 4, value: "confused",   priority: null },
-        { key: "system.statusImmunities", mode: 4, value: "frightened", priority: null }
-      ]
-    }]
+    canonicalIds: ["psychic-mental-fortress"]
   },
 
   // ──────────────────────────────────────────────

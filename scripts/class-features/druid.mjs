@@ -116,16 +116,7 @@ export const DRUID_REGISTRY = {
     flag: "druid_ancientGrowth",
     status: "partial",
     description: "Self-Polymorph Focus allows one additional Focus Spell. Beast attacks count as (+1) Relics (increases every 6 levels).",
-    effects: [
-      {
-        label: "Ancient Growth (+1 Focus)",
-        icon: "icons/magic/nature/leaf-glow-yellow.webp",
-        disabled: true,
-        changes: [
-          { key: "system.focus.maxBonus", mode: 2, value: "1" }
-        ]
-      }
-    ]
+    canonicalIds: ["druid-ancient-growth"]
   },
 
   // ──────────────────────────────────────────────
@@ -145,16 +136,7 @@ export const DRUID_REGISTRY = {
     flag: "druid_savagery",
     status: "module",
     description: "While polymorphed into a Beast, +1 bonus to Armor.",
-    effects: [
-      {
-        label: "Savagery (+1 Armor)",
-        icon: "icons/creatures/abilities/bear-roar-bite-brown-green.webp",
-        disabled: true,
-        changes: [
-          { key: "system.armorBonus", mode: 2, value: "1" }
-        ]
-      }
-    ]
+    canonicalIds: ["druid-savagery"]
   },
 
   // ──────────────────────────────────────────────

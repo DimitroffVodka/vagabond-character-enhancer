@@ -38,15 +38,7 @@ export const DANCER_REGISTRY = {
     level: 1,
     flag: "dancer_fleetOfFoot",
     description: "Gain Treads Lightly Perk. Reflex Save crit reduced by (ceil Dancer Level / 4).",
-    effects: [
-      {
-        label: "Fleet of Foot (Reflex Crit)",
-        icon: "icons/skills/movement/feet-winged-sandals-tan.webp",
-        changes: [
-          { key: "system.reflexCritBonus", mode: 2, value: "-1" }
-        ]
-      }
-    ]
+    canonicalIds: ["dancer-fleet-of-foot"]
   },
 
   // ──────────────────────────────────────────────

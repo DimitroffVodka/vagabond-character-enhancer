@@ -78,13 +78,7 @@ export const REVELATOR_REGISTRY = {
   "paragon's aura": {
     class: "revelator", level: 4, flag: "revelator_paragonsAura", status: "partial",
     description: "Free Aura spell delivery (no Mana). Focus on Aura + Imbue simultaneously.",
-    effects: [{
-      label: "Paragon's Aura",
-      icon: "icons/magic/holy/prayer-hands-glowing-yellow.webp",
-      changes: [
-        { key: "system.focus.maxBonus", mode: 2, value: "1" }
-      ]
-    }]
+    canonicalIds: ["revelator-paragons-aura"]
   },
 
   // ──────────────────────────────────────────────
@@ -97,15 +91,7 @@ export const REVELATOR_REGISTRY = {
   "divine resolve": {
     class: "revelator", level: 6, flag: "revelator_divineResolve", status: "module",
     description: "Can't be Blinded, Paralyzed, or Sickened. Lay on Hands cures these on targets.",
-    effects: [{
-      label: "Divine Resolve",
-      icon: "icons/magic/holy/barrier-shield-winged-cross.webp",
-      changes: [
-        { key: "system.statusImmunities", mode: 2, value: "blinded" },
-        { key: "system.statusImmunities", mode: 2, value: "paralyzed" },
-        { key: "system.statusImmunities", mode: 2, value: "sickened" }
-      ]
-    }]
+    canonicalIds: ["revelator-divine-resolve"]
   },
 
   // ──────────────────────────────────────────────
@@ -133,15 +119,7 @@ export const REVELATOR_REGISTRY = {
   "sacrosanct": {
     class: "revelator", level: 10, flag: "revelator_sacrosanct", status: "module",
     description: "+2 bonus to all Saves.",
-    effects: [{
-      label: "Sacrosanct",
-      icon: "icons/magic/holy/chalice-glowing-gold.webp",
-      changes: [
-        { key: "system.saves.reflex.bonus", mode: 2, value: "2" },
-        { key: "system.saves.endure.bonus", mode: 2, value: "2" },
-        { key: "system.saves.will.bonus", mode: 2, value: "2" }
-      ]
-    }]
+    canonicalIds: ["revelator-sacrosanct"]
   }
 };
 

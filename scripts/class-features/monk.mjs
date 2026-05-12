@@ -99,13 +99,7 @@ export const MONK_REGISTRY = {
   "empowered strikes": {
     class: "monk", level: 8, flag: "monk_empoweredStrikes", status: "module",
     description: "Finesse Weapon damage die becomes d6.",
-    effects: [{
-      label: "Empowered Strikes",
-      icon: "icons/skills/melee/unarmed-punch-fist-yellow.webp",
-      changes: [
-        { key: "system.finesseDamageDieSizeBonus", mode: 2, value: "2" }
-      ]
-    }]
+    canonicalIds: ["monk-empowered-strikes"]
   },
 
   // NOTE: L10 Flurry of Blows shares the same compendium feature name as L6,

@@ -867,13 +867,7 @@ export const PERK_REGISTRY = {
   "spin-to-win": {
     flag: "perk_spinToWin",
     description: "Melee Cleave attacks can deal half damage to all viable Targets, not just one extra.",
-    effects: [{
-      label: "Spin-to-Win",
-      icon: "icons/skills/melee/strike-sword-slashing-red.webp",
-      changes: [
-        { key: "system.cleaveTargets", mode: 2, value: "98" }
-      ]
-    }]
+    canonicalIds: ["perk-spin-to-win"]
   },
 
   // Steady Aim

@@ -82,6 +82,177 @@ export const CATALOG = [
     ],
     moduleFlags: { auraTemplate: true },
   },
+
+  /* ---- Class feature AEs (migrated from inline registry entries) ---- */
+
+  {
+    canonicalId: "barbarian-rage",
+    name: "Rage",
+    img: "icons/skills/melee/hand-grip-sword-red.webp",
+    changes: [
+      // DR 1 per die — always on; system gates behind berserk + light armor.
+      // Die upsizing / exploding / damage bonus are on the dynamic "Rage (Active)"
+      // companion AE created when Berserk toggles (see barbarian._registerRageHooks).
+      { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" },
+    ],
+  },
+  {
+    canonicalId: "barbarian-mindless-rancor",
+    name: "Mindless Rancor",
+    img: "icons/magic/defensive/shield-barrier-deflect-gold.webp",
+    changes: [
+      { key: "system.statusImmunities", mode: 2, value: "charmed" },
+      { key: "system.statusImmunities", mode: 2, value: "confused" },
+    ],
+  },
+  {
+    canonicalId: "barbarian-rip-and-tear",
+    name: "Rip and Tear",
+    img: "icons/skills/melee/strike-axe-blood-red.webp",
+    changes: [
+      // +1 more DR per die (stacks with Rage's 1 for total 2)
+      { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" },
+    ],
+  },
+  {
+    canonicalId: "dancer-fleet-of-foot",
+    name: "Fleet of Foot (Reflex Crit)",
+    img: "icons/skills/movement/feet-winged-sandals-tan.webp",
+    changes: [
+      { key: "system.reflexCritBonus", mode: 2, value: "-1" },
+    ],
+  },
+  {
+    canonicalId: "druid-ancient-growth",
+    name: "Ancient Growth (+1 Focus)",
+    img: "icons/magic/nature/leaf-glow-yellow.webp",
+    disabled: true,
+    changes: [
+      { key: "system.focus.maxBonus", mode: 2, value: "1" },
+    ],
+  },
+  {
+    canonicalId: "druid-savagery",
+    name: "Savagery (+1 Armor)",
+    img: "icons/creatures/abilities/bear-roar-bite-brown-green.webp",
+    disabled: true,
+    changes: [
+      { key: "system.armorBonus", mode: 2, value: "1" },
+    ],
+  },
+  {
+    canonicalId: "monk-empowered-strikes",
+    name: "Empowered Strikes",
+    img: "icons/skills/melee/unarmed-punch-fist-yellow.webp",
+    changes: [
+      { key: "system.finesseDamageDieSizeBonus", mode: 2, value: "2" },
+    ],
+  },
+  {
+    canonicalId: "psychic-mental-fortress",
+    name: "Mental Fortress",
+    img: "icons/magic/control/control-influence-puppet.webp",
+    // ADD mode (4) appends each name. Per system's Divine Resolve fix in CHANGELOG
+    // v0.3.0+, each immunity is a SEPARATE change entry — the system splits on
+    // commas internally but ADD mode of an array field needs distinct values.
+    changes: [
+      { key: "system.statusImmunities", mode: 4, value: "berserk",    priority: null },
+      { key: "system.statusImmunities", mode: 4, value: "charmed",    priority: null },
+      { key: "system.statusImmunities", mode: 4, value: "confused",   priority: null },
+      { key: "system.statusImmunities", mode: 4, value: "frightened", priority: null },
+    ],
+  },
+  {
+    canonicalId: "pugilist-impact",
+    name: "Impact",
+    img: "icons/skills/melee/unarmed-punch-fist.webp",
+    changes: [
+      { key: "system.brawlDamageDieSizeBonus", mode: 2, value: "2" },
+    ],
+  },
+  {
+    canonicalId: "revelator-paragons-aura",
+    name: "Paragon's Aura",
+    img: "icons/magic/holy/prayer-hands-glowing-yellow.webp",
+    changes: [
+      { key: "system.focus.maxBonus", mode: 2, value: "1" },
+    ],
+  },
+  {
+    canonicalId: "revelator-divine-resolve",
+    name: "Divine Resolve",
+    img: "icons/magic/holy/barrier-shield-winged-cross.webp",
+    changes: [
+      { key: "system.statusImmunities", mode: 2, value: "blinded" },
+      { key: "system.statusImmunities", mode: 2, value: "paralyzed" },
+      { key: "system.statusImmunities", mode: 2, value: "sickened" },
+    ],
+  },
+  {
+    canonicalId: "revelator-sacrosanct",
+    name: "Sacrosanct",
+    img: "icons/magic/holy/chalice-glowing-gold.webp",
+    changes: [
+      { key: "system.saves.reflex.bonus", mode: 2, value: "2" },
+      { key: "system.saves.endure.bonus", mode: 2, value: "2" },
+      { key: "system.saves.will.bonus", mode: 2, value: "2" },
+    ],
+  },
+  {
+    canonicalId: "sorcerer-spell-slinger",
+    name: "Spell-Slinger",
+    img: "icons/magic/lightning/bolt-strike-blue.webp",
+    changes: [
+      { key: "system.castCritBonus", mode: 2, value: "-1" },
+      { key: "system.spellDamageDieSize", mode: 5, value: "8" },
+    ],
+  },
+  {
+    canonicalId: "sorcerer-overpowered",
+    name: "Overpowered",
+    img: "icons/magic/lightning/bolt-strike-purple.webp",
+    changes: [
+      // Additional -1 on top of Spell-Slinger's -1 = total -2 = crit on 18
+      { key: "system.castCritBonus", mode: 2, value: "-1" },
+    ],
+  },
+  {
+    canonicalId: "vanguard-wall-large",
+    name: "Wall (Large)",
+    img: "icons/equipment/shield/heater-crystal-blue.webp",
+    // Shove size override handled by brawl-intent.mjs via feature flag.
+    changes: [],
+  },
+  {
+    canonicalId: "vanguard-wall-huge",
+    name: "Wall (Huge)",
+    img: "icons/equipment/shield/heater-crystal-blue.webp",
+    changes: [],
+  },
+  {
+    canonicalId: "wizard-manifold-mind",
+    name: "Manifold Mind",
+    img: "icons/magic/perception/eye-ringed-glow-angry-small-teal.webp",
+    changes: [
+      { key: "system.focus.maxBonus", mode: 2, value: "1" },
+    ],
+  },
+  {
+    canonicalId: "wizard-manifold-mind-3",
+    name: "Manifold Mind (3)",
+    img: "icons/magic/perception/eye-ringed-glow-angry-small-teal.webp",
+    changes: [
+      { key: "system.focus.maxBonus", mode: 2, value: "1" },
+    ],
+  },
+  {
+    canonicalId: "perk-spin-to-win",
+    name: "Spin-to-Win",
+    img: "icons/skills/melee/strike-sword-slashing-red.webp",
+    changes: [
+      { key: "system.cleaveTargets", mode: 2, value: "98" },
+    ],
+  },
 ];
 
 /* -------------------------------------------- */
@@ -190,7 +361,7 @@ export async function bootstrapActiveEffectsCatalog() {
       description: def.description ?? "",
       statuses: def.statuses ?? [],
       changes: def.changes ?? [],
-      disabled: false,
+      disabled: def.disabled ?? false,
       flags: {
         [MODULE_ID]: {
           canonicalId: def.canonicalId,

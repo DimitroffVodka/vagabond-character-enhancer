@@ -33,14 +33,7 @@ export const SORCERER_REGISTRY = {
   "spell-slinger": {
     class: "sorcerer", level: 2, flag: "sorcerer_spellSlinger", status: "module",
     description: "Crit on Cast Checks on 19-20. Spell damage die becomes d8.",
-    effects: [{
-      label: "Spell-Slinger",
-      icon: "icons/magic/lightning/bolt-strike-blue.webp",
-      changes: [
-        { key: "system.castCritBonus", mode: 2, value: "-1" },
-        { key: "system.spellDamageDieSize", mode: 5, value: "8" }
-      ]
-    }]
+    canonicalIds: ["sorcerer-spell-slinger"]
   },
 
   // L4: Quickening — Skip Move to Cast (no Mana)
@@ -69,14 +62,7 @@ export const SORCERER_REGISTRY = {
   "overpowered": {
     class: "sorcerer", level: 10, flag: "sorcerer_overpowered", status: "module",
     description: "Crit on Cast Checks on 18-20. Can gain 2 Fatigue to regain Cd6 Mana and remove Mana cap.",
-    effects: [{
-      label: "Overpowered",
-      icon: "icons/magic/lightning/bolt-strike-purple.webp",
-      changes: [
-        // Additional -1 on top of Spell-Slinger's -1 = total -2 = crit on 18
-        { key: "system.castCritBonus", mode: 2, value: "-1" }
-      ]
-    }]
+    canonicalIds: ["sorcerer-overpowered"]
   }
 };
 

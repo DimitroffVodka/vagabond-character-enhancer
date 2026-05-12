@@ -45,11 +45,7 @@ export const VANGUARD_REGISTRY = {
   "wall (large)": {
     class: "vanguard", level: 4, flag: "vanguard_wall", status: "module",
     description: "Considered Large for Shoves.",
-    effects: [{
-      label: "Wall (Large)",
-      icon: "icons/equipment/shield/heater-crystal-blue.webp",
-      changes: []  // Shove size override handled by brawl-intent.mjs via feature flag
-    }]
+    canonicalIds: ["vanguard-wall-large"]
   },
 
   // L6: Unstoppable — Chain shoves during Rampant Charge
@@ -64,11 +60,7 @@ export const VANGUARD_REGISTRY = {
   "wall (huge)": {
     class: "vanguard", level: 8, flag: "vanguard_wallHuge", status: "module",
     description: "Considered Huge for Shoves.",
-    effects: [{
-      label: "Wall (Huge)",
-      icon: "icons/equipment/shield/heater-crystal-blue.webp",
-      changes: []  // Shove size override handled by brawl-intent.mjs via feature flag
-    }]
+    canonicalIds: ["vanguard-wall-huge"]
   },
 
   // L10: Indestructible — Immune to attack damage with Armor ≥ 1

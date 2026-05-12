@@ -4,6 +4,7 @@
  */
 
 import { MODULE_ID, log } from "./utils.mjs";
+import { cloneFor as catalogCloneFor } from "./active-effects-catalog.mjs";
 
 // Import class registries — each class file owns all its feature definitions
 import { BARBARIAN_REGISTRY } from "./class-features/barbarian.mjs";
@@ -107,6 +108,79 @@ const ANCESTRY_TRAIT_REGISTRY = {
  * Combined registry of all perk features.
  */
 const PERK_FEATURE_REGISTRY = PERK_REGISTRY;
+
+/* -------------------------------------------- */
+/*  Effect Resolution                            */
+/* -------------------------------------------- */
+
+/**
+ * Resolve a registry feature definition's effects into the actor-bound
+ * shape the feature-detector apply pipeline expects, and merge them into
+ * the `desiredEffects` map keyed by `${featureFlag}_${name}`.
+ *
+ * A feature def can declare effects in two ways:
+ *   - `effects: [{ label, icon, changes, ... }]` — inline. Legacy shape.
+ *   - `canonicalIds: ["bless-aura", "rage-dr-1"]` — references to entries
+ *      in the VCE Active Effects Catalog. The catalog holds the canonical
+ *      definitions; we clone here and merge with managed-flag metadata.
+ *
+ * Both shapes are honored; defs may use either or both. The effectKey
+ * format `${flag}_${name}` is preserved across the two paths so the
+ * feature-detector's existing diff-and-create loop matches old managed
+ * AEs against the same key after a catalog migration — no recreate
+ * needed if the catalog entry's `name` matches the old `label`.
+ */
+async function _collectFeatureEffects(featureDef, desiredEffects, classUuid) {
+  const managedFlags = (label) => ({
+    [MODULE_ID]: {
+      managed: true,
+      featureFlag: featureDef.flag,
+      effectKey: `${featureDef.flag}_${label}`,
+    },
+  });
+  const originForDef = classUuid || `${MODULE_ID}.${featureDef.flag}`;
+
+  // Inline effects (legacy shape) — preserved verbatim.
+  if (Array.isArray(featureDef.effects)) {
+    for (const effectDef of featureDef.effects) {
+      const key = `${featureDef.flag}_${effectDef.label}`;
+      desiredEffects.set(key, {
+        ...effectDef,
+        origin: originForDef,
+        flags: managedFlags(effectDef.label),
+      });
+    }
+  }
+
+  // Catalog references — clone from the VCE Active Effects Catalog and
+  // merge with management metadata. The catalog entry's `name` is used
+  // as the label for effectKey so a migration from inline→canonicalId
+  // keeps the same key (no AE recreate on next scan).
+  if (Array.isArray(featureDef.canonicalIds)) {
+    for (const canonicalId of featureDef.canonicalIds) {
+      const data = await catalogCloneFor(canonicalId);
+      if (!data) {
+        log("FeatureDetector", `Catalog entry "${canonicalId}" missing for ${featureDef.flag}; skipping`);
+        continue;
+      }
+      // The cloned data carries the catalog's flags; merge in management metadata.
+      const label = data.name;
+      const key = `${featureDef.flag}_${label}`;
+      desiredEffects.set(key, {
+        // Translate catalog field names to the inline-effect shape that
+        // the rest of the apply pipeline expects.
+        label,
+        icon: data.img,
+        changes: data.changes ?? [],
+        statuses: data.statuses ?? [],
+        description: data.description ?? "",
+        ...data, // keep all other fields (img, name, etc.)
+        origin: originForDef,
+        flags: foundry.utils.mergeObject(data.flags ?? {}, managedFlags(label), { inplace: false }),
+      });
+    }
+  }
+}
 
 /* -------------------------------------------- */
 /*  Psychic Talent pick-on-detect               */
@@ -358,44 +432,14 @@ export const FeatureDetector = {
     for (const [featureName, entries] of Object.entries(_CLASS_FEATURE_MULTI)) {
       for (const featureDef of entries) {
         if (!features[featureDef.flag]) continue;
-        if (!featureDef.effects) continue;
-
-        for (const effectDef of featureDef.effects) {
-          const key = `${featureDef.flag}_${effectDef.label}`;
-          desiredEffects.set(key, {
-            ...effectDef,
-            origin: classUuid || `${MODULE_ID}.${featureDef.flag}`,
-            flags: {
-              [MODULE_ID]: {
-                managed: true,
-                featureFlag: featureDef.flag,
-                effectKey: key
-              }
-            }
-          });
-        }
+        await _collectFeatureEffects(featureDef, desiredEffects, classUuid);
       }
     }
 
     // Check perk feature registry
     for (const [perkName, perkDef] of Object.entries(PERK_FEATURE_REGISTRY)) {
       if (!features[perkDef.flag]) continue;
-      if (!perkDef.effects) continue;
-
-      for (const effectDef of perkDef.effects) {
-        const key = `${perkDef.flag}_${effectDef.label}`;
-        desiredEffects.set(key, {
-          ...effectDef,
-          origin: `${MODULE_ID}.${perkDef.flag}`,
-          flags: {
-            [MODULE_ID]: {
-              managed: true,
-              featureFlag: perkDef.flag,
-              effectKey: key
-            }
-          }
-        });
-      }
+      await _collectFeatureEffects(perkDef, desiredEffects, null);
     }
 
     // Allow class feature modules to dynamically modify effect definitions

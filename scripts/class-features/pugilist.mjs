@@ -101,13 +101,7 @@ export const PUGILIST_REGISTRY = {
   "impact": {
     class: "pugilist", level: 8, flag: "pugilist_impact", status: "module",
     description: "Brawl Weapon damage die becomes d6.",
-    effects: [{
-      label: "Impact",
-      icon: "icons/skills/melee/unarmed-punch-fist.webp",
-      changes: [
-        { key: "system.brawlDamageDieSizeBonus", mode: 2, value: "2" }
-      ]
-    }]
+    canonicalIds: ["pugilist-impact"]
   },
 
   // ──────────────────────────────────────────────

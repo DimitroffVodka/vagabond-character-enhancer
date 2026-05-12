@@ -25,13 +25,7 @@ export const WIZARD_REGISTRY = {
   "manifold mind": {
     class: "wizard", level: 4, flag: "wizard_manifoldMind", status: "module",
     description: "Focus on up to 2 Spells at the same time.",
-    effects: [{
-      label: "Manifold Mind",
-      icon: "icons/magic/perception/eye-ringed-glow-angry-small-teal.webp",
-      changes: [
-        { key: "system.focus.maxBonus", mode: 2, value: "1" }
-      ]
-    }]
+    canonicalIds: ["wizard-manifold-mind"]
   },
   "extracurricular": {
     class: "wizard", level: 6, flag: "wizard_extracurricular", status: "flavor",
@@ -40,13 +34,7 @@ export const WIZARD_REGISTRY = {
   "manifold mind (3)": {
     class: "wizard", level: 8, flag: "wizard_manifoldMind3", status: "module",
     description: "Focus on up to 3 Spells at the same time.",
-    effects: [{
-      label: "Manifold Mind (3)",
-      icon: "icons/magic/perception/eye-ringed-glow-angry-small-teal.webp",
-      changes: [
-        { key: "system.focus.maxBonus", mode: 2, value: "1" }
-      ]
-    }]
+    canonicalIds: ["wizard-manifold-mind-3"]
   },
   "archwizard": {
     class: "wizard", level: 10, flag: "wizard_archwizard", status: "system",

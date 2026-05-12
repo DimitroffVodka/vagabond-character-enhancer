@@ -84,18 +84,7 @@ export const BARBARIAN_REGISTRY = {
     flag: "barbarian_rage",
     status: "module",
     description: "While Berserk + light/no armor: damage dice upsized, can explode, reduce incoming damage by 1 per die. Can go Berserk after taking damage or as part of an attack.",
-    effects: [
-      {
-        label: "Rage",
-        icon: "icons/skills/melee/hand-grip-sword-red.webp",
-        changes: [
-          // DR 1 per die — always on, system gates behind berserk + light armor check
-          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" }
-          // Die upsizing, exploding, and damage bonus are on the Rage (Active) companion AE
-          // which is created/deleted dynamically when Berserk toggles (see _registerRageHooks).
-        ]
-      }
-    ]
+    canonicalIds: ["barbarian-rage"]
   },
 
   // ──────────────────────────────────────────────
@@ -215,16 +204,7 @@ export const BARBARIAN_REGISTRY = {
     flag: "barbarian_mindlessRancor",
     status: "module",
     description: "You can't be Charmed, Confused, or compelled to act against your will.",
-    effects: [
-      {
-        label: "Mindless Rancor",
-        icon: "icons/magic/defensive/shield-barrier-deflect-gold.webp",
-        changes: [
-          { key: "system.statusImmunities", mode: 2, value: "charmed" },
-          { key: "system.statusImmunities", mode: 2, value: "confused" }
-        ]
-      }
-    ]
+    canonicalIds: ["barbarian-mindless-rancor"]
   },
 
   // ──────────────────────────────────────────────
@@ -276,19 +256,7 @@ export const BARBARIAN_REGISTRY = {
     flag: "barbarian_ripAndTear",
     status: "module",
     description: "Upgrades Rage: reduce damage by 2 per die instead of 1, +1 bonus to each damage die.",
-    effects: [
-      {
-        label: "Rip and Tear",
-        icon: "icons/skills/melee/strike-axe-blood-red.webp",
-        changes: [
-          // +1 more DR per die (stacks with Rage's 1 for total 2)
-          // Always on — system gates behind berserk + light armor check
-          { key: "system.incomingDamageReductionPerDie", mode: 2, value: "1" }
-          // +1 universal damage bonus is on the Rage (Active) companion AE
-          // which checks for barbarian_ripAndTear flag (see _registerRageHooks).
-        ]
-      }
-    ]
+    canonicalIds: ["barbarian-rip-and-tear"]
   }
 };
 
