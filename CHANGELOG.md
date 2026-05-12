@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.4.16 — Foundry v14.360 + Vagabond 5.7.0 compatibility (WIP)
+
+Tracks the v14 compatibility pass. See `docs/superpowers/specs/2026-05-12-v14-compatibility-pass-design.md` for the full plan.
+
+### Compatibility
+
+- `module.json` `compatibility.verified` → `14.360` (was `13.351`). `minimum` stays at `13` — module still works on v13.
+- `relationships.systems[vagabond].compatibility.verified` → `5.7.0` (was `5.3.0`).
+
+### Aura template re-create (v14)
+
+`MeasuredTemplate` documents are read-only post-create on v14 — `template.update({x,y})` silently no-ops with no error or warning. `AuraManager._updateTemplatePosition` now deletes the existing template and creates a new one at the target position, preserving all original fields, then path-updates `activeAura.templateId` to the new id.
+
+### Aura tick race fix (v14)
+
+The tick-boundary write in `_tickAura` and `_runEffectTick` was doing a wholesale `setFlag(MODULE_ID, "activeAura", { ...auraState, tickedThisRound: [...] })`. That races with the delete+recreate template path which concurrently path-updates `activeAura.templateId`. The wholesale write would land last with the stale `templateId` from `auraState`, orphaning the freshly created template. Fixed by path-updating only the single field that changed (`activeAura.tickedThisRound`).
+
+### Effect-only damageDice = 0 actually honored
+
+The sustain-tick path read `sheetStates[spell.id]?.damageDice >= 1` to decide whether to roll damage. A player choosing "effect only" (damageDice = 0) was being silently coerced back to 1, so effect-only Burn auras still rolled damage on every tick. Now honors any explicit number `>= 0`, including 0. The `behavior` selection logic was also broken — a damage-capable spell cast with damageDice=0 was labeled `damageTick`; now correctly `effectTick`.
+
+### Effect-only Apply Effects button for damage-less casts
+
+`EffectOnlyHandler` assumed the system's chat card always included a damage button and bailed early if it didn't. Aura ticks with damageDice=0 produce cards with no damage button — the player had no UI to apply the spell's statuses. Now injects the Apply Effects button into the card's `action-buttons-container` when there's no damage button, hit-gated via the system's `.roll-result-banner.result-hit` class so a missed cast can't apply statuses.
+
 ## v0.4.15 — Sorcerer Tap + reload-viewport repair + smoke harness fix
 
 ### Sorcerer Tap (L1 class feature)
