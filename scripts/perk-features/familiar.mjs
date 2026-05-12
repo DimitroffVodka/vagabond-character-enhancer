@@ -120,7 +120,7 @@ export const FamiliarFeatures = {
                 this.hideInventoryContextMenu();
 
                 const { ContextMenuHelper } = globalThis.vagabond.utils;
-                const { VagabondChatCard } = globalThis.vagabond.utils;
+                const { VagabondChatCard } = game.vagabond.api;
 
                 const menuItems = [
                   {
@@ -667,7 +667,7 @@ export const FamiliarFeatures = {
       tags.push({ label: action.note, cssClass: "tag-standard" });
     }
 
-    const { VagabondChatCard } = globalThis.vagabond.utils;
+    const { VagabondChatCard } = game.vagabond.api;
 
     const fakeItem = {
       name: `${action.name}`,
@@ -741,7 +741,7 @@ export const FamiliarFeatures = {
     const d20 = roll.terms.find(t => t.constructor.name === "Die" && t.faces === 20);
     const isCritical = (d20?.results?.[0]?.result ?? 0) >= critNum;
 
-    const { VagabondChatCard } = globalThis.vagabond.utils;
+    const { VagabondChatCard } = game.vagabond.api;
     const skillLabel = skill?.label || skillKey;
 
     await VagabondChatCard.createActionCard({
@@ -782,7 +782,7 @@ export const FamiliarFeatures = {
     const d20 = roll.terms.find(t => t.constructor.name === "Die" && t.faces === 20);
     const isCritical = (d20?.results?.[0]?.result ?? 0) >= critNum;
 
-    const { VagabondChatCard } = globalThis.vagabond.utils;
+    const { VagabondChatCard } = game.vagabond.api;
     const skillLabel = skill?.label || skillKey;
 
     await VagabondChatCard.createActionCard({

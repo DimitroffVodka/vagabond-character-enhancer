@@ -712,7 +712,7 @@ export const CompanionManagerTab = {
 
     // Create the chat card attributed to the controller PC
     try {
-      const { VagabondChatCard } = globalThis.vagabond.utils;
+      const { VagabondChatCard } = game.vagabond.api;
 
       const fakeItem = {
         name: action.name,

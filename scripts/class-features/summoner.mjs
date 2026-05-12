@@ -1315,7 +1315,7 @@ export const SummonerFeatures = {
     }
 
     // Use the system's createActionCard for proper styling
-    const { VagabondChatCard } = globalThis.vagabond.utils;
+    const { VagabondChatCard } = game.vagabond.api;
 
     // Build a minimal "item" object for the chat card (it expects actor + item)
     const fakeItem = {

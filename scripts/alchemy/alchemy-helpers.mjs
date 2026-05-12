@@ -387,7 +387,7 @@ export async function useConsumable(actor, item) {
       // Potency (level 4+): apply exploding dice to healing rolls
       if (alcData?.level >= 4) {
         try {
-          const { VagabondDamageHelper } = globalThis.vagabond.utils ?? {};
+          const { VagabondDamageHelper } = game.vagabond?.api ?? {};
           if (VagabondDamageHelper?._manuallyExplodeDice) {
             const dieMatch = effect.formula.match(/d(\d+)/);
             const maxFace = dieMatch ? parseInt(dieMatch[1]) : 6;
@@ -1697,7 +1697,7 @@ export function registerConsumableUseHook() {
 
         if (alcData?.level >= 4) {
           try {
-            const { VagabondDamageHelper } = globalThis.vagabond.utils ?? {};
+            const { VagabondDamageHelper } = game.vagabond?.api ?? {};
             if (VagabondDamageHelper?._manuallyExplodeDice) {
               const dieMatch = effect.formula.match(/d(\d+)/);
               const maxFace = dieMatch ? parseInt(dieMatch[1]) : 6;

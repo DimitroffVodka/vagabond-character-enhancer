@@ -2210,7 +2210,7 @@ Hooks.once("ready", async () => {
   //         fallback the crawler uses, so pre-v0.4.0 companions still route
   //      3. No flags → call original npcAction (unflagged NPC rolls its own stats)
   try {
-    const { VagabondChatCard } = globalThis.vagabond?.utils ?? {};
+    const { VagabondChatCard } = game.vagabond?.api ?? {};
     if (VagabondChatCard?.npcAction && !VagabondChatCard._vceNpcActionPatched) {
       const origNpcAction = VagabondChatCard.npcAction.bind(VagabondChatCard);
       VagabondChatCard.npcAction = async function(actor, action, actionIndex, targetsAtRollTime = []) {

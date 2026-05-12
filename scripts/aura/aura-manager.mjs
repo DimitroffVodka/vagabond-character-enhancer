@@ -583,27 +583,15 @@ export const AuraManager = {
     const token = AuraManager._getCasterToken(actor);
     if (!token) return false;
 
-    try {
-      const [sourceAE] = await actor.createEmbeddedDocuments("ActiveEffect", [{
-        name: `Ward (Aura: ${actor.name})`,
-        img: spellDef.icon,
-        origin: `Actor.${actor.id}`,
-        description: spellDef.description || "",
-        disabled: false,
-        statuses: ["warded"],
-        flags: {
-          [MODULE_ID]: {
-            managed: true,
-            auraTemplate: true,
-            auraSpell: "Ward",
-            auraBuff: actor.id,
-            wardAE: true,
-            wardCasterId: actor.id,
-          },
-        },
-        changes: [],
-      }]);
+    // Catalog-backed template — single source-of-truth Ward AE.
+    // Cloned AEs won't carry `wardCasterId` (catalog template is shared
+    // across all casters); WardManager._resolveWardCasterId derives the
+    // caster from the cloned AE's `origin` (region behavior UUID) →
+    // region.flags.auraOwner. See ward-manager.mjs.
+    const templateUuid = await catalogUuidFor("ward-aura");
+    if (!templateUuid) return false;
 
+    try {
       const scene = canvas.scene;
       const distance = scene.grid?.distance || 5;
       const radiusPx = radius * scene.grid.size / distance;
@@ -621,7 +609,7 @@ export const AuraManager = {
         behaviors: [{
           type: "applyActiveEffect",
           name: "Ward Buff",
-          system: { effects: [sourceAE.uuid] },
+          system: { effects: [templateUuid] },
         }],
         flags: { [MODULE_ID]: { auraOwner: actor.id, spellKey: "ward" } },
       }]);
@@ -631,7 +619,7 @@ export const AuraManager = {
         radius,
         tokenId: token.id,
         regionId: region.id,
-        sourceAeId: sourceAE.id,
+        // No sourceAeId — template lives in the shared catalog.
       });
 
       AuraManager._playAuraFX(token, spellDef, radius);

@@ -21,6 +21,32 @@ import { MODULE_ID, log } from "../utils.mjs";
 
 const WARD_AE_FLAG = "wardAE";
 
+/**
+ * Resolve the caster actor id from a Warded AE on a target. Two paths:
+ *   1. Direct-cast Ward — `_applyWardToTargets` sets `wardCasterId` on the AE.
+ *      Read it directly.
+ *   2. Aura Ward — the AE is a clone created by the Region's
+ *      applyActiveEffect behavior; the catalog template has no
+ *      `wardCasterId` (it's shared across casters). Parse the AE's
+ *      `origin` (RegionBehavior UUID) to find the source region, then
+ *      read `region.flags.vagabond-character-enhancer.auraOwner`.
+ *
+ * @param {ActiveEffect} ae - The Warded AE on a target.
+ * @returns {string|null} - The caster actor id, or null if not resolvable.
+ */
+function _resolveWardCasterId(ae) {
+  if (!ae) return null;
+  const direct = ae.getFlag(MODULE_ID, "wardCasterId");
+  if (direct) return direct;
+  // Aura-clone path. Origin shape: "Scene.<sceneId>.Region.<regionId>.RegionBehavior.<behaviorId>"
+  const origin = ae.origin || "";
+  const match = origin.match(/^Scene\.([^.]+)\.Region\.([^.]+)/);
+  if (!match) return null;
+  const [, sceneId, regionId] = match;
+  const region = game.scenes.get(sceneId)?.regions?.get(regionId);
+  return region?.getFlag(MODULE_ID, "auraOwner") ?? null;
+}
+
 /* -------------------------------------------- */
 /*  WardManager                                  */
 /* -------------------------------------------- */
@@ -68,7 +94,7 @@ export const WardManager = {
           e.getFlag(MODULE_ID, WARD_AE_FLAG) && !e.getFlag(MODULE_ID, "auraBuff")
         );
         for (const ae of wardAEs) {
-          const casterId = ae.getFlag(MODULE_ID, "wardCasterId");
+          const casterId = _resolveWardCasterId(ae);
           if (!casterId) continue;
           const caster = game.actors.get(casterId);
           if (!caster) continue;
@@ -123,7 +149,7 @@ export const WardManager = {
       );
       if (!wardAE) return;
 
-      const casterId = wardAE.getFlag(MODULE_ID, "wardCasterId");
+      const casterId = _resolveWardCasterId(wardAE);
       const caster = casterId ? game.actors.get(casterId) : null;
       // Need a reachable caster who can roll the Cast Check on the local
       // client. Without one we fall through and let the system apply

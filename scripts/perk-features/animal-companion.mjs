@@ -64,7 +64,7 @@ export const AnimalCompanion = {
                 this.hideInventoryContextMenu();
 
                 const { ContextMenuHelper } = globalThis.vagabond.utils;
-                const { VagabondChatCard } = globalThis.vagabond.utils;
+                const { VagabondChatCard } = game.vagabond.api;
 
                 const menuItems = [{
                   label: "Send to Chat",

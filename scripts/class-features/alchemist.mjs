@@ -128,7 +128,7 @@ export const AlchemistFeatures = {
     if (!actor) return;
 
     try {
-      const { VagabondChatCard } = globalThis.vagabond.utils;
+      const { VagabondChatCard } = game.vagabond.api;
       const targets = Array.from(game.user.targets).map(t => ({
         tokenId: t.id, sceneId: t.scene.id,
         actorId: t.actor?.id, actorName: t.name, actorImg: t.document.texture.src,
