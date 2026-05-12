@@ -598,9 +598,7 @@ export const DancerFeatures = {
   /* -------------------------------------------- */
 
   _registerFlashOfBeautyHooks() {
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
-
+    onRenderChatMessage((message, el) => {
       // Look for save roll results in the chat card (system uses .roll-strip with .roll-result-banner)
       const saveResult = el.querySelector(".roll-result-banner, .roll-strip");
       if (!saveResult) return;

@@ -19,7 +19,7 @@
  * update position on every token move via the updateToken hook.
  */
 
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, onRenderChatMessage } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Aura Spell Definitions                      */
@@ -182,8 +182,7 @@ export const AuraManager = {
     Hooks.on("canvasReady", () => AuraManager._restoreAuras());
 
     // Chat button handlers
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       el.querySelectorAll("[data-action='vce-aura-activate']").forEach(btn => {
         btn.addEventListener("click", (ev) => AuraManager._onActivateClick(ev));
       });

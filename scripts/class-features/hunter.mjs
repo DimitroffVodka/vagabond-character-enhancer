@@ -164,8 +164,7 @@ export const HunterFeatures = {
 
   registerHooks() {
     // Mark Target button clicks from chat cards
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       el.querySelectorAll("[data-action='vce-hunter-mark']").forEach(btn => {
         btn.addEventListener("click", (ev) => this._onMarkButtonClick(ev));
       });

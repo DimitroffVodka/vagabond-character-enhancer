@@ -21,7 +21,7 @@
  *   _lastAttackMeta — stashed during rollAttack for Fisticuffs/FullSwing detection
  */
 
-import { MODULE_ID, log, hasFeature, getFeatures, combineFavor } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, getFeatures, combineFavor, onRenderChatMessage } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Size Helpers                                 */
@@ -81,8 +81,7 @@ export const BrawlIntent = {
 
   registerHooks() {
     // Inject buttons into weapon attack chat cards
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       this._injectButtons(message, el);
       this._attachClickHandlers(el);
     });

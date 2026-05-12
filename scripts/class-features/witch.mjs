@@ -65,8 +65,7 @@ export const WitchFeatures = {
     });
 
     // Attach hex button click handlers on render
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       this._attachHandlers(el);
       setTimeout(() => {
         const domEl = document.querySelector(`[data-message-id="${message.id}"]`);

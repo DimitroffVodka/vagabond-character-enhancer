@@ -59,7 +59,7 @@
  * `_annotateWeaponAttackCard` for visibility.
  */
 
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, onRenderChatMessage } from "../utils.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
@@ -99,8 +99,7 @@ export const ImbueManager = {
     });
 
     // Attach click handlers when messages render (handles re-renders + page load)
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       this._attachHandlers(el);
       // Also attach to the real DOM element (v13 uses a different element for insertion)
       setTimeout(() => {

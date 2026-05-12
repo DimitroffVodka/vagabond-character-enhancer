@@ -78,8 +78,7 @@ export const WizardFeatures = {
    * amounts, decrements studied dice, posts result notification.
    */
   _registerPageMasterHooks() {
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       this._injectPageMasterButton(message, el);
       this._attachPageMasterHandler(message, el);
     });

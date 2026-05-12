@@ -573,9 +573,7 @@ export const BarbarianFeatures = {
     });
 
     // --- Visual indicator + Rage DR breakdown on chat cards ---
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
-
+    onRenderChatMessage((message, el) => {
       // Add RAGE tag to attack cards from berserk barbarians
       const speakerActor = message.speaker?.actor ? game.actors.get(message.speaker.actor) : null;
       if (speakerActor &&

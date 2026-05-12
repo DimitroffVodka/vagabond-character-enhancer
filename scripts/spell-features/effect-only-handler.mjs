@@ -12,7 +12,7 @@
  * focusing on the spell.
  */
 
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, onRenderChatMessage } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -32,8 +32,7 @@ export const EffectOnlyHandler = {
 
   registerHooks() {
     // Detect effect-only spell cards and replace damage button with Apply Effects
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       this._processCard(message, el);
       setTimeout(() => {
         const domEl = document.querySelector(`[data-message-id="${message.id}"]`);

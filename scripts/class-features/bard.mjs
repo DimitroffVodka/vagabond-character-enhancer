@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Bard features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration, onRenderChatMessage } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
@@ -562,8 +562,7 @@ export const BardFeatures = {
     });
 
     // Handle Virtuoso buff choice buttons in chat
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       const buttons = el.querySelectorAll(".vce-virtuoso-btn");
       if (buttons.length === 0) return;
 
@@ -614,8 +613,7 @@ export const BardFeatures = {
     // attack damage which is pre-rolled), so modifying the button formula works.
     // In combat: checks if the healer has the Inspiration AE.
     // Out of combat: checks if any PC on scene has bard_virtuoso (assumed always-on).
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       const healButtons = el.querySelectorAll('.vagabond-item-damage-button[data-damage-type="healing"]');
       if (healButtons.length === 0) return;
 

@@ -133,8 +133,7 @@ export const VanguardFeatures = {
     });
 
     // Attach click handlers to Guard Shove buttons
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       const btns = el.querySelectorAll("[data-action='vce-guard-shove']");
       if (!btns.length) return;
 

@@ -143,8 +143,7 @@ export const LuminaryFeatures = {
 
   registerHooks() {
     // Ever-Cure button clicks
-    Hooks.on("renderChatMessage", (message, html) => {
-      const el = html instanceof jQuery ? html[0] : html;
+    onRenderChatMessage((message, el) => {
       el.querySelectorAll("[data-action='vce-ever-cure']").forEach(btn => {
         btn.addEventListener("click", (ev) => this._onEverCureClick(ev));
       });

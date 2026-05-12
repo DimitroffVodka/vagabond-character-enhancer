@@ -54,6 +54,24 @@ export function combineFavor(currentFH, modifier = "favor") {
 }
 
 /**
+ * Register a chat-message render callback that works on both v14
+ * (`renderChatMessageHTML`, HTMLElement) and v13.330+ (`renderChatMessage`,
+ * jQuery — deprecated on v14). Coerces `html` to a plain HTMLElement before
+ * invoking the callback so consumers can use `el.querySelector(...)` etc
+ * without a jQuery guard at every call site.
+ *
+ * @param {(message: ChatMessage, html: HTMLElement, context?: object) => void} callback
+ */
+export function onRenderChatMessage(callback) {
+  const useNewHook = foundry.utils.isNewerVersion(game.version, "13.330");
+  const hookName = useNewHook ? "renderChatMessageHTML" : "renderChatMessage";
+  Hooks.on(hookName, (message, html, context) => {
+    const el = html instanceof HTMLElement ? html : (html?.[0] ?? html);
+    callback(message, el, context);
+  });
+}
+
+/**
  * Check if any PC combatant (or scene PC) has an active Inspiration buff.
  * @returns {boolean}
  */
