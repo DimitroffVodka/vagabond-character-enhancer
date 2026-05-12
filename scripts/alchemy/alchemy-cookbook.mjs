@@ -9,7 +9,7 @@
  * Right-click any item row to add/remove it as a formula.
  */
 
-import { MODULE_ID } from "../utils.mjs";
+import { MODULE_ID, onRenderActorSheet } from "../utils.mjs";
 import {
   getAlchemistData, fetchCompendiumItems, itemValueInSilver,
   getCraftCost, formatCost, craftItem, getAlchemicalEffect,
@@ -446,11 +446,7 @@ let _sheetPatched = false;
 function _patchCookbookSheet() {
   if (_sheetPatched) return;
 
-  Hooks.on("renderApplicationV2", (app) => {
-    if (app.document?.type === "character") {
-      _injectCookbookTab(app);
-    }
-  });
+  onRenderActorSheet((app) => _injectCookbookTab(app));
 
   _sheetPatched = true;
   console.log(`${MODULE_ID} | AlchemyCookbook | Registered render hook for inline Cookbook tab.`);

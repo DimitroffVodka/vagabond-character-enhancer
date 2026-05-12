@@ -5,7 +5,7 @@
  * Junk flag is shared with vagabond-crawler module.
  */
 
-import { MODULE_ID, log, hasFeature } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, onRenderActorSheet } from "../utils.mjs";
 import {
   isOffensiveType, convertToWeapon, prepareForInventory,
   getAlchemicalEffect, getConsumableEffect,
@@ -610,11 +610,7 @@ export const GoldSinkSheet = {
     // Pre-load shop items (already inside the ready hook, so call directly)
     _loadShopItems();
 
-    Hooks.on("renderApplicationV2", (app, html, data) => {
-      if (app.document?.type === "character") {
-        self._injectGoldSink(app);
-      }
-    });
+    onRenderActorSheet((app) => self._injectGoldSink(app));
 
     this._patched = true;
     log("Merchant", "Gold Sink sheet hooks registered.");

@@ -5,7 +5,7 @@
  * Widdershins: hex target is Weak to witch's damage (bypasses armor, not immunity).
  */
 
-import { MODULE_ID, log, getFeatures, onRenderChatMessage } from "../utils.mjs";
+import { MODULE_ID, log, getFeatures, onRenderChatMessage, onRenderActorSheet } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
@@ -77,11 +77,7 @@ export const WitchFeatures = {
     // Deferred to next macrotask: the system re-renders the spell-list area
     // after the renderApplicationV2 hook fires, which would clobber any DOM
     // we appended synchronously. setTimeout(0) lets the system finish first.
-    Hooks.on("renderApplicationV2", (app) => {
-      if (app.document?.type === "character") {
-        setTimeout(() => this._injectHexUI(app), 0);
-      }
-    });
+    onRenderActorSheet((app) => setTimeout(() => this._injectHexUI(app), 0));
 
     // Things Betwixt cleanup: remove invisible on round change
     Hooks.on("updateCombat", async (combat, changes) => {

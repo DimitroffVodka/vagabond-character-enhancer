@@ -72,6 +72,49 @@ export function onRenderChatMessage(callback) {
 }
 
 /**
+ * Register a renderApplicationV2 callback scoped to actor sheets of a given
+ * type. Replaces the boilerplate `Hooks.on("renderApplicationV2", (app, html)
+ * => { if (app.actor?.type !== "character") return; ... })` repeated across
+ * 15+ call sites. Coerces `html` to HTMLElement.
+ *
+ * @param {(app: Application, html: HTMLElement, data?: object) => void} callback
+ * @param {object} [opts]
+ * @param {string|null} [opts.type] Actor type filter, e.g. "character"; pass
+ *   `null` to receive every sheet render. Default "character".
+ */
+export function onRenderActorSheet(callback, { type = "character" } = {}) {
+  Hooks.on("renderApplicationV2", (app, html, data) => {
+    if (!app?.actor) return;
+    if (type && app.actor.type !== type) return;
+    const el = html instanceof HTMLElement ? html : (html?.[0] ?? html);
+    callback(app, el, data);
+  });
+}
+
+/**
+ * Run a `registerHooks()`-style init function in a try/catch so one failing
+ * subsystem doesn't abort the rest of the module init. Errors are logged with
+ * the subsystem label so they surface in the console instead of silently
+ * killing every downstream init step.
+ *
+ * Background: VCE init runs inside one large `Hooks.once("ready")` callback.
+ * If any subsystem throws, Foundry's async hook dispatcher swallows the
+ * error and all subsequent init code is skipped — presents as "half-loaded
+ * VCE" with no console errors. Wrapping each subsystem's init in this helper
+ * ensures every failure surfaces.
+ *
+ * @param {string} label Subsystem name, used in error logging.
+ * @param {() => (void|Promise<void>)} fn The init function to run.
+ */
+export async function safeRegister(label, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    console.error(`${MODULE_ID} | ${label} init failed:`, err);
+  }
+}
+
+/**
  * Check if any PC combatant (or scene PC) has an active Inspiration buff.
  * @returns {boolean}
  */

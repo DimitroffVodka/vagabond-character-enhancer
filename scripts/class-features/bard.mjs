@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Bard features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration, onRenderChatMessage } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration, onRenderChatMessage, onRenderActorSheet } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
@@ -1130,11 +1130,7 @@ export const BardFeatures = {
   _patchVirtuosoSheet() {
     const self = this;
 
-    Hooks.on("renderApplicationV2", (app) => {
-      if (app.document?.type === "character") {
-        self._injectVirtuosoTab(app);
-      }
-    });
+    onRenderActorSheet((app) => self._injectVirtuosoTab(app));
 
     console.log(`${MODULE_ID} | Bard | Registered render hook for Virtuoso tab.`);
   },

@@ -12,7 +12,7 @@
  * Combined count = system.focus.spellIds.length + featureFocus.length.
  */
 
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, onRenderActorSheet } from "../utils.mjs";
 import { getFeatureFxConfig } from "./feature-fx-config.mjs";
 
 /* -------------------------------------------- */
@@ -312,11 +312,7 @@ export const FocusManager = {
     });
 
     // Inject feature focus UI into character sheet
-    Hooks.on("renderApplicationV2", (app, html) => {
-      if (app.document?.type === "character") {
-        this._injectFocusUI(app);
-      }
-    });
+    onRenderActorSheet((app) => this._injectFocusUI(app));
 
     // Status effect FX — play/stop animations when statuses are toggled
     Hooks.on("applyActiveEffect", (actor, effect) => {

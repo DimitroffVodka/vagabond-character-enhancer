@@ -5,7 +5,7 @@
  * The right sliding panel (HP, stats, skills, spells, focus) stays untouched.
  */
 
-import { MODULE_ID } from "../utils.mjs";
+import { MODULE_ID, onRenderActorSheet } from "../utils.mjs";
 
 export const PolymorphSheet = {
 
@@ -31,11 +31,7 @@ export const PolymorphSheet = {
 
     // 1. Use render hook to inject beast form on every character sheet render.
     //    Foundry V2 ApplicationV2 fires "renderApplicationV2" and "renderActorSheetV2".
-    Hooks.on("renderApplicationV2", (app, html, data) => {
-      if (app.document?.type === "character") {
-        self._injectBeastForm(app);
-      }
-    });
+    onRenderActorSheet((app) => self._injectBeastForm(app));
 
     // 2. Register custom actions via Foundry's V2 action delegation system.
     const sheetClass = CONFIG.Actor.sheetClasses?.character?.["vagabond.VagabondCharacterSheet"]?.cls;

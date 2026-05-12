@@ -19,7 +19,7 @@
  * Exalt buffs to allies who enter the radius.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, getFeatures, onRenderChatMessage } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, getFeatures, onRenderChatMessage, onRenderActorSheet } from "../utils.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
@@ -272,12 +272,9 @@ export const RevelatorFeatures = {
 
     // Inject "Use" button into Lay on Hands feature on the character sheet
     // Foundry v13 ApplicationV2 fires "renderApplicationV2", not "renderActorSheet".
-    Hooks.on("renderApplicationV2", (app, html) => {
-      const actor = app.actor || app.document;
-      if (!actor || actor.type !== "character") return;
+    onRenderActorSheet((app, el) => {
+      const actor = app.actor;
       if (!hasFeature(actor, "revelator_layOnHands")) return;
-
-      const el = html instanceof HTMLElement ? html : html[0];
       // Find all feature entries and look for "Lay on Hands"
       const featureHeaders = el.querySelectorAll(".feature-header");
       for (const header of featureHeaders) {

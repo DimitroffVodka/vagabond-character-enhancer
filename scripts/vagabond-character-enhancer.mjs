@@ -3,7 +3,7 @@
  * Automates ancestry traits, class features, and perks for the Vagabond RPG system.
  */
 
-import { MODULE_ID, log, getFeatures, combineFavor } from "./utils.mjs";
+import { MODULE_ID, log, getFeatures, combineFavor, safeRegister } from "./utils.mjs";
 export { MODULE_ID };
 
 // Psychic system — Talent item type
@@ -2127,51 +2127,55 @@ Hooks.once("ready", async () => {
     }
   };
 
-  // Register socket relay for GM-proxied operations (token/actor create/delete)
-  registerSocketRelay();
+  // Register socket relay for GM-proxied operations (token/actor create/delete).
+  // Each subsystem init is wrapped in `safeRegister` so a failure in one
+  // doesn't silently abort the rest — Foundry's async hook dispatcher
+  // swallows thrown errors, which used to present as mysterious "VCE
+  // half-loaded" states with no console output.
+  await safeRegister("SocketRelay", () => registerSocketRelay());
 
   // Register feature detection hooks
-  FeatureDetector.registerHooks();
+  await safeRegister("FeatureDetector", () => FeatureDetector.registerHooks());
 
   // Register class feature runtime hooks
-  BarbarianFeatures.registerHooks();
-  BardFeatures.registerHooks();
-  DancerFeatures.registerHooks();
-  DruidFeatures.registerHooks();
-  AlchemistFeatures.registerHooks();
-  FighterFeatures.registerHooks();
-  GunslingerFeatures.registerHooks();
-  HunterFeatures.registerHooks();
-  LuminaryFeatures.registerHooks();
-  MagusFeatures.registerHooks();
-  MerchantFeatures.registerHooks();
-  MonkFeatures.registerHooks();
-  PugilistFeatures.registerHooks();
-  RevelatorFeatures.registerHooks();
-  RogueFeatures.registerHooks();
-  SorcererFeatures.registerHooks();
-  VanguardFeatures.registerHooks();
-  WitchFeatures.registerHooks();
-  WizardFeatures.registerHooks();
-  BrawlIntent.registerHooks();
-  FocusManager.registerHooks();
-  DrakenFeatures.registerHooks();
-  ImbueManager.registerHooks();
+  await safeRegister("BarbarianFeatures", () => BarbarianFeatures.registerHooks());
+  await safeRegister("BardFeatures", () => BardFeatures.registerHooks());
+  await safeRegister("DancerFeatures", () => DancerFeatures.registerHooks());
+  await safeRegister("DruidFeatures", () => DruidFeatures.registerHooks());
+  await safeRegister("AlchemistFeatures", () => AlchemistFeatures.registerHooks());
+  await safeRegister("FighterFeatures", () => FighterFeatures.registerHooks());
+  await safeRegister("GunslingerFeatures", () => GunslingerFeatures.registerHooks());
+  await safeRegister("HunterFeatures", () => HunterFeatures.registerHooks());
+  await safeRegister("LuminaryFeatures", () => LuminaryFeatures.registerHooks());
+  await safeRegister("MagusFeatures", () => MagusFeatures.registerHooks());
+  await safeRegister("MerchantFeatures", () => MerchantFeatures.registerHooks());
+  await safeRegister("MonkFeatures", () => MonkFeatures.registerHooks());
+  await safeRegister("PugilistFeatures", () => PugilistFeatures.registerHooks());
+  await safeRegister("RevelatorFeatures", () => RevelatorFeatures.registerHooks());
+  await safeRegister("RogueFeatures", () => RogueFeatures.registerHooks());
+  await safeRegister("SorcererFeatures", () => SorcererFeatures.registerHooks());
+  await safeRegister("VanguardFeatures", () => VanguardFeatures.registerHooks());
+  await safeRegister("WitchFeatures", () => WitchFeatures.registerHooks());
+  await safeRegister("WizardFeatures", () => WizardFeatures.registerHooks());
+  await safeRegister("BrawlIntent", () => BrawlIntent.registerHooks());
+  await safeRegister("FocusManager", () => FocusManager.registerHooks());
+  await safeRegister("DrakenFeatures", () => DrakenFeatures.registerHooks());
+  await safeRegister("ImbueManager", () => ImbueManager.registerHooks());
   // AuraManager is a delivery system, not a class feature — register it
   // at module-level so any class casting Aura-delivery spells (or VCE
   // talents cast as Aura) gets the persistent template / per-round tick
   // / per-cell containment behavior. BlessManager + WardManager depend
   // on AuraManager being live, so it must run before them.
-  AuraManager.registerHooks();
-  BlessManager.registerHooks();
-  WardManager.registerHooks();
-  EffectOnlyHandler.registerHooks();
-  BriarHealerManager.registerHooks();
-  SummonerFeatures.registerHooks();
-  FamiliarFeatures.registerHooks();
-  CompanionManagerTab.init();
-  TalentsTab.init();
-  TalentCast.registerHooks();
+  await safeRegister("AuraManager", () => AuraManager.registerHooks());
+  await safeRegister("BlessManager", () => BlessManager.registerHooks());
+  await safeRegister("WardManager", () => WardManager.registerHooks());
+  await safeRegister("EffectOnlyHandler", () => EffectOnlyHandler.registerHooks());
+  await safeRegister("BriarHealerManager", () => BriarHealerManager.registerHooks());
+  await safeRegister("SummonerFeatures", () => SummonerFeatures.registerHooks());
+  await safeRegister("FamiliarFeatures", () => FamiliarFeatures.registerHooks());
+  await safeRegister("CompanionManagerTab", () => CompanionManagerTab.init());
+  await safeRegister("TalentsTab", () => TalentsTab.init());
+  await safeRegister("TalentCast", () => TalentCast.registerHooks());
   // One-shot data migrations on the Talent compendium / embedded items.
   // Idempotent — gated by a hidden world setting.
   runTalentMigrations().catch(err =>
@@ -2290,22 +2294,24 @@ Hooks.once("ready", async () => {
   }
 
   // Patch character sheet for Beast Form panel injection
-  PolymorphSheet.patchSheet();
+  await safeRegister("PolymorphSheet", () => PolymorphSheet.patchSheet());
 
   // Patch character sheet for Merchant Gold Sink tab
-  GoldSinkSheet.patchSheet();
+  await safeRegister("GoldSinkSheet", () => GoldSinkSheet.patchSheet());
 
-  // Initialize beast cache from compendiums
-  BeastCache.initialize();
-  // Expose globally for polymorph manager API (used by Vagabond Crawler)
-  globalThis._vceBeastCache = BeastCache;
+  // Initialize beast cache from compendiums + expose globally for polymorph
+  // manager API (used by Vagabond Crawler)
+  await safeRegister("BeastCache", () => {
+    BeastCache.initialize();
+    globalThis._vceBeastCache = BeastCache;
+  });
 
   // Expose populate function for GM use: game.modules.get("vagabond-character-enhancer").populateBeasts()
   const mod = game.modules.get(MODULE_ID);
   if (mod) mod.populateBeasts = populateBeasts;
 
   // Scan all existing characters on first load
-  FeatureDetector.scanAll();
+  await safeRegister("FeatureDetector.scanAll", () => FeatureDetector.scanAll());
 
   console.log(`${MODULE_ID} | Ready.`);
 });

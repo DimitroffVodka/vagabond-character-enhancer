@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Dancer features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage, onRenderActorSheet } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
@@ -770,11 +770,7 @@ export const DancerFeatures = {
   _patchStepUpSheet() {
     const self = this;
 
-    Hooks.on("renderApplicationV2", (app) => {
-      if (app.document?.type === "character") {
-        self._injectStepUpTab(app);
-      }
-    });
+    onRenderActorSheet((app) => self._injectStepUpTab(app));
 
     console.log(`${MODULE_ID} | Dancer | Registered render hook for Step Up tab.`);
   },
