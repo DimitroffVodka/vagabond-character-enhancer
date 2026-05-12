@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Wizard features.
  */
 
-import { MODULE_ID, log, hasFeature, getFeatures } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, getFeatures, onRenderChatMessage } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */

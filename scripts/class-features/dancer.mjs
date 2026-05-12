@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Dancer features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */

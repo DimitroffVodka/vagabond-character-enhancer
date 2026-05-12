@@ -23,7 +23,7 @@
  *   - Removable statuses on healed target trigger Ever-Cure card
  */
 
-import { MODULE_ID, log, hasFeature } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, onRenderChatMessage } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */

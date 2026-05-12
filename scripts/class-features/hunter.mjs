@@ -25,7 +25,7 @@
  *   - The hunter manually unmarks (chat button)
  */
 
-import { MODULE_ID, log, hasFeature } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, onRenderChatMessage } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /**

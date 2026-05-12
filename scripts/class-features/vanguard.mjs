@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Vanguard features.
  */
 
-import { MODULE_ID, log, hasFeature, getFeatures, combineFavor } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, getFeatures, combineFavor, onRenderChatMessage } from "../utils.mjs";
 import { measureDistance } from "../range-validator.mjs";
 import { _saveSourceActorId } from "../vagabond-character-enhancer.mjs";
 import { SIZE_ORDER, getActorSize, getEffectiveShoveSize } from "../brawl/brawl-intent.mjs";

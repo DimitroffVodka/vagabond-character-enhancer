@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Barbarian features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */

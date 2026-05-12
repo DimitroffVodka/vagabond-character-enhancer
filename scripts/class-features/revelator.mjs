@@ -19,7 +19,7 @@
  * Exalt buffs to allies who enter the radius.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, getFeatures } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, getFeatures, onRenderChatMessage } from "../utils.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
