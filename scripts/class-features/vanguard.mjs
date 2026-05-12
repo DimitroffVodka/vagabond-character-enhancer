@@ -5,7 +5,7 @@
 
 import { MODULE_ID, log, hasFeature, getFeatures, combineFavor, onRenderChatMessage } from "../utils.mjs";
 import { measureDistance } from "../range-validator.mjs";
-import { _saveSourceActorId } from "../vagabond-character-enhancer.mjs";
+import { _saveSourceActorId, _directSourceAttackType, _saveSourceAttackType } from "../vagabond-character-enhancer.mjs";
 import { SIZE_ORDER, getActorSize, getEffectiveShoveSize } from "../brawl/brawl-intent.mjs";
 
 /* -------------------------------------------- */
@@ -159,6 +159,50 @@ export const VanguardFeatures = {
       if (!game.user.isGM) return;
       if (!("turn" in changes) && !("round" in changes)) return;
       this._clearGuardFlags();
+    });
+
+    // L10 Indestructible: Immune to melee/ranged attack damage while not
+    // Incapacitated and Armor >= 1. Cast (spell) and environmental damage
+    // still apply.
+    //
+    // Uses the v5.3.0+ `vagabond.preDamageApply` system hook rather than
+    // VCE's calculateFinalDamage patch — returning false from this hook is
+    // a clean cancellation (skips the HP write AND the postDamageApply
+    // hook), where the older approach returned 0 from inside the calc
+    // helper. Attack-type detection prefers `ctx.sourceItem` (provided by
+    // the system) and falls back to VCE's `_directSourceAttackType` /
+    // `_saveSourceAttackType` globals for paths where sourceItem is null
+    // (e.g., the manual "Apply" save button click that has no item ref).
+    Hooks.on("vagabond.preDamageApply", (ctx) => {
+      const { actor, sourceItem } = ctx;
+      if (!actor || !hasFeature(actor, "vanguard_indestructible")) return;
+
+      let atkType = null;
+      if (sourceItem?.type === "weapon") atkType = sourceItem.system?.attackType ?? null;
+      else if (sourceItem?.type === "spell") atkType = "cast";
+      atkType = atkType || _directSourceAttackType || _saveSourceAttackType;
+
+      if (atkType !== "melee" && atkType !== "ranged") return;
+
+      const armor = actor.system?.armor ?? 0;
+      const isIncapacitated = actor.statuses?.has("incapacitated")
+        || actor.statuses?.has("unconscious")
+        || actor.statuses?.has("paralyzed");
+      if (isIncapacitated || armor < 1) return;
+
+      log("Vanguard", `Indestructible: ${actor.name} immune to ${atkType} damage (Armor ${armor})`);
+      ChatMessage.create({
+        content: `<div class="vagabond-chat-card-v2" data-card-type="indestructible">
+          <div class="card-body"><section class="content-body">
+            <div class="card-description" style="text-align:center;">
+              <i class="fas fa-shield-halved"></i> <strong>${actor.name}</strong> — <em>Indestructible</em><br>
+              Immune to attack damage! (Armor: ${armor})
+            </div>
+          </section></div>
+        </div>`,
+        speaker: ChatMessage.getSpeaker({ actor }),
+      });
+      return false; // cancel damage application entirely
     });
   },
 

@@ -793,13 +793,13 @@ Hooks.once("ready", async () => {
         }
       }
 
-      // Psychic Shield Talent: consume any Shield d4 that the upstream
-      // handleApplyDirect / _rollSave hooks pre-rolled (those are async
-      // and can use Roll() + DSN animation; this fn is synchronous and
-      // can't). Reduces post-armor damage by the rolled value.
-      if (_pendingShieldD4Reduction > 0 && result > 0) {
-        result = Math.max(0, result - _pendingShieldD4Reduction);
-      }
+      // Psychic Shield Talent reduction has moved to the
+      // vagabond.preDamageApply hook listener below (registered after
+      // this patch). It still consumes _pendingShieldD4Reduction —
+      // pre-rolled async in handleApplyDirect / _rollSave for the DSN
+      // animation — but now subtracts at apply time rather than inside
+      // the sync calc helper. Keeps the d4 reduction post-armor, same
+      // as before, but moves the consumption out of calc.
 
       // Sneak Attack: armor penetration (reduce armor by sneak dice count)
       const sneakCtx = { actor, result, damage };
@@ -808,34 +808,13 @@ Hooks.once("ready", async () => {
 
       const features = getFeatures(actor);
 
-      // Indestructible (Vanguard L10): Immune to attack damage while not
-      // Incapacitated and Armor >= 1. Only negates melee/ranged attack damage —
-      // cast (spell) damage and environmental damage still applies.
-      if (features?.vanguard_indestructible) {
-        const atkType = _directSourceAttackType || _saveSourceAttackType;
-        const isMeleeOrRanged = atkType === "melee" || atkType === "ranged";
-        if (isMeleeOrRanged) {
-          const armor = actor.system?.armor ?? 0;
-          const isIncapacitated = actor.statuses?.has("incapacitated")
-            || actor.statuses?.has("unconscious")
-            || actor.statuses?.has("paralyzed");
-          if (!isIncapacitated && armor >= 1) {
-            log("Vanguard", `Indestructible: ${actor.name} immune to ${atkType} damage (Armor ${armor})`);
-            ChatMessage.create({
-              content: `<div class="vagabond-chat-card-v2" data-card-type="indestructible">
-                <div class="card-body"><section class="content-body">
-                  <div class="card-description" style="text-align:center;">
-                    <i class="fas fa-shield-halved"></i> <strong>${actor.name}</strong> — <em>Indestructible</em><br>
-                    Immune to attack damage! (Armor: ${armor})
-                  </div>
-                </section></div>
-              </div>`,
-              speaker: ChatMessage.getSpeaker({ actor })
-            });
-            return 0;
-          }
-        }
-      }
+      // Indestructible (Vanguard L10): now subscribed to vagabond.preDamageApply
+      // directly in VanguardFeatures.registerHooks (v5.3.0+ system hook,
+      // same pattern as BriarHealerManager). Returning false from
+      // preDamageApply is a cleaner cancellation than `return 0` from
+      // here would be — it also skips the postDamageApply hook so any
+      // damage-reactive features see "no damage applied" instead of
+      // "applied 0 damage". No dispatcher call needed.
 
       // Apex Predator: check if this target is marked by the hunter dealing the damage
       const apexCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
@@ -886,6 +865,20 @@ Hooks.once("ready", async () => {
       return ctx.result;
     };
     console.log(`${MODULE_ID} | Patched calculateFinalDamage.`);
+
+    // Psychic Shield Talent — post-armor d4 reduction. The d4 is rolled
+    // upstream in handleApplyDirect / _rollSave (async, with DSN) and
+    // stashed in `_pendingShieldD4Reduction`. We used to consume the
+    // stash inside the sync calc patch above; with v5.3.0+ system
+    // hooks, we subtract at apply time instead, which keeps the calc
+    // patch focused on calculation and reads cleaner. The state cleanup
+    // remains in the upstream patches' `finally` blocks so the stash
+    // doesn't leak between events.
+    Hooks.on("vagabond.preDamageApply", (ctx) => {
+      if (_pendingShieldD4Reduction > 0 && ctx.amount > 0) {
+        ctx.amount = Math.max(0, ctx.amount - _pendingShieldD4Reduction);
+      }
+    });
 
 
     // --- _getDamageSourceDieSize: Fix weakness die not accounting for weapon skill die size bonus ---
