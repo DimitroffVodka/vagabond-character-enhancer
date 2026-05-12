@@ -64,10 +64,6 @@ export const EffectOnlyHandler = {
     // Already processed?
     if (el.querySelector('[data-action="vce-apply-effects"]')) return;
 
-    // Find the erroneous damage button
-    const damageBtn = el.querySelector('.vagabond-damage-button');
-    if (!damageBtn) return;
-
     // Look up spell from message flags
     const actorId = message.flags?.vagabond?.actorId;
     const itemId = message.flags?.vagabond?.itemId;
@@ -94,12 +90,22 @@ export const EffectOnlyHandler = {
 
     if (!isAlwaysEffectOnly && !isCastAsEffectOnly) return;
 
+    // The system's chat card may or may not include a damage button:
+    //   - With damage rolled (damageDice > 0): damage button is present, we
+    //     replace it with Apply Effects (when the cast is effect-only AND has
+    //     statuses).
+    //   - Without damage (e.g., aura ticks with damageDice = 0): no damage
+    //     button at all. We inject Apply Effects into the card-actions area
+    //     so the player still has a way to apply the spell's statuses.
+    const damageBtn = el.querySelector('.vagabond-damage-button');
+
     // Check if the spell has statuses to apply
     const hasStatuses = item.system.causedStatuses?.length > 0;
     const hasCritStatuses = item.system.critCausedStatuses?.length > 0;
     if (!hasStatuses && !hasCritStatuses) {
-      // Effect-only cast with no statuses — just remove the erroneous button
-      damageBtn.remove();
+      // Effect-only cast with no statuses — strip the erroneous damage button
+      // if one exists; otherwise nothing to do.
+      if (damageBtn) damageBtn.remove();
       return;
     }
 
@@ -124,8 +130,32 @@ export const EffectOnlyHandler = {
     applyBtn.dataset.messageId = message.id;
     applyBtn.innerHTML = '<i class="fas fa-wand-magic-sparkles"></i> Apply Effects';
 
-    // Replace damage button with Apply Effects
-    damageBtn.replaceWith(applyBtn);
+    if (damageBtn) {
+      // Replace existing damage button with Apply Effects (existing behavior:
+      // the damage button was already implicitly hit-only since the system
+      // skips it on a miss, so no extra hit-gate needed here).
+      damageBtn.replaceWith(applyBtn);
+    } else {
+      // No damage button (e.g., aura tick with damageDice=0). Inject the
+      // Apply Effects button into the card's action-buttons-container —
+      // BUT only on a hit. On a miss the spell didn't land, so applying
+      // statuses would be wrong. Detect via the system's roll-result-banner
+      // class: `result-hit` vs `result-miss`.
+      const isHit = !!el.querySelector('.roll-result-banner.result-hit')
+                 || !!el.querySelector('.roll-outcome-text')?.textContent?.match(/\bhit\b|\bcrit\b/i);
+      if (!isHit) return;
+      const actionsHost = el.querySelector('.action-buttons-container')
+                       ?? el.querySelector('.card-actions')
+                       ?? el.querySelector('.card-buttons');
+      if (actionsHost) {
+        actionsHost.insertBefore(applyBtn, actionsHost.firstChild);
+      } else {
+        // Last-resort fallback — append to the card body so the player still
+        // sees and can click it.
+        const body = el.querySelector('.content-body') ?? el;
+        body.appendChild(applyBtn);
+      }
+    }
 
     // Wire click handler
     applyBtn.addEventListener('click', (ev) => {

@@ -158,7 +158,11 @@ export const AuraManager = {
         // re-populates with whoever's still in range).
         if (auraState.generic
             && (auraState.behavior === "damageTick" || auraState.behavior === "effectTick")) {
-          await actor.setFlag(MODULE_ID, "activeAura", { ...auraState, tickedThisRound: [] });
+          // Path-update only `tickedThisRound`. A wholesale `{...auraState, ...}`
+          // write would race with `_handleTemplateMove`'s concurrent
+          // `activeAura.templateId` update on v14 (where templates are
+          // delete+recreate per move) and clobber the new templateId.
+          await actor.setFlag(MODULE_ID, "activeAura.tickedThisRound", []);
           const refreshed = actor.getFlag(MODULE_ID, "activeAura");
           await AuraManager._tickAura(actor, refreshed);
         }
@@ -484,16 +488,32 @@ export const AuraManager = {
   /**
    * Update the aura template position to follow the caster token.
    * Uses changes from updateToken hook (committed values).
+   *
+   * v14: MeasuredTemplate documents are read-only post-create — `template.update({x,y})`
+   * silently no-ops with no error or warning (the doc was "merged into Region functionality"
+   * for v16 removal). Workaround: delete and recreate the template at the new position,
+   * preserving all original fields, then update auraState.templateId to the new ID.
    */
   async _updateTemplatePosition(actor, tokenDoc, auraState, changes = {}) {
-    const template = canvas.scene.templates.get(auraState.templateId);
-    if (!template) return;
+    const oldTemplate = canvas.scene.templates.get(auraState.templateId);
+    if (!oldTemplate) return;
 
     const gridSize = canvas.grid.size;
     const newX = (changes.x ?? tokenDoc.x) + gridSize / 2;
     const newY = (changes.y ?? tokenDoc.y) + gridSize / 2;
 
-    await template.update({ x: newX, y: newY });
+    if (oldTemplate.x === newX && oldTemplate.y === newY) return;
+
+    const newData = oldTemplate.toObject();
+    delete newData._id;
+    newData.x = newX;
+    newData.y = newY;
+
+    await canvas.scene.deleteEmbeddedDocuments("MeasuredTemplate", [oldTemplate.id]);
+    const [newTemplate] = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [newData]);
+    if (newTemplate) {
+      await actor.setFlag(MODULE_ID, "activeAura.templateId", newTemplate.id);
+    }
   },
 
   /* -------------------------------------------- */
@@ -934,8 +954,12 @@ export const AuraManager = {
     let castDamageDice = 1;
     try {
       const sheetStates = JSON.parse(localStorage.getItem(`vagabond.spell-states.${actor.id}`) ?? "{}");
-      if (sheetStates[spell.id]?.damageDice >= 1) {
-        castDamageDice = sheetStates[spell.id].damageDice;
+      const cached = sheetStates[spell.id]?.damageDice;
+      // Honor an explicit 0 — the player's "effect only" choice. The old
+      // `>= 1` guard silently coerced 0 back to the default of 1, so an
+      // effect-only Burn aura was still rolling damage on every tick.
+      if (typeof cached === "number" && cached >= 0) {
+        castDamageDice = cached;
       }
     } catch { /* fall back to default */ }
 
@@ -949,10 +973,16 @@ export const AuraManager = {
     // Behavior: focus-duration → tick each round; instant → one-shot
     // already resolved by the system, just place the template for the
     // round so the visual stays put.
+    // `hasDamage` is the spell-level "has any damage definition" flag;
+    // `castDamageDice > 0` is the player's runtime choice. An effect-only
+    // cast (damageDice = 0) on a damage-capable spell is effectTick, not
+    // damageTick — the tick path won't roll damage, so the label should
+    // match what's actually happening.
     const focused = (actor.system?.focus?.spellIds ?? []).includes(spellId);
+    const willRollDamage = hasDamage && castDamageDice > 0;
     let behavior;
     if (focused) {
-      behavior = hasDamage ? "damageTick" : "effectTick";
+      behavior = willRollDamage ? "damageTick" : "effectTick";
     } else {
       behavior = "instant";
     }
@@ -1350,10 +1380,13 @@ export const AuraManager = {
     }
 
     // Persist the updated set so movement-driven ticks honor it.
-    await actor.setFlag(MODULE_ID, "activeAura", {
-      ...auraState,
-      tickedThisRound: [...tickedSet],
-    });
+    // Path-update only `tickedThisRound` — a wholesale `{...auraState, ...}`
+    // write races with `_handleTemplateMove`'s concurrent `templateId`
+    // update on v14 (templates are delete+recreate per move). The race
+    // detached the aura template from the caster after the activation
+    // tick: tick reads auraState (templateId=T1), move handler swaps in
+    // T2, tick writes back its T1 snapshot, T2 is orphaned.
+    await actor.setFlag(MODULE_ID, "activeAura.tickedThisRound", [...tickedSet]);
   },
 
   /**
