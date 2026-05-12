@@ -20,6 +20,7 @@
  */
 
 import { MODULE_ID, log, onRenderChatMessage } from "../utils.mjs";
+import { uuidFor as catalogUuidFor } from "../active-effects-catalog.mjs";
 
 /* -------------------------------------------- */
 /*  Aura Spell Definitions                      */
@@ -484,54 +485,33 @@ export const AuraManager = {
     const token = AuraManager._getCasterToken(actor);
     if (!token) return false;
 
-    try {
-      // Source AE template — cloned by the region behavior onto every
-      // in-range token. statuses:["blessed"] gives the in-game icon;
-      // blessAE flag is the tag BlessManager.onPreRollSave looks for.
-      const [sourceAE] = await actor.createEmbeddedDocuments("ActiveEffect", [{
-        name: `Bless (Aura: ${actor.name})`,
-        img: spellDef.icon,
-        origin: `Actor.${actor.id}`,
-        description: spellDef.description || "",
-        disabled: false,
-        statuses: ["blessed"],
-        flags: {
-          [MODULE_ID]: {
-            managed: true,
-            auraTemplate: true,
-            auraSpell: "Bless",
-            auraBuff: actor.id,
-            blessAE: true,
-          },
-        },
-        changes: [],
-      }]);
+    // Catalog-backed template — single source-of-truth AE on the hidden
+    // catalog actor. Clones onto every in-range token (including caster)
+    // exactly once. Replaces the prior per-caster source-on-caster
+    // pattern which left the caster with two copies (harmless duplicate
+    // for tag-based detection, but ugly).
+    const templateUuid = await catalogUuidFor("bless-aura");
+    if (!templateUuid) return false;
 
+    try {
       const scene = canvas.scene;
-      // Convert feet → pixels via scene grid (grid.size px = grid.distance ft)
       const distance = scene.grid?.distance || 5;
       const radiusPx = radius * scene.grid.size / distance;
-      // `token` here is a Token *placeable* (canvas object), whose .x/.y/.width/.height
-      // refer to texture pixel positions — not what we want. Use getCenterPoint() for
-      // the scene-coordinate center point of the token, falling back to the token
-      // document's top-left + grid-cell-derived center if the placeable isn't on canvas.
       const center = token.getCenterPoint?.() ?? {
         x: (token.document?.x ?? 0) + ((token.document?.width ?? 1) * scene.grid.size) / 2,
         y: (token.document?.y ?? 0) + ((token.document?.height ?? 1) * scene.grid.size) / 2,
       };
-      const cx = center.x;
-      const cy = center.y;
 
       const [region] = await scene.createEmbeddedDocuments("Region", [{
         name: `Bless Aura — ${actor.name}`,
-        visibility: 2, // visible when Region layer active
+        visibility: 2,
         color: spellDef.templateColor || "#87CEEB",
         attachment: { token: token.id },
-        shapes: [{ type: "circle", x: cx, y: cy, radius: radiusPx, hole: false, gridBased: false }],
+        shapes: [{ type: "circle", x: center.x, y: center.y, radius: radiusPx, hole: false, gridBased: false }],
         behaviors: [{
           type: "applyActiveEffect",
           name: "Bless Buff",
-          system: { effects: [sourceAE.uuid] },
+          system: { effects: [templateUuid] },
         }],
         flags: { [MODULE_ID]: { auraOwner: actor.id, spellKey: "bless" } },
       }]);
@@ -542,7 +522,7 @@ export const AuraManager = {
         radius,
         tokenId: token.id,
         regionId: region.id,
-        sourceAeId: sourceAE.id,
+        // No sourceAeId — template lives in the shared catalog.
       });
 
       AuraManager._playAuraFX(token, spellDef, radius);
@@ -722,83 +702,15 @@ export const AuraManager = {
   },
 
   /**
-   * Find or create the hidden template-actor that owns shared aura
-   * source AEs. Stat-changing auras (Exalt) reference template AEs on
-   * this actor instead of duplicating them on the caster — putting the
-   * source on the caster would let the source AE's `changes` stack with
-   * the caster's own region-clone, doubling the buff. The hidden actor
-   * sidesteps that.
-   *
-   * Bootstrap is GM-only (Actor.create requires it). Players read the
-   * UUID and the system's applyActiveEffect cloning is server-side, so
-   * OBSERVER ownership on the template actor is enough.
-   *
-   * Returns `null` if the actor doesn't exist yet and the current user
-   * isn't a GM — caller should fall through to the legacy path.
-   */
-  async _getOrCreateAuraTemplateActor() {
-    let actor = game.actors.find(a => a.getFlag(MODULE_ID, "auraTemplateActor"));
-    if (actor) return actor;
-    if (!game.user.isGM) return null;
-    try {
-      actor = await Actor.create({
-        name: "_VCE Aura Templates",
-        type: "npc",
-        img: "icons/svg/sun.svg",
-        ownership: { default: 1 }, // OBSERVER — players read, can't edit
-        flags: { [MODULE_ID]: { auraTemplateActor: true } },
-      });
-      return actor;
-    } catch (err) {
-      log("AuraManager", `Could not create template actor: ${err.message}`);
-      return null;
-    }
-  },
-
-  /**
-   * Ensure a shared template AE for the given aura key exists on the
-   * template-actor; create it if missing (GM only). Returns the AE
-   * document or `null` if bootstrap failed.
-   *
-   * The template AE itself is enabled — applyActiveEffect clones inherit
-   * the source's `disabled` state, so a disabled source produces
-   * disabled clones. We want active clones on the targets.
-   */
-  async _ensureSharedTemplateAE(spellKey) {
-    const tplActor = await AuraManager._getOrCreateAuraTemplateActor();
-    if (!tplActor) return null;
-    const existing = tplActor.effects.find(e => e.getFlag(MODULE_ID, "auraTemplateKey") === spellKey);
-    if (existing) return existing;
-    if (!game.user.isGM) return null;
-    const spellDef = AURA_SPELLS[spellKey];
-    if (!spellDef) return null;
-    const labelLc = spellDef.label.toLowerCase();
-    try {
-      const [ae] = await tplActor.createEmbeddedDocuments("ActiveEffect", [{
-        name: spellDef.label,
-        img: spellDef.icon,
-        description: spellDef.description || "",
-        disabled: false,
-        statuses: [labelLc.endsWith("ed") ? labelLc : `${labelLc}ed`],
-        flags: { [MODULE_ID]: { auraTemplate: true, auraTemplateKey: spellKey } },
-        changes: spellDef.changes || [],
-      }]);
-      return ae;
-    } catch (err) {
-      log("AuraManager", `Could not create template AE for ${spellKey}: ${err.message}`);
-      return null;
-    }
-  },
-
-  /**
    * v14 region-based aura activation for Exalt.
    *
-   * Unlike Bless / Ward (tag-based detection, caster-duplicate harmless),
-   * Exalt has real AE `changes` that would stack if the source AE lived
-   * on the caster. So this path references a shared template AE on a
-   * hidden actor (`_VCE Aura Templates`). The region's applyActiveEffect
-   * behavior clones that template onto every in-range token (including
-   * the caster) — exactly once per actor.
+   * Unlike Bless / Ward (tag-based detection where caster-duplicate would
+   * be harmless), Exalt has real AE `changes` that would stack if the
+   * source AE lived on the caster. The region's applyActiveEffect
+   * behavior references a shared template AE in the VCE Active Effects
+   * Catalog and clones it onto every in-range token (caster included)
+   * exactly once. Catalog backing is currently a hidden world actor
+   * (`_VCE Active Effects Catalog`); see active-effects-catalog.mjs.
    *
    * @param {Actor} actor - The caster
    * @param {number} radius - Aura radius in feet
@@ -809,8 +721,8 @@ export const AuraManager = {
     const token = AuraManager._getCasterToken(actor);
     if (!token) return false;
 
-    const templateAE = await AuraManager._ensureSharedTemplateAE("exalt");
-    if (!templateAE) return false;
+    const templateUuid = await catalogUuidFor("exalt-aura");
+    if (!templateUuid) return false;
 
     try {
       const scene = canvas.scene;
@@ -830,7 +742,7 @@ export const AuraManager = {
         behaviors: [{
           type: "applyActiveEffect",
           name: "Exalt Buff",
-          system: { effects: [templateAE.uuid] },
+          system: { effects: [templateUuid] },
         }],
         flags: { [MODULE_ID]: { auraOwner: actor.id, spellKey: "exalt" } },
       }]);

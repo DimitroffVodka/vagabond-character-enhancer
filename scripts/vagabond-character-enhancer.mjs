@@ -4,6 +4,7 @@
  */
 
 import { MODULE_ID, log, getFeatures, combineFavor, safeRegister } from "./utils.mjs";
+import { bootstrapActiveEffectsCatalog } from "./active-effects-catalog.mjs";
 export { MODULE_ID };
 
 // Psychic system — Talent item type
@@ -2126,6 +2127,13 @@ Hooks.once("ready", async () => {
   // swallows thrown errors, which used to present as mysterious "VCE
   // half-loaded" states with no console output.
   await safeRegister("SocketRelay", () => registerSocketRelay());
+
+  // Bootstrap the VCE Active Effects Catalog (hidden world actor holding
+  // template AEs). Idempotent — only creates entries that don't already
+  // exist. GM-only. Must run before AuraManager.registerHooks because
+  // the region-based aura paths look up AE templates by canonicalId at
+  // activation time.
+  await safeRegister("ActiveEffectsCatalog", () => bootstrapActiveEffectsCatalog());
 
   // Register feature detection hooks
   await safeRegister("FeatureDetector", () => FeatureDetector.registerHooks());
