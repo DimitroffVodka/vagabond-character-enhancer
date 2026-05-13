@@ -50,6 +50,10 @@ export const SmokeTest = {
       await import("./tests/tier-c/spells.mjs"),
       // Phase 3: ancestry trait detection (7 system ancestries).
       await import("./tests/tier-c/ancestries.mjs"),
+      // Phase 3: VCE custom ancestries — presence/identity smoke (20 ancestries).
+      // Flavor-only items with empty levelFeatures; tests catch pack/type
+      // regressions + detector crashes, not trait-flag automation.
+      await import("./tests/tier-c/vce-ancestries.mjs"),
     ];
     return all.flatMap(m => m.tests);
   }
