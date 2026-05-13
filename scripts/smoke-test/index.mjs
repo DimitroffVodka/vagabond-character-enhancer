@@ -29,6 +29,13 @@ export const SmokeTest = {
       await import("./tests/tier-a/aura-polymorph-brawl.mjs"),
       await import("./tests/tier-a/detection-ae.mjs"),
       await import("./tests/tier-a/encumbrance-fx.mjs"),
+      // v0.5.0 behavioral tests — added 2026-05-13. Guard against the bug
+      // set that shipped past the prior shallow smoke harness (Exalt
+      // damage path, buff propagation, catalog integrity, DialogV2 click).
+      await import("./tests/tier-a/catalog-integrity.mjs"),
+      await import("./tests/tier-a/aura-buff-propagation.mjs"),
+      await import("./tests/tier-a/exalt-damage.mjs"),
+      await import("./tests/tier-a/dialog-v2.mjs"),
       await import("./tests/tier-b/martial.mjs"),
       await import("./tests/tier-b/skirmisher.mjs"),
       await import("./tests/tier-b/casters.mjs"),

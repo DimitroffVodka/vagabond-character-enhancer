@@ -72,6 +72,24 @@ export const FIXTURE_DEFS = {
     hp: 1,
     armor: 0,
   },
+  // Hostile generic — for disposition-filter tests (Bless/Ward/Exalt allies-only).
+  // Disposition is set on the token at place-time, not on the actor.
+  HostileNPC: {
+    name: "_smoke-HostileNPC",
+    type: "npc",
+    stats: { mig: 1, dex: 2, awr: 2, rsn: 2, prs: 2, lck: 1 },
+    hp: 999,
+    armor: 0,
+  },
+  // Undead-typed hostile — for Exalt doubling tests.
+  UndeadNPC: {
+    name: "_smoke-UndeadNPC",
+    type: "npc",
+    stats: { mig: 1, dex: 2, awr: 2, rsn: 2, prs: 2, lck: 1 },
+    hp: 999,
+    armor: 0,
+    beingType: "Undead",
+  },
   TestPC: {
     name: "_smoke-TestPC",
     type: "character",

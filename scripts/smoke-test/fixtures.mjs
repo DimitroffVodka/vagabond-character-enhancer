@@ -69,6 +69,7 @@ export const Fixtures = {
       update["system.health.max"] = def.hp;
     }
     if (def.armor != null) update["system.armor"] = def.armor;
+    if (def.beingType != null) update["system.beingType"] = def.beingType;
     await actor.update(update);
   },
 
