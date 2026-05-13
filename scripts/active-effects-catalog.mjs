@@ -148,14 +148,17 @@ export const CATALOG = [
     canonicalId: "psychic-mental-fortress",
     name: "Mental Fortress",
     img: "icons/magic/control/control-influence-puppet.webp",
-    // ADD mode (4) appends each name. Per system's Divine Resolve fix in CHANGELOG
-    // v0.3.0+, each immunity is a SEPARATE change entry — the system splits on
-    // commas internally but ADD mode of an array field needs distinct values.
+    // CONST.ACTIVE_EFFECT_MODES.ADD === 2 (Foundry v10+). The prior version
+    // of this entry used mode 4, which is UPGRADE — silently a no-op for
+    // array-field appends. Caught by the smoke test
+    // `psychic.mental-fortress-status-immunities` (2026-05-13).
+    // Each immunity is a separate change entry per the system's array-ADD
+    // behavior; see revelator-divine-resolve for the matching pattern.
     changes: [
-      { key: "system.statusImmunities", mode: 4, value: "berserk",    priority: null },
-      { key: "system.statusImmunities", mode: 4, value: "charmed",    priority: null },
-      { key: "system.statusImmunities", mode: 4, value: "confused",   priority: null },
-      { key: "system.statusImmunities", mode: 4, value: "frightened", priority: null },
+      { key: "system.statusImmunities", mode: 2, value: "berserk",    priority: null },
+      { key: "system.statusImmunities", mode: 2, value: "charmed",    priority: null },
+      { key: "system.statusImmunities", mode: 2, value: "confused",   priority: null },
+      { key: "system.statusImmunities", mode: 2, value: "frightened", priority: null },
     ],
   },
   {

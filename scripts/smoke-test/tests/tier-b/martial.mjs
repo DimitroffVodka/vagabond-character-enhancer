@@ -132,6 +132,33 @@ export const tests = [
     }
   },
 
+  // ── Tier B Test 4b — Pugilist Impact (L8 — has managed AE) ──────────────
+  // Impact writes `system.brawlDamageDieSizeBonus +2`. Different test from
+  // haymaker because Impact unlocks at L8 — the haymaker test (L6) misses it.
+  {
+    id: "pugilist.impact-die-bonus",
+    name: "Pugilist Impact: brawlDamageDieSizeBonus increments at L8",
+    tier: "b",
+    usesFixtures: ["TestPC"],
+    setup: async () => {
+      const { Fixtures } = await import("../../fixtures.mjs");
+      await Fixtures.swapClass("TestPC", "Pugilist", 8);
+    },
+    run: async ({ fixtures, assert, wait }) => {
+      const actor = fixtures.TestPC;
+      if (!actor) { assert(false, "TestPC fixture missing"); return; }
+      await wait(300);
+
+      const features = actor.getFlag(MODULE_ID, "features") ?? {};
+      assert(features.pugilist_impact === true,
+        `expected pugilist_impact=true at L8; features=${JSON.stringify(features)}`);
+
+      // BEHAVIORAL: Impact AE writes brawlDamageDieSizeBonus +2
+      assert((actor.system?.brawlDamageDieSizeBonus ?? 0) >= 2,
+        `Impact should set brawlDamageDieSizeBonus ≥ 2; got ${actor.system?.brawlDamageDieSizeBonus}`);
+    }
+  },
+
   // ── Tier B Test 5 ────────────────────────────────────────────────────────
   {
     id: "rogue.sneak-attack-flag",

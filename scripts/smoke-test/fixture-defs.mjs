@@ -11,8 +11,10 @@ export const FIXTURE_PREFIX = "_smoke-";
 // The vce-classes/vce-ancestries packs contain VCE homebrew additions only.
 export const PACKS = {
   classes: "vagabond.classes",
+  classesVce: "vagabond-character-enhancer.vce-classes", // fallback for custom classes
   perks:   "vagabond-character-enhancer.vce-perks",
   ancestries: "vagabond.ancestries",
+  ancestriesVce: "vagabond-character-enhancer.vce-ancestries",
 };
 
 export const FIXTURE_DEFS = {

@@ -82,12 +82,24 @@ export const Fixtures = {
     if (existing) {
       await existing.update({ "system.level": def.level });
     } else {
-      const pack = game.packs.get(PACKS.classes);
-      if (!pack) { log("SmokeTest", `Missing pack: ${PACKS.classes}`); return; }
-      const idx = await pack.getIndex();
-      const entry = idx.find(e => e.name === def.className);
-      if (!entry) { log("SmokeTest", `Missing class in compendium: ${def.className}`); return; }
-      const doc = await pack.getDocument(entry._id);
+      // Try the system pack first, then fall back to the VCE custom-class
+      // pack. Custom classes (Psychic, Monk, Dragoon, Jester, Samurai,
+      // Summoner) live there and weren't reachable from this helper before.
+      let doc = null;
+      for (const packId of [PACKS.classes, PACKS.classesVce]) {
+        const pack = game.packs.get(packId);
+        if (!pack) continue;
+        const idx = await pack.getIndex();
+        const entry = idx.find(e => e.name === def.className);
+        if (entry) {
+          doc = await pack.getDocument(entry._id);
+          break;
+        }
+      }
+      if (!doc) {
+        log("SmokeTest", `Missing class in any compendium: ${def.className}`);
+        return;
+      }
       const data = doc.toObject();
       if (data.system) data.system.level = def.level;
       await actor.createEmbeddedDocuments("Item", [data]);
@@ -99,12 +111,23 @@ export const Fixtures = {
     const existing = actor.items.find(i => i.type === "ancestry" && i.name === def.ancestryName);
     if (existing) return;
     // TODO: remove stale ancestry items when ancestryName changes (mirror _syncClass pattern)
-    const pack = game.packs.get(PACKS.ancestries);
-    if (!pack) { log("SmokeTest", `Missing pack: ${PACKS.ancestries}`); return; }
-    const idx = await pack.getIndex();
-    const entry = idx.find(e => e.name === def.ancestryName);
-    if (!entry) { log("SmokeTest", `Missing ancestry in compendium: ${def.ancestryName}`); return; }
-    const doc = await pack.getDocument(entry._id);
+    // System pack first, then VCE custom-ancestry fallback (Centaur, Pixie,
+    // Kindled, Fiend, Changeling, etc. live in the VCE pack).
+    let doc = null;
+    for (const packId of [PACKS.ancestries, PACKS.ancestriesVce]) {
+      const pack = game.packs.get(packId);
+      if (!pack) continue;
+      const idx = await pack.getIndex();
+      const entry = idx.find(e => e.name === def.ancestryName);
+      if (entry) {
+        doc = await pack.getDocument(entry._id);
+        break;
+      }
+    }
+    if (!doc) {
+      log("SmokeTest", `Missing ancestry in any compendium: ${def.ancestryName}`);
+      return;
+    }
     await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
   },
 

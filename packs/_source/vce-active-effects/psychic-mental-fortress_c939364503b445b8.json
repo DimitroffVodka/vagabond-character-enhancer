@@ -7,25 +7,25 @@
   "changes": [
     {
       "key": "system.statusImmunities",
-      "mode": 4,
+      "mode": 2,
       "value": "berserk",
       "priority": null
     },
     {
       "key": "system.statusImmunities",
-      "mode": 4,
+      "mode": 2,
       "value": "charmed",
       "priority": null
     },
     {
       "key": "system.statusImmunities",
-      "mode": 4,
+      "mode": 2,
       "value": "confused",
       "priority": null
     },
     {
       "key": "system.statusImmunities",
-      "mode": 4,
+      "mode": 2,
       "value": "frightened",
       "priority": null
     }

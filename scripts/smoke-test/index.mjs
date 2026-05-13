@@ -42,6 +42,10 @@ export const SmokeTest = {
       await import("./tests/tier-b/specialists.mjs"),
       // Phase 2: damage-pipeline behavioral tests (Indestructible, Shield).
       await import("./tests/tier-b/indestructible-shield.mjs"),
+      // Phase 2: VCE custom classes (Monk, Psychic, Summoner, Samurai,
+      // Dragoon, Jester). Reachable now that Fixtures.swapClass falls
+      // through to the VCE pack.
+      await import("./tests/tier-b/vce-classes.mjs"),
       await import("./tests/tier-c/perks.mjs"),
       await import("./tests/tier-c/spells.mjs"),
     ];
