@@ -178,6 +178,43 @@ export const tests = [
       const features = actor.getFlag(MODULE_ID, "features") ?? {};
       assert(features.rogue_sneakAttack === true,
         `expected rogue_sneakAttack=true; features=${JSON.stringify(features)}`);
+
+      // BEHAVIORAL: RogueFeatures.onPreRollDamage reads `item._vceSneakAttack`
+      // and injects `+ NdN4` into the weapon's `currentDamage` BEFORE the
+      // system's rollDamage builds the Roll. Set the marker manually,
+      // invoke rollDamage, and verify the resulting formula contains the
+      // injected dice. This is the actual user-facing mechanic — sneak
+      // attacks ADD bonus d4s to weapon damage.
+      const { SceneHelper } = await import("../../scene-helper.mjs");
+      const { placed, cleanup } = await SceneHelper.placeFixtures({
+        rogue: { fixture: "TestPC", x: 300, y: 300, disposition: "friendly" },
+      });
+      try {
+        const rogue = placed.rogue.actor;
+        // Ensure the rogue has Might so HP/dice logic doesn't choke
+        await rogue.update({ "system.stats.might.value": 4 });
+
+        // Give the rogue a vanilla Dagger (1d4 base)
+        const pack = game.packs.get("vagabond.weapons");
+        const idx = [...await pack.getIndex()];
+        const daggerEntry = idx.find(e => e.name === "Dagger");
+        const daggerDoc = await pack.getDocument(daggerEntry._id);
+        const [dagger] = await rogue.createEmbeddedDocuments("Item", [daggerDoc.toObject()]);
+
+        // Set the Sneak Attack marker — what the system would set when a
+        // player chose to use Sneak Attack mid-attack.
+        dagger._vceSneakAttack = { diceCount: 2 };
+
+        const dmg = await dagger.rollDamage(rogue, false);
+        // Formula should contain "2d4" — the injected sneak dice
+        assert(/2d4/.test(dmg?.formula ?? ""),
+          `Sneak Attack should inject "2d4" into damage formula; got "${dmg?.formula}"`);
+
+        // Cleanup the marker
+        delete dagger._vceSneakAttack;
+      } finally {
+        await cleanup();
+      }
     }
   },
 ];

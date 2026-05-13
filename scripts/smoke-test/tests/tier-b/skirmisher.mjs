@@ -40,6 +40,29 @@ export const tests = [
       // gunslinger_deadeye unlocks at level 1 — level 5 is sufficient
       assert(features.gunslinger_deadeye === true,
         `expected gunslinger_deadeye=true; features=${JSON.stringify(features)}`);
+
+      // BEHAVIORAL: Deadeye stacks reduce rangedCritBonus by 1 each (min cap
+      // is the Vagabond crit floor of 17). `_ensureDeadeyeAE(actor, N)`
+      // builds/updates an AE that writes `system.rangedCritBonus -N`.
+      const { GunslingerFeatures } = await import("../../../class-features/gunslinger.mjs");
+      assert(typeof GunslingerFeatures._ensureDeadeyeAE === "function",
+        "GunslingerFeatures._ensureDeadeyeAE should be exposed");
+
+      // Clear any stale Deadeye AE first
+      const stale = [...actor.effects].filter(e => /Deadeye/i.test(e.name ?? ""));
+      if (stale.length) await actor.deleteEmbeddedDocuments("ActiveEffect", stale.map(e => e.id));
+
+      const before = actor.system?.rangedCritBonus ?? 0;
+      await GunslingerFeatures._ensureDeadeyeAE(actor, 2);
+      await wait(150);
+      const after = actor.system?.rangedCritBonus ?? 0;
+      // 2 stacks → -2 to rangedCritBonus
+      assert(after === before - 2,
+        `Deadeye 2 stacks should drop rangedCritBonus by 2 (was ${before}, now ${after})`);
+
+      // Cleanup
+      const ae = [...actor.effects].find(e => /Deadeye/i.test(e.name ?? ""));
+      if (ae) await actor.deleteEmbeddedDocuments("ActiveEffect", [ae.id]);
     }
   },
 
