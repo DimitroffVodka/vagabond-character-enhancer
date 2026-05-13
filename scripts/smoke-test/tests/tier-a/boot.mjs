@@ -51,13 +51,19 @@ export const tests = [
         }
         const cls = await pack.getDocument(entry._id);
         await a.createEmbeddedDocuments("Item", [cls.toObject()]);
-        // Allow time for createItem hook → 100ms debounce → scan() chain to
-        // complete. The scan does multiple actor.update() awaits (flag write,
-        // managed-effect sync, postScan hook) and can take 400-600ms under
-        // load. 700ms is conservative and still well under any test budget.
-        await wait(700);
+        // Poll up to 3s for the scan to complete. The createItem hook → 100ms
+        // debounce → scan() chain with multiple actor.update() awaits can take
+        // anywhere from 200ms to 1500ms under heavy suite load. Fixed waits
+        // are flaky here; poll for the expected end state and bail on timeout.
+        const deadline = performance.now() + 3000;
+        let druidFlags = [];
+        while (performance.now() < deadline) {
+          const flags = a.getFlag(MODULE_ID, "features") ?? {};
+          druidFlags = Object.keys(flags).filter(k => k.startsWith("druid_"));
+          if (druidFlags.length > 0) break;
+          await wait(50);
+        }
         const flags = a.getFlag(MODULE_ID, "features") ?? {};
-        const druidFlags = Object.keys(flags).filter(k => k.startsWith("druid_"));
         assert(druidFlags.length > 0, `expected druid_* flags after class creation, got: ${JSON.stringify(flags)}`);
       } finally {
         try { await a.delete(); } catch (e) { /* fixture cleanup race ok */ }

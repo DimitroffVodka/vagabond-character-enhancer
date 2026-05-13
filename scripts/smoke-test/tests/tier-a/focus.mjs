@@ -62,12 +62,17 @@ export const tests = [
       await FM.acquireFeatureFocus(a, "smoke_berserk_test", "for berserk drop");
       assert(FM.getTotalFocusCount(a) === 1, "have 1 focus before berserk");
       await a.toggleStatusEffect("berserk", { active: true });
-      // The createActiveEffect hook defers _dropAllFocus by 100ms (so the AE
-      // application cascade completes first), and _dropAllFocus then does an
-      // actor.update() that takes another 300-500ms to commit under load.
-      // 700ms is conservative.
-      await wait(700);
-      assert(FM.getTotalFocusCount(a) === 0, `berserk should drop focus to 0, got ${FM.getTotalFocusCount(a)}`);
+      // Poll up to 3s for the drop to commit. The createActiveEffect hook
+      // defers _dropAllFocus by 100ms, then unsetFlag() takes another
+      // 200-1500ms under heavy suite load. Fixed waits are flaky; poll for
+      // the end state.
+      const deadline = performance.now() + 3000;
+      let total = FM.getTotalFocusCount(a);
+      while (performance.now() < deadline && total !== 0) {
+        await wait(50);
+        total = FM.getTotalFocusCount(a);
+      }
+      assert(total === 0, `berserk should drop focus to 0, got ${total}`);
     }
   }
 ];
