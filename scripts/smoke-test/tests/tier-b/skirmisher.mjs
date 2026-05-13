@@ -150,6 +150,22 @@ export const tests = [
       // dancer_evasive — level 2 feature, also present at L5
       assert(features.dancer_evasive === true,
         `expected dancer_evasive=true; features=${JSON.stringify(features)}`);
+
+      // BEHAVIORAL: Step Up sets `stepUpActive` flag on the dancer; the
+      // onPreRollSave hook then patches VagabondRollBuilder to inject
+      // "2d20kh" as the base formula for Reflex saves. Set the flag and
+      // roll a Reflex save — verify the rolled formula has the 2d20.
+      await actor.setFlag(MODULE_ID, "stepUpActive", true);
+      await wait(100);
+      try {
+        const helper = game.vagabond.api.VagabondDamageHelper;
+        const roll = await helper._rollSave(actor, "reflex", false);
+        const formula = roll?.formula ?? "";
+        assert(/2d20/.test(formula),
+          `Step Up should roll Reflex with 2d20 (kh); got formula "${formula}"`);
+      } finally {
+        await actor.unsetFlag(MODULE_ID, "stepUpActive");
+      }
     }
   },
 ];
