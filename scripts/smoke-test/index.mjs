@@ -48,6 +48,8 @@ export const SmokeTest = {
       await import("./tests/tier-b/vce-classes.mjs"),
       await import("./tests/tier-c/perks.mjs"),
       await import("./tests/tier-c/spells.mjs"),
+      // Phase 3: ancestry trait detection (7 system ancestries).
+      await import("./tests/tier-c/ancestries.mjs"),
     ];
     return all.flatMap(m => m.tests);
   }
