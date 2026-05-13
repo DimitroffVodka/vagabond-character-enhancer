@@ -36,6 +36,9 @@ export const SmokeTest = {
       // Phase 4: cross-cutting subsystems (range validator, brawl intent
       // helpers, save routing, silver/metal weakness).
       await import("./tests/tier-a/cross-cutting.mjs"),
+      // Phase 5: chat-message injection (renderChatMessage hook drives 14+
+      // features — visual tags, formula breakdowns, button click handlers).
+      await import("./tests/tier-a/chat-injection.mjs"),
       await import("./tests/tier-a/aura-buff-propagation.mjs"),
       await import("./tests/tier-a/exalt-damage.mjs"),
       await import("./tests/tier-a/dialog-v2.mjs"),
