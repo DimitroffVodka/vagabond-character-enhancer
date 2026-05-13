@@ -40,6 +40,8 @@ export const SmokeTest = {
       await import("./tests/tier-b/skirmisher.mjs"),
       await import("./tests/tier-b/casters.mjs"),
       await import("./tests/tier-b/specialists.mjs"),
+      // Phase 2: damage-pipeline behavioral tests (Indestructible, Shield).
+      await import("./tests/tier-b/indestructible-shield.mjs"),
       await import("./tests/tier-c/perks.mjs"),
       await import("./tests/tier-c/spells.mjs"),
     ];

@@ -44,6 +44,12 @@ export const tests = [
       const rageAE = actor.effects.find(e => /^rage$/i.test(e.name));
       assert(!!rageAE,
         `expected a "Rage" managed AE; effects=${actor.effects.map(e => e.name).join(", ")}`);
+
+      // BEHAVIORAL: Rage AE writes `system.incomingDamageReductionPerDie +1`.
+      // If the AE is properly applied, the actor's prepared data reflects this.
+      // Rip and Tear (L9) stacks another +1; at L5 only Rage contributes.
+      assert((actor.system.incomingDamageReductionPerDie ?? 0) >= 1,
+        `Rage AE should set incomingDamageReductionPerDie >= 1; got ${actor.system.incomingDamageReductionPerDie}`);
     }
   },
 

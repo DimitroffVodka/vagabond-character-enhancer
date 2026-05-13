@@ -45,6 +45,15 @@ export const tests = [
       // wizard_pageMaster: level 1, status:"module"
       assert(features.wizard_pageMaster === true,
         `expected wizard_pageMaster=true; features=${JSON.stringify(features)}`);
+
+      // BEHAVIORAL: at L5 Wizard has Manifold Mind which writes
+      // `system.focus.maxBonus += 1`. Verify the bonus actually accumulates.
+      const maxBonus = actor.system?.focus?.maxBonus;
+      const bonusSum = Array.isArray(maxBonus)
+        ? maxBonus.reduce((s, v) => s + Number(v || 0), 0)
+        : Number(maxBonus || 0);
+      assert(bonusSum >= 1,
+        `Manifold Mind AE should bump focus.maxBonus by ≥1; got ${JSON.stringify(maxBonus)} (sum=${bonusSum})`);
     }
   },
 
@@ -95,6 +104,13 @@ export const tests = [
       // sorcerer_spellSlinger: level 2, status:"module", has managed AE
       assert(features.sorcerer_spellSlinger === true,
         `expected sorcerer_spellSlinger=true at L5; features=${JSON.stringify(features)}`);
+
+      // BEHAVIORAL: Spell-Slinger AE writes castCritBonus -1 (crit on 19+)
+      // and overrides spellDamageDieSize to 8. Verify both reached actor data.
+      assert((actor.system.castCritBonus ?? 0) <= -1,
+        `Spell-Slinger should set castCritBonus ≤ -1; got ${actor.system.castCritBonus}`);
+      assert((actor.system.spellDamageDieSize ?? 6) >= 8,
+        `Spell-Slinger should set spellDamageDieSize >= 8; got ${actor.system.spellDamageDieSize}`);
     }
   },
 
@@ -150,6 +166,15 @@ export const tests = [
       // revelator_selfless: level 1, status:"module"
       assert(features.revelator_selfless === true,
         `expected revelator_selfless=true; features=${JSON.stringify(features)}`);
+
+      // BEHAVIORAL: Revelator at L5 has Paragon's Aura which writes
+      // `system.focus.maxBonus += 1`. Also Sacrosanct (L3+) writes save bonuses.
+      const maxBonus = actor.system?.focus?.maxBonus;
+      const bonusSum = Array.isArray(maxBonus)
+        ? maxBonus.reduce((s, v) => s + Number(v || 0), 0)
+        : Number(maxBonus || 0);
+      assert(bonusSum >= 1,
+        `Paragon's Aura should bump focus.maxBonus ≥1; got ${JSON.stringify(maxBonus)}`);
     }
   },
 
