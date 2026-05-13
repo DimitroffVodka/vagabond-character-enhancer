@@ -184,77 +184,12 @@ export const tests = [
     }
   },
 
-  // ── Test 7 ──────────────────────────────────────────────────────────────
-  {
-    id: "range-validator.no-error-on-out-of-range",
-    name: "RangeValidator: out-of-range weapon attack does not throw uncaught errors",
-    tier: "a",
-    usesFixtures: ["Generic", "NPC"],
-    // Skip if no tokens are on the scene (range validator requires token positions)
-    skip: () => {
-      const genericActor = game.actors.getName("_smoke-Generic");
-      if (!genericActor) return false; // let the test surface the failure
-      const tokens = genericActor.getActiveTokens();
-      return tokens.length === 0;
-    },
-    skipReason: "Generic actor has no token on the active scene — range check requires canvas positions",
-    run: async ({ fixtures, assert, wait }) => {
-      const attacker = fixtures.Generic;
-      const target = fixtures.NPC;
-      if (!attacker || !target) {
-        assert(false, "Generic or NPC fixture missing");
-        return;
-      }
-
-      // Find attacker's first weapon
-      const weapon = attacker.items.find(i => i.type === "equipment" &&
-        (i.system?.equipmentType === "weapon" || i.system?.properties?.some?.(p =>
-          ["melee", "ranged", "brawl", "finesse"].includes(p?.toLowerCase?.()))));
-      if (!weapon) {
-        // No weapon found — create a minimal melee weapon stub
-        const [stub] = await attacker.createEmbeddedDocuments("Item", [{
-          name: "_smoke-sword",
-          type: "equipment",
-          system: { equipmentType: "weapon", equipped: true }
-        }]);
-        // Not asserting roll outcome — just that no uncaught error occurs
-        // Delete the stub immediately since cleanup will also do it
-        await attacker.deleteEmbeddedDocuments("Item", [stub.id]).catch(() => {});
-        assert(true, "weapon stub created and cleaned up (no weapon found on Generic)");
-        return;
-      }
-
-      // Set the NPC as the current target
-      try {
-        const npcTokens = target.getActiveTokens();
-        if (npcTokens.length > 0) {
-          game.user.updateTokenTargets([npcTokens[0].id]);
-          await wait(100);
-        }
-      } catch (e) { /* non-fatal — targeting is best-effort */ }
-
-      // Attempt the attack — we don't care if it fires or is blocked by range,
-      // only that it doesn't throw an uncaught exception visible in console errors.
-      let attackError = null;
-      try {
-        // rollAttack on a weapon item. Pass skipDialog to avoid UI prompts.
-        await weapon.rollAttack?.({ skipDialog: true, chatMessage: false });
-      } catch (e) {
-        attackError = e;
-      }
-      await wait(300);
-
-      // Clear targets
-      try { game.user.updateTokenTargets([]); } catch (e) { /* non-fatal */ }
-
-      // If rollAttack doesn't exist on this item type, that's fine — not an error
-      if (attackError) {
-        // Only surface as failure if it's not a known "no rollAttack" type issue
-        const msg = attackError.message ?? String(attackError);
-        assert(false, `weapon.rollAttack threw unexpectedly: ${msg}`);
-      } else {
-        assert(true, "rollAttack completed without thrown exception");
-      }
-    }
-  },
+  // Removed (2026-05-13): `range-validator.no-error-on-out-of-range` was a
+  // 🔴 structural test that only asserted "doesn't throw" without verifying
+  // that the validator actually blocked or hindered the attack. Superseded
+  // by 4 stronger Phase 4 tests in `tier-a/cross-cutting.mjs`:
+  //   - range.measureDistance-chebyshev
+  //   - range.melee-out-of-range-blocked
+  //   - range.ranged-at-close-hinder
+  //   - range.multi-target-no-cleave-blocked
 ];

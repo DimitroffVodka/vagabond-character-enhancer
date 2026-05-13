@@ -192,41 +192,54 @@ export const tests = [
   },
 
   {
-    id: "ward.method-is-callable",
-    name: "WardManager exposes callable methods (hook-driven apply)",
+    id: "ward.applies-and-clears-AE",
+    name: "WardManager._applyWardAE creates Warded AE on target; refresh deletes prior copy",
     tier: "a",
-    usesFixtures: ["Witch"],
-    run: async ({ fixtures, assert }) => {
-      const a = fixtures.Witch;
-      const ward = a.items.find(i => i.name === "Ward" && i.type === "spell");
-      assert(!!ward, "Witch fixture has Ward spell");
-      if (!ward) return;
+    usesFixtures: ["Witch", "NPC"],
+    run: async ({ fixtures, assert, wait }) => {
+      const caster = fixtures.Witch;
+      const target = fixtures.NPC;
+      const { WardManager } = await import("../../../spell-features/ward-manager.mjs");
 
-      let WardMod;
-      try {
-        WardMod = await import("../../../spell-features/ward-manager.mjs");
-      } catch (e) {
-        assert(false, `Could not import ward-manager: ${e.message}`);
-        return;
+      // Clean any pre-existing Ward AEs on target from prior runs
+      const stale = target.effects.filter(e =>
+        e.getFlag?.(MODULE_ID, "wardAE") || /warded/i.test(e.name ?? "")
+      );
+      if (stale.length) {
+        await target.deleteEmbeddedDocuments("ActiveEffect", stale.map(e => e.id));
+        await wait(100);
       }
 
-      const WM = WardMod.WardManager;
-      assert(!!WM, "WardManager export is present");
-      if (!WM) return;
+      try {
+        // _applyWardAE takes (caster, targets) where targets is an array of
+        // { actorId, actorName } — same shape as bless.
+        await WardManager._applyWardAE(caster, [{ actorId: target.id, actorName: target.name }]);
+        await wait(250);
 
-      // WardManager is hook-driven: no direct public apply() exists.
-      // Verify the internal application method and the hook registration method
-      // are callable (not undefined / not a function would be a real bug).
-      const hasApply = typeof WM._applyWardAE === "function";
-      const hasRegister = typeof WM.registerHooks === "function";
-      assert(hasRegister, "WardManager.registerHooks is a function");
-      assert(hasApply, "WardManager._applyWardAE is a function (internal apply entry)");
+        const wardAE = target.effects.find(e => e.getFlag?.(MODULE_ID, "wardAE"));
+        assert(!!wardAE,
+          `Warded AE should appear on target after _applyWardAE; effects: ${target.effects.map(e => e.name).join(", ")}`);
+        assert(wardAE?.getFlag?.(MODULE_ID, "wardCasterId") === caster.id,
+          `Warded AE should record caster id; got "${wardAE?.getFlag?.(MODULE_ID, "wardCasterId")}" expected "${caster.id}"`);
+        assert(wardAE?.statuses?.has?.("warded"),
+          `Warded AE should carry the 'warded' status; got ${JSON.stringify([...(wardAE?.statuses ?? [])])}`);
 
-      // Verify the Ward AE flag constant is consistent: the constant WARD_AE_FLAG
-      // is used internally but not exported. We can verify it indirectly by
-      // confirming the module exports only what's expected.
-      const exportKeys = Object.keys(WardMod);
-      assert(exportKeys.includes("WardManager"), `ward-manager exports WardManager; exports: ${exportKeys.join(", ")}`);
+        // BEHAVIORAL: re-applying from the same caster should refresh (delete
+        // old + create new), not stack. Count Warded AEs before/after.
+        const beforeRefresh = target.effects.filter(e => e.getFlag?.(MODULE_ID, "wardAE")).length;
+        await WardManager._applyWardAE(caster, [{ actorId: target.id, actorName: target.name }]);
+        await wait(250);
+        const afterRefresh = target.effects.filter(e => e.getFlag?.(MODULE_ID, "wardAE")).length;
+        assert(afterRefresh === beforeRefresh,
+          `Refresh should keep exactly 1 Warded AE from this caster; before=${beforeRefresh}, after=${afterRefresh}`);
+      } finally {
+        const cleanup = target.effects.filter(e =>
+          e.getFlag?.(MODULE_ID, "wardAE") || /warded/i.test(e.name ?? "")
+        );
+        if (cleanup.length) {
+          await target.deleteEmbeddedDocuments("ActiveEffect", cleanup.map(e => e.id)).catch(() => {});
+        }
+      }
     }
   },
 

@@ -1,5 +1,9 @@
 # Smoke Test Audit (2026-05-13)
 
+**Updated 2026-05-13 (later pass): post-Phases 2-5 + audit upgrade pass.**
+Suite size grew from 58 → 227 tests; behavioral coverage went from 47% to
+**~92%** (208 🟢 / 6 🟡 / 8 🔴 / 5 skip in the final count).
+
 Categorizing the existing 44 tests + the 14 tests I added today by what they
 actually verify. Each test gets a label:
 
@@ -193,3 +197,80 @@ that exercises the feature. Suggested upgrades, ordered by user-visible impact:
 
 That's ~18 upgrades + ~12 cross-cutting tests = the Phase 2 / Phase 3 / Phase 4
 targets in the original plan.
+
+---
+
+## Update — 2026-05-13 (later pass)
+
+Phases 2-5 implemented, plus a final audit-pass upgrade. The suite has grown
+from 58 to 227 tests. **Behavioral coverage rose from 47% to ~92%.**
+
+Phases since the original audit:
+
+- **Phase 2** — Tier B class features upgraded with behavioral assertions
+  (Barbarian Rage DR via system.incomingDamageReductionPerDie; Sorcerer
+  Spell-Slinger castCritBonus + spellDamageDieSize; Wizard Manifold Mind
+  focus.maxBonus; Revelator focus + Divine Resolve immunities + Sacrosanct
+  save bonuses; Merchant Deep Pockets exact bonusSlots; Pugilist Impact
+  brawlDamageDieSizeBonus; Rogue Sneak Attack damage formula injection;
+  Hunter `_markTarget`; Gunslinger Deadeye rangedCritBonus; Dancer Step Up
+  2d20kh save formula; Sorcerer Tap HP→Mana delta).
+- **Phase 3** — Tier C: 7 system ancestry trait-detection tests (surfaced
+  the darksight/nimble multi-name collision bug — fixed in feature-detector
+  via `_ANCESTRY_TRAIT_MULTI`); 20 VCE custom ancestry presence/identity
+  tests; behavioral assertions on Tier C perk tests (catalog-backed AE stat
+  changes).
+- **Phase 4** — Cross-cutting (11 tests in `tier-a/cross-cutting.mjs`):
+  range validator (measureDistance + onPreRollAttack blocking/Hinder),
+  brawl intent helpers (getActorSize + getEffectiveShoveSize +
+  vanguard_wall scaling), save routing (resolveSaveRoller mana vs
+  leadership), silver/metal weakness (calculateFinalDamage armor bypass).
+- **Phase 5** — Chat-message injection (3 tests in
+  `tier-a/chat-injection.mjs`): Barbarian RAGE tag, Rage DR breakdown,
+  Hunter unmark button click. Pattern: synthetic chat card matching the
+  system's DOM shape → message create → poll for injected element →
+  click + assert flag mutation. Template is ready for the other 11+
+  injection sites if regressions surface.
+
+Audit-pass upgrades (this session):
+
+- `ward.method-is-callable` 🔴 → `ward.applies-and-clears-AE` 🟢 — drives
+  WardManager._applyWardAE end-to-end, asserts AE flag + status + caster id,
+  and verifies refresh-without-stacking semantics.
+- `range-validator.no-error-on-out-of-range` 🔴 → **removed** (superseded
+  by 4 stronger Phase 4 tests).
+- `alchemist.cookbook-api-callable` 🔴 →
+  `alchemist.progression-data-at-level-5` 🟢 — drives getAlchemistData
+  end-to-end and asserts L5 progression values match ALCHEMIST_LEVELS[5].
+
+Remaining 🔴 tests are pure-API-presence smoke checks where building a
+behavioral path would require fixture machinery disproportionate to the
+yield:
+
+- `boot.no-console-errors-recent` — baseline smoke check
+- `boot.api-surface-present` — module-load smoke check
+- `magus.flag-set` — system-status feature with no module AE to inspect
+- `druid.flag-set` — polymorph already tested behaviorally elsewhere
+- `witch.betwixt-api-callable` — opens a blocking dialog
+- `luminary.flag-set` — runtime hook (canExplode injection on healing)
+- `bard.virtuoso-api-callable` — hasActiveInspiration() has out-of-combat
+  quirks (see source); behavioral path documented as deferred
+- `summoner.conjure-api-callable` — Summoner not in vagabond.classes pack
+
+These are documented in their respective test files and represent
+intentional boundaries rather than gaps.
+
+**Bug parade** caught by the behavioral pass:
+
+1. Mental Fortress AE mode-4 (UPGRADE) on an array field was a no-op —
+   status immunities never landed. Fixed (mode → 2).
+2. Ancestry trait flat-spread registry collision: darksight (Dwarf/Goblin/
+   Orc) and nimble (Goblin/Halfling) — only one registration won. Fixed
+   via `_ANCESTRY_TRAIT_MULTI` pattern (same shape as class features).
+3. Fixture pollution from crashed prior sessions — `featureFocus` leftovers
+   broke the focus suite. Fixed via `Fixtures._wipeStaleFlags` on each
+   session init.
+
+Both module bugs and the fixture-hygiene bug existed BEFORE this work and
+were invisible to the prior shallow harness. They were caught the first
+time behavioral assertions exercised the code paths they affect.

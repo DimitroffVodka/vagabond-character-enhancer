@@ -31,8 +31,8 @@ export const tests = [
 
   // ── Tier B Test 16 ────────────────────────────────────────────────────────
   {
-    id: "alchemist.cookbook-api-callable",
-    name: "Alchemist: alchemist + alchemy API objects exist + flag set after class swap (L5)",
+    id: "alchemist.progression-data-at-level-5",
+    name: "Alchemist: getAlchemistData returns L5 progression after class swap",
     tier: "b",
     usesFixtures: ["TestPC"],
     setup: async ({ fixtures }) => {
@@ -46,17 +46,32 @@ export const tests = [
       await wait(300);
 
       const api = game.vagabondCharacterEnhancer;
-      // api.alchemist is AlchemistFeatures object
       assert(typeof api?.alchemist === "object" && api.alchemist !== null,
         `expected api.alchemist to be an object; got ${typeof api?.alchemist}`);
-      // api.alchemy is the AlchemyCookbook / Alchemy helpers object
       assert(typeof api?.alchemy === "object" && api.alchemy !== null,
         `expected api.alchemy to be an object; got ${typeof api?.alchemy}`);
 
       const features = actor.getFlag(MODULE_ID, "features") ?? {};
-      // alchemist_alchemy: level 1 (no status field in registry, but detector still sets flag)
       assert(features.alchemist_alchemy === true,
         `expected alchemist_alchemy=true; features=${JSON.stringify(features)}`);
+
+      // BEHAVIORAL: getAlchemistData reads the class item + level and returns
+      // a progression-derived data object. At L5 the data must (a) be non-null,
+      // (b) reflect the actor's level, (c) expose the L5 progression values
+      // (maxFormulaeCount=6, maxFormulaeValue=250 per ALCHEMIST_LEVELS[5]).
+      // This catches breakage in ALCHEMIST_LEVELS table lookup or in the
+      // class-item detection path — regressions the original "api object
+      // exists" check would have missed.
+      const { getAlchemistData, ALCHEMIST_LEVELS } = await import("../../../alchemy/alchemy-helpers.mjs");
+      const data = getAlchemistData(actor);
+      assert(!!data,
+        `getAlchemistData should return non-null for an Alchemist L5 actor; got ${data}`);
+      assert(data?.level === 5,
+        `getAlchemistData.level should be 5; got ${data?.level}`);
+      assert(data?.maxFormulaeCount === ALCHEMIST_LEVELS[5].formulaeKnown,
+        `maxFormulaeCount should match ALCHEMIST_LEVELS[5].formulaeKnown (${ALCHEMIST_LEVELS[5].formulaeKnown}); got ${data?.maxFormulaeCount}`);
+      assert(data?.maxFormulaeValue === ALCHEMIST_LEVELS[5].maxValueSilver,
+        `maxFormulaeValue should match ALCHEMIST_LEVELS[5].maxValueSilver (${ALCHEMIST_LEVELS[5].maxValueSilver}); got ${data?.maxFormulaeValue}`);
     }
   },
 
