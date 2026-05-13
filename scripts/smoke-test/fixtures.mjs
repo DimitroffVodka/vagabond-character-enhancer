@@ -50,12 +50,33 @@ export const Fixtures = {
         flags: { [MODULE_ID]: { [SMOKE_FLAG]: true } }
       });
     }
+    // Hygiene: wipe stale VCE flags (except the smokeTestFixture marker).
+    // Without this, a crashed/interrupted prior session can leave residue
+    // (e.g. featureFocus entries, draconicResilienceType, hunterMark target)
+    // that the runner's snapshot/restore then bakes into the test baseline
+    // — every subsequent test sees the pollution as its starting state.
+    // `features` is preserved because the detector rewrites it on rescan;
+    // we don't need to clear it explicitly and clearing it can cause a
+    // flash where downstream tests read empty flags before rescan completes.
+    await this._wipeStaleFlags(a);
     await this._syncStats(a, def);
     await this._syncClass(a, def);
     await this._syncAncestry(a, def);
     await this._syncSpells(a, def);
     await this._syncItems(a, def);
     return a;
+  },
+
+  async _wipeStaleFlags(actor) {
+    const KEEP = new Set([SMOKE_FLAG, "features"]);
+    const flags = actor.flags?.[MODULE_ID] ?? {};
+    const deletions = {};
+    for (const k of Object.keys(flags)) {
+      if (!KEEP.has(k)) deletions[`flags.${MODULE_ID}.-=${k}`] = null;
+    }
+    if (Object.keys(deletions).length) {
+      await actor.update(deletions, { diff: false });
+    }
   },
 
   async _syncStats(actor, def) {

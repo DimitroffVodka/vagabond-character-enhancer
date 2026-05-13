@@ -18,15 +18,33 @@ import { MODULE_ID } from "../../../utils.mjs";
 
 const FLAG_RESILIENCE_TYPE = "draken_draconicResilienceType";
 
-/** Click the dialog button whose action matches, return true if clicked. */
+/**
+ * Click the dialog button whose action matches, scoped to the LAST (top-most)
+ * open dialog. Without scoping, document.querySelector grabs the first matching
+ * dialog DOM-wise, which can be a stray left over by another test — leading to
+ * confusing "clicked the wrong button" failures (e.g. clicked acid instead of
+ * fire when the Draken dialog's button order matches a stale dialog's).
+ */
 async function _clickDialogButton(action, timeoutMs = 1000) {
   const deadline = performance.now() + timeoutMs;
   while (performance.now() < deadline) {
-    const btn = document.querySelector(`dialog.application button[data-action="${action}"]`);
+    const dialogs = [...document.querySelectorAll("dialog.application")];
+    const top = dialogs[dialogs.length - 1];
+    const btn = top?.querySelector(`button[data-action="${action}"]`);
     if (btn) { btn.click(); return true; }
     await new Promise(r => setTimeout(r, 50));
   }
   return false;
+}
+
+/** Dismiss any pre-existing dialogs so this test starts clean. */
+async function _dismissOpenDialogs() {
+  for (const d of [...document.querySelectorAll("dialog.application")]) {
+    const close = d.querySelector('button[data-action="close"], button[data-action="cancel"]');
+    if (close) close.click();
+    else d.close?.();
+  }
+  await new Promise(r => setTimeout(r, 100));
 }
 
 export const tests = [
@@ -43,6 +61,8 @@ export const tests = [
 
       // Clear any prior choice so we're testing fresh
       await actor.unsetFlag(MODULE_ID, FLAG_RESILIENCE_TYPE).catch(() => {});
+      // Dismiss any pre-existing dialogs left over by a prior test
+      await _dismissOpenDialogs();
 
       const { DrakenFeatures } = await import("../../../ancestry-features/draken.mjs");
 
