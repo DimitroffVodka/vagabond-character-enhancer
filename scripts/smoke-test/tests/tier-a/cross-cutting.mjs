@@ -359,6 +359,92 @@ export const tests = [
     }
   },
 
+  /* ============================================================== */
+  /*  CONCURRENCY — per-defender damage source attribution           */
+  /* ============================================================== */
+  //
+  // Bug (Gemini review, 2026-05-13): VCE used a module-level `let
+  // _damageSourceActorId` to pass the attacker's id through async damage-apply
+  // flows. Concurrent flows on different defenders would overwrite each
+  // other's state during await yields — A's Apex Predator handler would see
+  // B's source actor, and B's would see `null` because A's finally cleared it.
+  //
+  // Demonstrated as a generic JS race in the review thread (Promise.all on
+  // two flows touching the same module-level let → both flows corrupted).
+  //
+  // Fix: replaced the single module global with a `WeakMap<defenderActor,
+  // sourceId>`. Each writer (handleSaveRoll, handleSaveReminderRoll,
+  // handleApplySaveDamage, handleApplyDirect) now sets per-defender; readers
+  // in calculateFinalDamage + processCausedStatuses look up by their own
+  // `actor` arg (which IS the defender). Two flows on different defenders
+  // can no longer corrupt each other.
+  //
+  // Test races two concurrent flows that each:
+  //   1. Set a distinct source for their distinct defender
+  //   2. Await briefly to let the OTHER flow's set land
+  //   3. Read back their own defender's source via getDamageSourceFor
+  //   4. Verify it's STILL their original source (not the other flow's)
+  //
+  // Pre-refactor this test would have shown crossover (A reads B's source).
+  {
+    id: "concurrency.damage-source-per-defender-race-safe",
+    name: "Concurrency: per-defender damage-source attribution survives concurrent async flows",
+    tier: "a",
+    usesFixtures: ["HostileNPC", "UndeadNPC", "Revelator", "Witch"],
+    run: async ({ fixtures, assert }) => {
+      const vce = await import("../../../vagabond-character-enhancer.mjs");
+      assert(typeof vce.getDamageSourceFor === "function",
+        "getDamageSourceFor must be exported");
+      assert(typeof vce._setDamageSource === "function",
+        "_setDamageSource must be exported for tests");
+      assert(typeof vce._clearDamageSource === "function",
+        "_clearDamageSource must be exported for tests");
+
+      const defenderA = fixtures.HostileNPC;
+      const defenderB = fixtures.UndeadNPC;
+      const sourceA = fixtures.Revelator.id;
+      const sourceB = fixtures.Witch.id;
+
+      // Sanity: both unset → null
+      vce._clearDamageSource(defenderA);
+      vce._clearDamageSource(defenderB);
+      assert(vce.getDamageSourceFor(defenderA) === null,
+        `precondition: defender A source should be null; got ${vce.getDamageSourceFor(defenderA)}`);
+      assert(vce.getDamageSourceFor(defenderB) === null,
+        `precondition: defender B source should be null; got ${vce.getDamageSourceFor(defenderB)}`);
+
+      // Race: each flow sets its own source, yields, reads its own back.
+      // With the old module-level `let _damageSourceActorId`, both flows would
+      // see whichever's set landed last (and one would see null after the
+      // other's finally cleared). With per-defender WeakMap, each flow sees
+      // its own.
+      async function flow(defender, sourceId, otherSetFn) {
+        vce._setDamageSource(defender, sourceId);
+        // Yield so the other flow can also run its set() before we read.
+        await new Promise(r => setTimeout(r, 15));
+        const observed = vce.getDamageSourceFor(defender);
+        vce._clearDamageSource(defender);
+        return { defender: defender.name, set: sourceId, observed };
+      }
+
+      const [resA, resB] = await Promise.all([
+        flow(defenderA, sourceA),
+        flow(defenderB, sourceB),
+      ]);
+
+      assert(resA.observed === sourceA,
+        `flow A defender ${resA.defender}: expected its own source "${sourceA}", got "${resA.observed}" — RACE!`);
+      assert(resB.observed === sourceB,
+        `flow B defender ${resB.defender}: expected its own source "${sourceB}", got "${resB.observed}" — RACE!`);
+
+      // Sanity post-clear
+      assert(vce.getDamageSourceFor(defenderA) === null,
+        `defender A should be cleared post-test; got ${vce.getDamageSourceFor(defenderA)}`);
+      assert(vce.getDamageSourceFor(defenderB) === null,
+        `defender B should be cleared post-test; got ${vce.getDamageSourceFor(defenderB)}`);
+    }
+  },
+
   // ── calculateFinalDamage: silver weapon vs target NOT weak to silver
   //    → armor still applies (no false-positive bypass)
   {

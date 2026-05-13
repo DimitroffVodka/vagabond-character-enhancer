@@ -19,7 +19,7 @@
  */
 
 import { MODULE_ID, log } from "../utils.mjs";
-import { _directSourceAttackType, _saveSourceAttackType, _damageSourceActorId } from "../vagabond-character-enhancer.mjs";
+import { _directSourceAttackType, _saveSourceAttackType, getDamageSourceFor } from "../vagabond-character-enhancer.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
@@ -102,7 +102,10 @@ export const BriarHealerManager = {
       // not currently focusing Life.
       if (!this._isCasterFocusingLife(caster)) return;
 
-      const attackerId = ctx.sourceItem?.parent?.id || _damageSourceActorId;
+      // Per-defender source lookup (race-safe). Falls back to sourceItem parent
+      // for the case where the damage didn't go through one of VCE's patched
+      // entry points (system-initiated apply, etc.).
+      const attackerId = ctx.sourceItem?.parent?.id || getDamageSourceFor(ctx.actor);
       if (!attackerId) return;
       const attacker = game.actors.get(attackerId);
       if (!attacker || attacker.id === ctx.actor.id) return;

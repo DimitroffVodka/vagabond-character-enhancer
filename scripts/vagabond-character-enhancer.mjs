@@ -26,9 +26,91 @@ import { _hunterMarkDice, resetHunterMarkDice } from "./class-features/hunter.mj
 // can check whether the save was provoked by a specific actor (e.g., for Overwatch).
 export let _saveSourceActorId = null;
 
-// Damage source actor ID. Set by handleSaveRoll / handleApplyDirectDamage patches
-// so that calculateFinalDamage handlers (Apex Predator) know who dealt the damage.
-export let _damageSourceActorId = null;
+// Damage source actor ID. Was a module-level let, refactored to per-defender
+// WeakMap (2026-05-13, Gemini review concurrency finding) so two concurrent
+// damage-apply flows on different defenders no longer overwrite each other's
+// state mid-await. Keyed by defender Actor; entries cleared in each writer's
+// finally block.
+//
+// Old read pattern:    `_damageSourceActorId`
+// New read pattern:    `getDamageSourceFor(defenderActor)` (exported below)
+//
+// The legacy export stays as a no-op `null` for any consumer that hasn't been
+// migrated yet (none in-tree as of this commit — both readers
+// vagabond-character-enhancer.mjs and perk-features/briar-healer.mjs were
+// converted in the same commit). Leaving the export prevents a hard import
+// crash if a future consumer references the old name; logged via a one-time
+// console.warn if anyone reads it.
+const _damageSourceByDefender = new WeakMap();
+let _damageSourceLegacyWarned = false;
+const _legacyHandler = {
+  get(_t, _k) {
+    if (!_damageSourceLegacyWarned) {
+      _damageSourceLegacyWarned = true;
+      console.warn(`${MODULE_ID} | _damageSourceActorId is deprecated — use getDamageSourceFor(defenderActor) for race-safety.`);
+    }
+    return null;
+  }
+};
+// Note: exporting a primitive `null` and exporting a binding to a let are
+// different — ES live bindings export the variable itself. Consumers that
+// destructure on import see `null` (correct behavior post-refactor).
+export let _damageSourceActorId = null; // deprecated — see WeakMap above
+
+/**
+ * Set the "source actor" attribution for a specific defender. Called by the
+ * patched damage-apply / save-roll entry points before they hand off to the
+ * system's original method (which may await and yield).
+ *
+ * Exported (with underscore prefix marking it as internal) so the smoke test
+ * suite can verify per-defender semantics without driving full system flows.
+ */
+export function _setDamageSource(defenderActor, sourceActorId) {
+  if (!defenderActor || !sourceActorId) return;
+  _damageSourceByDefender.set(defenderActor, sourceActorId);
+}
+
+/**
+ * Clear the entry for a defender. Called in the writer's finally block.
+ */
+export function _clearDamageSource(defenderActor) {
+  if (!defenderActor) return;
+  _damageSourceByDefender.delete(defenderActor);
+}
+
+/**
+ * Read the source actor id for a given defender. Called by downstream
+ * handlers (Apex Predator, Widdershins, processCausedStatuses, briar-healer).
+ * Returns null when no source has been recorded for this defender.
+ *
+ * Exported for cross-module consumers (e.g., perk-features/briar-healer.mjs)
+ * to replace the legacy `_damageSourceActorId` global read pattern.
+ *
+ * @param {Actor} defenderActor - The actor receiving the damage / save.
+ * @returns {string|null}
+ */
+export function getDamageSourceFor(defenderActor) {
+  if (!defenderActor) return null;
+  return _damageSourceByDefender.get(defenderActor) ?? null;
+}
+
+/**
+ * Parse `button.dataset.targets` JSON into an array of defender Actor instances.
+ * Returns an empty array on parse failure rather than throwing, since damage
+ * flows must continue even with malformed dataset.
+ */
+function _resolveDefendersFromButton(button) {
+  if (!button?.dataset) return [];
+  const raw = button.dataset.targets;
+  if (!raw) return [];
+  try {
+    const list = JSON.parse(raw.replace?.(/&quot;/g, '"') ?? raw);
+    if (!Array.isArray(list)) return [];
+    return list.map(t => (t?.actorId ? game.actors.get(t.actorId) : null)).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
 
 // Save source attack type. Set by handleSaveRoll patch so Spell Surge can check
 // if the save was provoked by a Cast (vs melee/ranged).
@@ -817,13 +899,17 @@ Hooks.once("ready", async () => {
       // damage-reactive features see "no damage applied" instead of
       // "applied 0 damage". No dispatcher call needed.
 
-      // Apex Predator: check if this target is marked by the hunter dealing the damage
-      const apexCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
+      // Apex Predator: check if this target is marked by the hunter dealing the damage.
+      // `actor` here IS the defender — read the per-defender source attribution
+      // (no longer a module-level global, race-safe across concurrent flows on
+      // different defenders).
+      const _damageSourceForActor = getDamageSourceFor(actor);
+      const apexCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceForActor };
       HunterFeatures.onCalculateFinalDamage(apexCtx);
       result = apexCtx.result;
 
       // Widdershins: hex target is Weak to witch's damage (bypass armor, not immunity)
-      const widdCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceActorId };
+      const widdCtx = { actor, result, damage, damageType, damageSourceActorId: _damageSourceForActor };
       WitchFeatures.onCalculateFinalDamage(widdCtx);
       result = widdCtx.result;
 
@@ -1429,7 +1515,12 @@ Hooks.once("ready", async () => {
     const origHandleSaveRoll = VagabondDamageHelper.handleSaveRoll;
     VagabondDamageHelper.handleSaveRoll = async function (button, event = null) {
       _saveSourceActorId = button.dataset.actorId || null;
-      _damageSourceActorId = button.dataset.actorId || null;
+      // Per-defender damage source attribution — race-safe replacement for
+      // the old _damageSourceActorId global. Each defender targeted by this
+      // save gets an entry; cleared in finally.
+      const _saveDefenders = _resolveDefendersFromButton(button);
+      const _saveSourceId = button.dataset.actorId || null;
+      for (const d of _saveDefenders) _setDamageSource(d, _saveSourceId);
       _saveSourceAttackType = button.dataset.attackType || null;
       _currentApplySpellId = button.dataset.itemId || null;
       const saveSourceActor = game.actors.get(button.dataset.actorId);
@@ -1540,7 +1631,8 @@ Hooks.once("ready", async () => {
         return;
       } finally {
         for (const ctx of _blessContexts) await BlessManager.onPostRollSave(ctx);
-        _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
+        _saveSourceActorId = null; _saveSourceAttackType = null;
+        for (const d of _saveDefenders) _clearDamageSource(d);
         _currentApplySpellId = null;
         _pendingShieldD4Reduction = 0;
         _pendingEvadeDefender = null;
@@ -1550,7 +1642,9 @@ Hooks.once("ready", async () => {
     const origHandleSaveReminderRoll = VagabondDamageHelper.handleSaveReminderRoll;
     VagabondDamageHelper.handleSaveReminderRoll = async function (button, event = null) {
       _saveSourceActorId = button.dataset.actorId || null;
-      _damageSourceActorId = button.dataset.actorId || null;
+      const _reminderDefenders = _resolveDefendersFromButton(button);
+      const _reminderSourceId = button.dataset.actorId || null;
+      for (const d of _reminderDefenders) _setDamageSource(d, _reminderSourceId);
       _saveSourceAttackType = button.dataset.attackType || null;
       _currentApplySpellId = button.dataset.itemId || null;
       const saveReminderActor = game.actors.get(button.dataset.actorId);
@@ -1568,7 +1662,8 @@ Hooks.once("ready", async () => {
       }
       try { return await origHandleSaveReminderRoll.call(this, button, event); }
       finally {
-        _saveSourceActorId = null; _damageSourceActorId = null; _saveSourceAttackType = null;
+        _saveSourceActorId = null; _saveSourceAttackType = null;
+        for (const d of _reminderDefenders) _clearDamageSource(d);
         _currentApplySpellId = null;
         _pendingEvadeDefender = null;
       }
@@ -1578,10 +1673,15 @@ Hooks.once("ready", async () => {
     // --- handleApplySaveDamage: Track deferred-save apply context for Fx gating ---
     const origHandleApplySaveDamage = VagabondDamageHelper.handleApplySaveDamage;
     VagabondDamageHelper.handleApplySaveDamage = async function (button) {
-      _damageSourceActorId = button.dataset.sourceActorId || null;
+      const _saveDmgDefenders = _resolveDefendersFromButton(button);
+      const _saveDmgSourceId = button.dataset.sourceActorId || null;
+      for (const d of _saveDmgDefenders) _setDamageSource(d, _saveDmgSourceId);
       _currentApplySpellId = button.dataset.sourceItemId || null;
       try { return await origHandleApplySaveDamage.call(this, button); }
-      finally { _damageSourceActorId = null; _currentApplySpellId = null; }
+      finally {
+        for (const d of _saveDmgDefenders) _clearDamageSource(d);
+        _currentApplySpellId = null;
+      }
     };
     console.log(`${MODULE_ID} | Patched handleApplySaveDamage.`);
 
@@ -1593,7 +1693,10 @@ Hooks.once("ready", async () => {
     const { StatusHelper } = await import("/systems/vagabond/module/helpers/status-helper.mjs");
     const origProcessCausedStatuses = StatusHelper.processCausedStatuses;
     StatusHelper.processCausedStatuses = async function (targetActor, statuses, damageWasBlocked, sourceName = '', options = {}) {
-      const sourceActorId = _damageSourceActorId || _saveSourceActorId;
+      // Race-safe: read the per-defender source ID from the WeakMap rather
+      // than the module global. Falls through to _saveSourceActorId (still
+      // a global — separate refactor target, listed in the PoC tracking note).
+      const sourceActorId = getDamageSourceFor(targetActor) || _saveSourceActorId;
       const spellId = _currentApplySpellId;
       if (sourceActorId && spellId) {
         const key = `${sourceActorId}:${spellId}`;
@@ -1619,7 +1722,9 @@ Hooks.once("ready", async () => {
     // --- handleApplyDirect: Track damage source + fix Cleave split (full/half, not even) ---
     const origHandleApplyDirect = VagabondDamageHelper.handleApplyDirect;
     VagabondDamageHelper.handleApplyDirect = async function (button) {
-      _damageSourceActorId = button.dataset.actorId || null;
+      const _directDefenders = _resolveDefendersFromButton(button);
+      const _directSourceId = button.dataset.actorId || null;
+      for (const d of _directDefenders) _setDamageSource(d, _directSourceId);
       _currentApplySpellId = button.dataset.itemId || null;
       // Attack-type detection priority:
       //   1. NPC action attackType (preserves unnormalized 'castClose'/'castRanged')
@@ -1697,7 +1802,7 @@ Hooks.once("ready", async () => {
         await _applyImbueStatusesIfPresent(button, targets);
         return;
       } finally {
-        _damageSourceActorId = null;
+        for (const d of _directDefenders) _clearDamageSource(d);
         _directSourceAttackType = null;
         _currentApplySpellId = null;
         _pendingShieldD4Reduction = 0;
