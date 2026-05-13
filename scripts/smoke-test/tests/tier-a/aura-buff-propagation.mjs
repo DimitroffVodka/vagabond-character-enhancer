@@ -275,4 +275,72 @@ export const tests = [
       }
     },
   },
+
+  // ── Regression guard: _restoreAuras must not spawn orphan templates ─────
+  //
+  // Bug (Codex P2, 2026-05-13): _restoreAuras checked
+  // `canvas.scene.templates.get(auraState.templateId)` even for region-based
+  // auras, where `templateId` is undefined (region auras save `regionId`).
+  // The lookup returned undefined → "template missing — recreate it" branch
+  // fired → a NEW MeasuredTemplate was created and `activeAura.templateId`
+  // was overwritten. Later deactivate took the region path (line 444) and
+  // returned BEFORE the legacy template cleanup at line 481, leaving the
+  // synthesized MeasuredTemplate orphaned on the scene.
+  //
+  // Fix: _restoreAuras now branches on auraState.regionId FIRST. Region
+  // auras skip the MeasuredTemplate logic entirely; the Region itself
+  // persists across canvasReady and its applyActiveEffect behavior
+  // re-applies buffs natively.
+  {
+    id: "aura.restore-region-aura-creates-no-orphan-template",
+    name: "Region aura restore: _restoreAuras must not spawn a MeasuredTemplate or set templateId",
+    tier: "a",
+    usesFixtures: ["Revelator"],
+    run: async ({ assert, wait }) => {
+      await _wipePriorAuras();
+      const { placed, cleanup } = await SceneHelper.placeFixtures({
+        caster: { fixture: "Revelator", x: 400, y: 400, disposition: "friendly" },
+      });
+      try {
+        const caster = placed.caster.actor;
+        await game.vagabondCharacterEnhancer.aura(caster, "exalt", 30);
+        await wait(700);
+
+        // Precondition: region path activated successfully.
+        const stateAfterCast = caster.getFlag(MODULE_ID, "activeAura");
+        assert(!!stateAfterCast?.regionId,
+          `precondition: activeAura.regionId must be set after region-path cast; got ${JSON.stringify(stateAfterCast)}`);
+        assert(!stateAfterCast?.templateId,
+          `precondition: region-path activeAura must NOT carry templateId; got ${JSON.stringify(stateAfterCast)}`);
+
+        // Baseline: count MeasuredTemplates owned by VCE on the scene
+        const vceTemplatesBefore = (canvas.scene?.templates?.contents ?? [])
+          .filter(t => t.flags?.[MODULE_ID]?.aura).length;
+
+        // Trigger the restore path (simulates canvasReady firing)
+        const { AuraManager } = await import("../../../aura/aura-manager.mjs");
+        await AuraManager._restoreAuras();
+        await wait(400);
+
+        // Post: NO new VCE-owned MeasuredTemplate should have been spawned.
+        const vceTemplatesAfter = (canvas.scene?.templates?.contents ?? [])
+          .filter(t => t.flags?.[MODULE_ID]?.aura).length;
+        assert(vceTemplatesAfter === vceTemplatesBefore,
+          `_restoreAuras created an orphan MeasuredTemplate; before=${vceTemplatesBefore}, after=${vceTemplatesAfter}`);
+
+        // Post: activeAura state must still be region-based — templateId
+        // must NOT have been written by the restore logic.
+        const stateAfterRestore = caster.getFlag(MODULE_ID, "activeAura");
+        assert(!!stateAfterRestore?.regionId,
+          `regionId should survive _restoreAuras; got ${JSON.stringify(stateAfterRestore)}`);
+        assert(!stateAfterRestore?.templateId,
+          `templateId must remain unset for region auras after restore; got ${JSON.stringify(stateAfterRestore)}`);
+
+        try { await game.vagabondCharacterEnhancer.auraEnd(caster); } catch {}
+        await wait(400);
+      } finally {
+        await cleanup();
+      }
+    },
+  },
 ];

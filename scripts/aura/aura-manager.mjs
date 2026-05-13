@@ -1504,7 +1504,21 @@ export const AuraManager = {
   },
 
   /**
-   * Restore aura templates after scene change / canvas ready.
+   * Restore aura state after scene change / canvas ready.
+   *
+   * Two code paths:
+   *  - Region path (v14, `auraState.regionId` is set): the Region itself is a
+   *    persistent scene-level Document, so it survives canvas reload without
+   *    intervention. Just verify the region is still present; if it was
+   *    deleted out from under us, recreate it via the normal activate flow.
+   *    Do NOT fall into the legacy MeasuredTemplate branch — that branch was
+   *    creating orphan templates because the saved state has no `templateId`
+   *    (only `regionId`), so the missing-template check always tripped and
+   *    spawned a stray MeasuredTemplate alongside the existing Region.
+   *    Caught by Codex review 2026-05-13 (P2).
+   *
+   *  - Legacy MeasuredTemplate path: aura was activated under the pre-v14
+   *    flow. Restore as before.
    */
   async _restoreAuras() {
     if (!game.user.isGM) return;
@@ -1513,17 +1527,34 @@ export const AuraManager = {
       const auraState = actor.getFlag(MODULE_ID, "activeAura");
       if (!auraState) continue;
 
-      // Check if the template still exists on this scene
-      const template = canvas.scene.templates.get(auraState.templateId);
       const token = AuraManager._getCasterToken(actor);
-
       if (!token) {
-        // Token not on this scene — deactivate
-        await actor.unsetFlag(MODULE_ID, "activeAura");
-        await AuraManager._removeAllBuffs(actor);
+        // Caster's token not on this scene — deactivate cleanly.
+        // Use the public deactivate() so the region path correctly tears
+        // down the Region (and the legacy path runs its full cleanup).
+        await AuraManager.deactivate(actor).catch(() => {});
         continue;
       }
 
+      // Region-based aura — handled separately. DO NOT fall through to the
+      // legacy MeasuredTemplate branch.
+      if (auraState.regionId) {
+        const region = canvas.scene?.regions?.get(auraState.regionId);
+        if (!region) {
+          // Region was deleted out from under us (rare — manual GM action,
+          // scene rebuild, etc.). The cleanest recovery is to deactivate the
+          // stale state; players can re-activate manually. We do NOT
+          // resurrect via MeasuredTemplate here.
+          log("AuraManager", `Region ${auraState.regionId} missing for ${actor.name}; clearing stale aura state`);
+          await AuraManager.deactivate(actor).catch(() => {});
+        }
+        // No buff rescan needed: the Region's applyActiveEffect behavior
+        // re-applies AEs to contained tokens automatically on canvasReady.
+        continue;
+      }
+
+      // ── Legacy MeasuredTemplate path ────────────────────────────────────
+      const template = canvas.scene.templates.get(auraState.templateId);
       if (!template) {
         // Template missing — recreate it
         const spellDef = AURA_SPELLS[auraState.spellKey];
@@ -1551,7 +1582,7 @@ export const AuraManager = {
         await actor.setFlag(MODULE_ID, "activeAura.templateId", newTemplate.id);
       }
 
-      // Rescan allies
+      // Rescan allies (legacy path only — region path handles buff distribution natively)
       await AuraManager._applyBuffsInRange(actor, token, auraState.spellKey, auraState.radius);
     }
   },

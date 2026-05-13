@@ -464,10 +464,21 @@ export const FeatureDetector = {
     // (e.g., Valor scaling crit bonus with level, Deep Pockets scaling slots)
     Hooks.callAll(`${MODULE_ID}.preSyncEffects`, actor, desiredEffects);
 
-    // Remove effects that should no longer exist
+    // Remove effects that should no longer exist OR have stale definitions.
+    //
+    // Stale-definition handling (added 2026-05-13 — Codex review P1):
+    // Previously this filter only removed effects whose key was absent from
+    // desiredEffects. If the catalog's `changes` array for an effect was
+    // updated in a release (e.g., the Mental Fortress mode-4 → mode-2 fix),
+    // existing actors kept the broken AE forever because the create loop
+    // below skips any key already present. We now also remove existing AEs
+    // whose `changes` (or `disabled`) diverge from the desired definition,
+    // so the create pass rebuilds them fresh with the current spec.
     const toDelete = existingManaged.filter(e => {
       const key = e.getFlag(MODULE_ID, "effectKey");
-      return !desiredEffects.has(key);
+      if (!desiredEffects.has(key)) return true;
+      const desired = desiredEffects.get(key);
+      return _existingDivergesFromDesired(e, desired);
     });
 
     if (toDelete.length > 0) {
@@ -475,12 +486,17 @@ export const FeatureDetector = {
       await actor.deleteEmbeddedDocuments("ActiveEffect", toDelete.map(e => e.id));
     }
 
-    // Create effects that don't exist yet
-    const existingKeys = new Set(existingManaged.map(e => e.getFlag(MODULE_ID, "effectKey")));
+    // Create effects that don't exist yet. Any AE we just removed for being
+    // stale will be regenerated here with current spec.
+    const survivingKeys = new Set(
+      existingManaged
+        .filter(e => !toDelete.includes(e))
+        .map(e => e.getFlag(MODULE_ID, "effectKey"))
+    );
     const toCreate = [];
 
     for (const [key, effectDef] of desiredEffects) {
-      if (existingKeys.has(key)) continue;
+      if (survivingKeys.has(key)) continue;
       toCreate.push({
         name: effectDef.label,
         icon: effectDef.icon,
@@ -498,3 +514,57 @@ export const FeatureDetector = {
     }
   }
 };
+
+/**
+ * Detect divergence between an existing managed AE on an actor and the desired
+ * definition built from the current registry/catalog. Used so catalog-level
+ * fixes (e.g., a mode value, an added/removed change entry, a disabled flag)
+ * reach actors whose AE was installed by a prior version of the module.
+ *
+ * Returns `true` if the existing AE should be recreated.
+ *
+ * Compares:
+ *  - `disabled`            (boolean equality)
+ *  - `changes` array       (length + entry-wise key/normalized-mode/value)
+ *
+ * NOT compared:
+ *  - `name` / `icon`       — cosmetic, would churn AEs on every rename
+ *  - `origin`              — varies by class item uuid which is per-actor
+ *  - flag bag              — `effectKey` already matched; other flags are
+ *                            book-keeping and can drift safely.
+ *  - `phase` / `priority`  — system-internal scheduling, not user-meaningful
+ *
+ * CRITICAL: the Vagabond system uses a custom AE schema where each change
+ * entry has `type: "add"` (string), NOT the Foundry-default `mode: 2`
+ * (number). When the catalog/registry writes `{ mode: 2 }` and the system
+ * persists it, the stored shape becomes `{ type: "add" }` — `mode` is
+ * undefined post-conversion. We MUST normalize both sides before
+ * comparing, or every rescan would think every AE has diverged and
+ * delete/recreate every managed AE on every actor every time.
+ */
+const _MODE_TO_TYPE = ["custom", "multiply", "add", "downgrade", "upgrade", "override"];
+
+function _normalizeChangeMode(change) {
+  // System-stored shape carries `type`; pre-persist catalog shape carries `mode`.
+  if (typeof change?.type === "string") return change.type.toLowerCase();
+  const m = Number(change?.mode);
+  if (Number.isInteger(m) && m >= 0 && m < _MODE_TO_TYPE.length) {
+    return _MODE_TO_TYPE[m];
+  }
+  return null;
+}
+
+function _existingDivergesFromDesired(existingAE, desired) {
+  if ((existingAE.disabled ?? false) !== (desired.disabled ?? false)) return true;
+  const existing = existingAE.changes ?? [];
+  const desiredChanges = desired.changes ?? [];
+  if (existing.length !== desiredChanges.length) return true;
+  for (let i = 0; i < desiredChanges.length; i++) {
+    const a = existing[i] ?? {};
+    const b = desiredChanges[i] ?? {};
+    if (a.key !== b.key) return true;
+    if (_normalizeChangeMode(a) !== _normalizeChangeMode(b)) return true;
+    if (String(a.value ?? "") !== String(b.value ?? "")) return true;
+  }
+  return false;
+}

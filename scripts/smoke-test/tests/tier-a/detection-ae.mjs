@@ -184,6 +184,74 @@ export const tests = [
     }
   },
 
+  // ── Regression guard: stale managed AE definitions get refreshed ────────
+  //
+  // Bug (Codex P1, 2026-05-13): _syncManagedEffects skipped any existing
+  // managed AE whose effectKey matched a desired effect. When the catalog
+  // was fixed (e.g., the Mental Fortress mode-4 → mode-2 patch), existing
+  // actors kept the BROKEN AE forever — the catalog update only reached
+  // fresh actors.
+  //
+  // Fix: existing managed AEs whose `changes` array (or `disabled`) differs
+  // from the current catalog spec are now included in toDelete, so the
+  // create pass rebuilds them with current spec.
+  //
+  // Test approach: install Barbarian L5 → Rage AE is created from catalog.
+  // Manually mutate the existing AE's mode value to a stale number (5 ≠
+  // catalog's 2). Trigger rescan. Assert the AE was deleted + recreated
+  // with the catalog's current mode (2).
+  {
+    id: "feature-detector.refreshes-stale-managed-AE",
+    name: "FeatureDetector replaces existing managed AE when its changes diverge from catalog",
+    tier: "a",
+    usesFixtures: ["TestPC"],
+    setup: async () => {
+      const { Fixtures } = await import("../../fixtures.mjs");
+      await Fixtures.swapClass("TestPC", "Barbarian", 5);
+    },
+    run: async ({ fixtures, assert, wait }) => {
+      const actor = fixtures.TestPC;
+      if (!actor) { assert(false, "TestPC fixture missing"); return; }
+      await wait(300);
+
+      const rageAE = actor.effects.find(e => /^Rage$/i.test(e.name ?? "")
+        && e.getFlag(MODULE_ID, "managed"));
+      assert(!!rageAE, `precondition: managed "Rage" AE present after Barbarian swap; effects: ${actor.effects.map(e=>e.name).join(", ")}`);
+      if (!rageAE) return;
+
+      // The Vagabond system uses a custom AE schema — each change entry has
+      // a string `type` (e.g. "add"), not the Foundry-default numeric `mode`.
+      // We mutate `type` because that's the actual stored field.
+      const desiredChanges = foundry.utils.deepClone(rageAE.changes);
+      assert(desiredChanges.length > 0,
+        `Rage AE should have a non-empty changes array; got ${JSON.stringify(rageAE.changes)}`);
+      const originalType = String(desiredChanges[0].type ?? "add");
+
+      // Mutate the AE to a stale spec: switch type from "add" to "upgrade".
+      // (Simulates a release where the catalog corrected an old type value
+      // — exactly what the Mental Fortress mode-4 → mode-2 fix did.)
+      const staleType = originalType === "upgrade" ? "override" : "upgrade";
+      const staleChanges = foundry.utils.deepClone(desiredChanges);
+      staleChanges[0].type = staleType;
+      await rageAE.update({ changes: staleChanges });
+      await wait(200);
+
+      // Pre-check: the AE on the actor is now stale
+      const aeAfterMutation = actor.effects.find(e => e.getFlag(MODULE_ID, "managed") && /^Rage$/i.test(e.name ?? ""));
+      assert(String(aeAfterMutation?.changes?.[0]?.type) === staleType,
+        `mutation didn't take — expected type="${staleType}", got "${aeAfterMutation?.changes?.[0]?.type}"`);
+
+      // Trigger rescan — divergence detector should remove + recreate
+      await game.vagabondCharacterEnhancer.rescan(actor);
+      await wait(300);
+
+      const finalAE = actor.effects.find(e => e.getFlag(MODULE_ID, "managed") && /^Rage$/i.test(e.name ?? ""));
+      assert(!!finalAE, `Rage AE should still exist after rescan; effects: ${actor.effects.map(e=>e.name).join(", ")}`);
+      assert(String(finalAE?.changes?.[0]?.type) === originalType,
+        `rescan should refresh stale AE back to catalog type="${originalType}"; got "${finalAE?.changes?.[0]?.type}"`);
+    }
+  },
+
   // Removed (2026-05-13): `range-validator.no-error-on-out-of-range` was a
   // 🔴 structural test that only asserted "doesn't throw" without verifying
   // that the validator actually blocked or hindered the attack. Superseded
