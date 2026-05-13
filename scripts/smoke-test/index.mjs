@@ -33,6 +33,9 @@ export const SmokeTest = {
       // set that shipped past the prior shallow smoke harness (Exalt
       // damage path, buff propagation, catalog integrity, DialogV2 click).
       await import("./tests/tier-a/catalog-integrity.mjs"),
+      // Phase 4: cross-cutting subsystems (range validator, brawl intent
+      // helpers, save routing, silver/metal weakness).
+      await import("./tests/tier-a/cross-cutting.mjs"),
       await import("./tests/tier-a/aura-buff-propagation.mjs"),
       await import("./tests/tier-a/exalt-damage.mjs"),
       await import("./tests/tier-a/dialog-v2.mjs"),
