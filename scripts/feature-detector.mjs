@@ -93,16 +93,30 @@ import { PERK_REGISTRY } from "./perk-features.mjs";
 /**
  * Combined registry of all ancestry traits.
  * Each ancestry file exports its own registry, merged here via spread.
+ *
+ * NOTE: Some trait names collide across ancestries (e.g. "darksight" exists
+ * in Dwarf, Goblin, and Orc; "nimble" exists in Goblin and Halfling).
+ * The flat spread below would mean the last entry wins, masking the others.
+ * To handle collisions, _ANCESTRY_TRAIT_MULTI maps each name to an array of
+ * all entries; the scan loop walks all entries and picks those whose
+ * `ancestry` matches the owning item's ancestry name.
  */
-const ANCESTRY_TRAIT_REGISTRY = {
-  ...HUMAN_TRAITS,
-  ...DWARF_TRAITS,
-  ...ELF_TRAITS,
-  ...HALFLING_TRAITS,
-  ...DRAKEN_TRAITS,
-  ...GOBLIN_TRAITS,
-  ...ORC_TRAITS
-};
+const _ANCESTRY_REGISTRIES = [
+  HUMAN_TRAITS, DWARF_TRAITS, ELF_TRAITS, HALFLING_TRAITS,
+  DRAKEN_TRAITS, GOBLIN_TRAITS, ORC_TRAITS
+];
+
+// Flat registry (last-wins) — kept for backwards compatibility / debug lookups
+const ANCESTRY_TRAIT_REGISTRY = Object.assign({}, ..._ANCESTRY_REGISTRIES);
+
+// Multi-map: traitName → [entry, entry, ...] — handles name collisions
+const _ANCESTRY_TRAIT_MULTI = {};
+for (const registry of _ANCESTRY_REGISTRIES) {
+  for (const [name, entry] of Object.entries(registry)) {
+    if (!_ANCESTRY_TRAIT_MULTI[name]) _ANCESTRY_TRAIT_MULTI[name] = [];
+    _ANCESTRY_TRAIT_MULTI[name].push(entry);
+  }
+}
 
 /**
  * Combined registry of all perk features.
@@ -356,11 +370,15 @@ export const FeatureDetector = {
       features._ancestryName = item.name;
 
       // Match traits by ancestry name — each trait's `ancestry` field
-      // tells us which ancestry it belongs to
-      for (const [traitName, traitDef] of Object.entries(ANCESTRY_TRAIT_REGISTRY)) {
-        if (traitDef.ancestry === ancestryName) {
-          features[traitDef.flag] = true;
-          log("FeatureDetector",`Detected trait: ${traitName} (${traitDef.ancestry}) on ${actor.name}`);
+      // tells us which ancestry it belongs to. Iterate the MULTI map so every
+      // ancestry's version of a name-collided trait is considered (e.g. "darksight"
+      // is registered by Dwarf, Goblin, AND Orc; the flat registry would last-wins).
+      for (const [traitName, entries] of Object.entries(_ANCESTRY_TRAIT_MULTI)) {
+        for (const traitDef of entries) {
+          if (traitDef.ancestry === ancestryName) {
+            features[traitDef.flag] = true;
+            log("FeatureDetector",`Detected trait: ${traitName} (${traitDef.ancestry}) on ${actor.name}`);
+          }
         }
       }
     }

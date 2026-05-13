@@ -24,32 +24,29 @@ const ANCESTRIES_PACK = "vagabond.ancestries";
 /**
  * Expected feature flags per system ancestry.
  *
- * KNOWN BUG (surfaced by this test, 2026-05-13): the feature detector uses
+ * History note: an earlier version of this test (commit 997bc6f, 2026-05-13)
+ * documented a name-collision bug in the feature detector. The detector used
  * a flat trait-name → registry map keyed by trait NAME, so traits with the
- * same name across ancestries collide. Only ONE registration wins; the
- * loser's flag never gets set even when its ancestry is selected. Same
- * collision class as the Dancer / Monk "fleet of foot" issue documented
- * in tests/tier-b/skirmisher.mjs.
+ * same name across ancestries collided and only one registration won. Same
+ * collision class as the Dancer / Monk "fleet of foot" issue documented in
+ * tests/tier-b/skirmisher.mjs.
  *
- * Affected trait names: "darksight" (Dwarf / Goblin / Orc — 3-way),
- * "nimble" (Goblin / Halfling). Per-ancestry traits with unique names are
- * fine. Flagged with `KNOWN_COLLISION` so the test asserts only the traits
- * that the detector CAN currently see, with the collision documented.
+ * Fixed by applying the class-feature multi-map pattern to ancestries:
+ *   _ANCESTRY_TRAIT_MULTI[traitName] = [entry, entry, ...]
+ * The scan loop now walks all entries and filters by ancestry name.
  *
- * Once the detector is fixed (multi-map keyed by ancestry+trait), un-flag.
+ * Affected trait names (now passing):
+ *   - "darksight" — Dwarf, Goblin, Orc (3-way)
+ *   - "nimble"    — Goblin, Halfling   (2-way)
  */
 const EXPECTED_FLAGS = {
   Draken:   ["draken_breathAttack", "draken_scale", "draken_draconicResilience"],
-  // Dwarf has "darksight" but it collides with Goblin/Orc — flag-detection skipped
-  Dwarf:    ["dwarf_sturdy", "dwarf_tough" /* KNOWN_COLLISION: dwarf_darksight */],
+  Dwarf:    ["dwarf_sturdy", "dwarf_tough", "dwarf_darksight"],
   Elf:      ["elf_ascendancy", "elf_elvenEyes", "elf_naturallyAttuned"],
-  // Goblin has both "darksight" and "nimble", both collisions — only scavenger detects cleanly
-  Goblin:   ["goblin_scavenger" /* KNOWN_COLLISION: goblin_darksight, goblin_nimble */],
-  // Halfling "nimble" collides with Goblin; squat + tricksy are unique
-  Halfling: ["halfling_squat", "halfling_tricksy" /* KNOWN_COLLISION: halfling_nimble */],
+  Goblin:   ["goblin_scavenger", "goblin_darksight", "goblin_nimble"],
+  Halfling: ["halfling_squat", "halfling_tricksy", "halfling_nimble"],
   Human:    ["human_knack", "human_strongPotential"],
-  // Orc "darksight" collides; beefy + hulking are unique
-  Orc:      ["orc_beefy", "orc_hulking" /* KNOWN_COLLISION: orc_darksight */],
+  Orc:      ["orc_beefy", "orc_hulking", "orc_darksight"],
 };
 
 async function _attachAncestry(actor, ancestryName) {
