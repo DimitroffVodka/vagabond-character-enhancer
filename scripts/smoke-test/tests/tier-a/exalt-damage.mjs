@@ -266,4 +266,68 @@ export const tests = [
       }
     },
   },
+
+  // ── Test 7: REGRESSION GUARD — mixed-target doubling bug ────────────────
+  //
+  // Bug demonstrated 2026-05-13 then fixed in the same session: with Exalt
+  // active and bonusPerDamageDieDoubleVsBeingTypes = ["Undead", "Hellspawn"],
+  // the system's _shouldDoublePerDieBonus used `.some()` — returning true if
+  // ANY target was a doubleable type. That doubled the per-die bonus on the
+  // shared rolled damage, which was then applied to ALL targets — meaning a
+  // mixed cast (Undead + Humanlike) gave the Humanlike target free doubled
+  // damage it shouldn't have received.
+  //
+  // VCE patches the helper to use `.every()` (bounded fix — under-rewards
+  // mixed Undead casts instead of over-rewarding mixed Humanlike casts).
+  //
+  // This test pins the patched semantic and would FAIL if the patch is
+  // removed, reverted, or the system upgrades and we forget to re-apply.
+  {
+    id: "exalt.mixed-target-doubling-regression-guard",
+    name: "Exalt regression: mixed Undead+Humanlike targets must NOT double the bonus",
+    tier: "a",
+    usesFixtures: ["Revelator", "UndeadNPC", "HostileNPC"],
+    run: async ({ fixtures, assert }) => {
+      const { placed, cleanup } = await SceneHelper.placeFixtures({
+        caster:    { fixture: "Revelator",  x: 200, y: 200, disposition: "friendly" },
+        undeadTgt: { fixture: "UndeadNPC",  x: 300, y: 200, disposition: "hostile" },
+        humanTgt:  { fixture: "HostileNPC", x: 300, y: 300, disposition: "hostile" },
+      });
+      try {
+        const caster = placed.caster.actor;
+        await _castExalt(caster);
+
+        const helper = game.vagabond?.api?.VagabondDamageHelper;
+        assert(typeof helper?._shouldDoublePerDieBonus === "function",
+          "VagabondDamageHelper._shouldDoublePerDieBonus must exist");
+
+        const sceneId = canvas.scene.id;
+        const tUndead = [{ sceneId, tokenId: placed.undeadTgt.token.id }];
+        const tHuman  = [{ sceneId, tokenId: placed.humanTgt.token.id }];
+        const tMixed  = [
+          { sceneId, tokenId: placed.undeadTgt.token.id },
+          { sceneId, tokenId: placed.humanTgt.token.id },
+        ];
+
+        // Sanity guards: the pure cases must behave the way they always have
+        assert(helper._shouldDoublePerDieBonus(caster, tUndead) === true,
+          "pure Undead target should still double the per-die bonus");
+        assert(helper._shouldDoublePerDieBonus(caster, tHuman) === false,
+          "pure Humanlike target should not double the per-die bonus");
+
+        // The regression itself: mixed must NOT double under the bounded fix.
+        // Before the patch this returned true → Humanlike got Undead-doubled
+        // damage. The patch flips it to false, which is the safer side of wrong
+        // (Undead in mixed casts gets under-rewarded, but no free damage to
+        // non-Undead targets).
+        const mixed = helper._shouldDoublePerDieBonus(caster, tMixed);
+        assert(mixed === false,
+          `mixed Undead+Humanlike must NOT double the bonus (would over-apply to Humanlike). got: ${mixed}`);
+
+        await _endExalt(caster);
+      } finally {
+        await cleanup();
+      }
+    },
+  },
 ];

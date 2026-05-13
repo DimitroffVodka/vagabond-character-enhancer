@@ -1255,6 +1255,53 @@ Hooks.once("ready", async () => {
       console.log(`${MODULE_ID} | Patched rollDamage.`);
     }
 
+    // --- _shouldDoublePerDieBonus: fix mixed-target over-application bug ---
+    //
+    // The Vagabond system's helper returns TRUE when ANY target is in the
+    // doubleVsBeingTypes list, which is then used to double the per-die bonus
+    // applied to the single rolled damage value. That single value goes to
+    // every target — meaning a cast at [Undead, Humanlike] gave BOTH targets
+    // the Undead-doubled bonus.
+    //
+    // Demonstrated 2026-05-13: with Exalt aura active (doubleVsTypes = ["Undead",
+    // "Hellspawn"]), the system helper returns:
+    //   targets=[Undead]            → true   (correct)
+    //   targets=[Humanlike]         → false  (correct)
+    //   targets=[Undead, Humanlike] → true   (BUG — Humanlike eats bonus damage)
+    //
+    // Full per-target fix would require plumbing the doubling-delta through the
+    // chat-card damage button to apply-time (per-target adjustment). That's
+    // invasive — the system's damage button has a single `damageAmount` shared
+    // across all targets, and rerouting it requires tracking dice count +
+    // base bonus on chat-message flags + a patch to handleApplyDirect.
+    //
+    // Bounded fix (this patch): switch the all-or-nothing decision from `.some()`
+    // to `.every()` — only double when ALL targets match. This trades:
+    //   - PURE Undead cast: still doubles (unchanged)
+    //   - PURE Humanlike cast: never doubles (unchanged)
+    //   - MIXED Undead+Humanlike: no longer doubles (was: both doubled → was wrong)
+    // The mixed-case Undead now gets UNDER-rewarded (no doubling) instead of
+    // the Humanlike getting OVER-rewarded. Under-rewarding the player is the
+    // safer side of wrong — no free damage applied to targets that shouldn't.
+    //
+    // Track this for full per-target implementation in a future pass.
+    if (typeof VagabondDamageHelper?._shouldDoublePerDieBonus === "function") {
+      const origShouldDouble = VagabondDamageHelper._shouldDoublePerDieBonus;
+      VagabondDamageHelper._shouldDoublePerDieBonus = function(attackingActor, storedTargets) {
+        const doubleVsTypes = attackingActor.system.bonusPerDamageDieDoubleVsBeingTypes;
+        if (!doubleVsTypes || doubleVsTypes.length === 0) return false;
+        const targetActors = this._getTargetActorsFromStored(storedTargets);
+        // Defensive: if target resolution failed, fall back to the system's
+        // original behavior so we don't silently regress single-target casts.
+        if (!targetActors || targetActors.length === 0) {
+          return origShouldDouble.call(this, attackingActor, storedTargets);
+        }
+        // VCE bounded fix: `.every()` instead of `.some()`.
+        return targetActors.every(a => doubleVsTypes.includes(this._getActorBeingType(a)));
+      };
+      console.log(`${MODULE_ID} | Patched _shouldDoublePerDieBonus (mixed-target bug fix).`);
+    }
+
     // --- item.roll: Dispatch to Alchemist + Bard ---
     if (VagabondItem?.prototype?.roll) {
       const origItemRoll = VagabondItem.prototype.roll;
