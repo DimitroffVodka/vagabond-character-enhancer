@@ -114,6 +114,63 @@ export const tests = [
     }
   },
 
+  // ── Sorcerer Tap (L1) — HP → Mana conversion ────────────────────────────
+  // BEHAVIORAL: applyTap(actor, 5) should reduce max HP by 5 and add 10 to
+  // current Mana. The applyTap path is what the dialog button calls.
+  {
+    id: "sorcerer.tap-hp-to-mana",
+    name: "Sorcerer Tap: applyTap(5) → -5 HP max, +10 current Mana",
+    tier: "b",
+    usesFixtures: ["TestPC"],
+    setup: async () => {
+      const { Fixtures } = await import("../../fixtures.mjs");
+      await Fixtures.swapClass("TestPC", "Sorcerer", 5);
+    },
+    run: async ({ fixtures, assert, wait }) => {
+      const actor = fixtures.TestPC;
+      if (!actor) { assert(false, "TestPC fixture missing"); return; }
+      await wait(300);
+
+      const { SorcererTap } = await import("../../../class-features/sorcerer-tap.mjs");
+      assert(typeof SorcererTap?.applyTap === "function",
+        "SorcererTap.applyTap should be exposed");
+
+      // TestPC fixture uses 3-letter stat keys (mig/dex/awr) but the actual
+      // data model uses full names (might/dexterity/awareness). Result: the
+      // fixture-built TestPC has might:null → HP max:1 → Tap has nothing to
+      // tap. Set might directly here so Tap has room to work; restore after.
+      const origMight = actor.system?.stats?.might?.value;
+      await actor.update({ "system.stats.might.value": 10 });
+      await wait(150);
+
+      // Snapshot state, then tap, then check delta.
+      const beforeHpMax = actor.system?.health?.max ?? 0;
+      const beforeMana = actor.system?.mana?.current ?? 0;
+      assert(beforeHpMax >= 10,
+        `Pre-test HP max should be ≥ 10 (Might 10 × Level 5 = 50); got ${beforeHpMax}`);
+
+      await SorcererTap.applyTap(actor, 5);
+      await wait(200);
+
+      const afterHpMax = actor.system?.health?.max ?? 0;
+      const afterMana = actor.system?.mana?.current ?? 0;
+
+      assert(afterHpMax === beforeHpMax - 5,
+        `applyTap(5) should reduce HP max by 5 (was ${beforeHpMax}, now ${afterHpMax})`);
+      assert(afterMana === beforeMana + 10,
+        `applyTap(5) should add 10 to Mana (was ${beforeMana}, now ${afterMana})`);
+
+      // Cleanup: clear the tap so subsequent tests see fresh state.
+      // The runner restores fixture flags after the test, but the live
+      // mana value isn't snapshotted — restore manually.
+      await SorcererTap.clearTap(actor).catch(() => {});
+      await actor.update({
+        "system.mana.current": beforeMana,
+        "system.stats.might.value": origMight ?? null,
+      });
+    }
+  },
+
   // ── Tier B Test 12 ────────────────────────────────────────────────────────
   {
     id: "druid.flag-set",
@@ -207,6 +264,72 @@ export const tests = [
       // witch_hex: level 1, status:"module" — also present at L5
       assert(features.witch_hex === true,
         `expected witch_hex=true at L5; features=${JSON.stringify(features)}`);
+    }
+  },
+
+  // ── Revelator Divine Resolve (L6) — status immunities ──────────────────
+  // BEHAVIORAL: AE adds blinded/paralyzed/sickened to system.statusImmunities.
+  // The L5 test above doesn't catch this — Divine Resolve unlocks at L6.
+  {
+    id: "revelator.divine-resolve-immunities",
+    name: "Revelator Divine Resolve: blinded/paralyzed/sickened immunities at L6",
+    tier: "b",
+    usesFixtures: ["TestPC"],
+    setup: async () => {
+      const { Fixtures } = await import("../../fixtures.mjs");
+      await Fixtures.swapClass("TestPC", "Revelator", 6);
+    },
+    run: async ({ fixtures, assert, wait }) => {
+      const actor = fixtures.TestPC;
+      if (!actor) { assert(false, "TestPC fixture missing"); return; }
+      await wait(300);
+
+      const features = actor.getFlag(MODULE_ID, "features") ?? {};
+      assert(features.revelator_divineResolve === true,
+        `expected revelator_divineResolve=true at L6; features=${JSON.stringify(features)}`);
+
+      const immunities = actor.system?.statusImmunities ?? "";
+      const list = Array.isArray(immunities) ? immunities : String(immunities).split(/[,\s]+/).filter(Boolean);
+      for (const status of ["blinded", "paralyzed", "sickened"]) {
+        assert(list.includes(status) || list.some(s => s.toLowerCase() === status),
+          `Divine Resolve should add "${status}" immunity; got: ${JSON.stringify(immunities)}`);
+      }
+    }
+  },
+
+  // ── Revelator Sacrosanct (L10) — +2 to all saves ────────────────────────
+  // BEHAVIORAL: AE adds +2 to reflex/endure/will save bonuses.
+  {
+    id: "revelator.sacrosanct-save-bonuses",
+    name: "Revelator Sacrosanct: +2 to all three saves at L10",
+    tier: "b",
+    usesFixtures: ["TestPC"],
+    setup: async () => {
+      const { Fixtures } = await import("../../fixtures.mjs");
+      await Fixtures.swapClass("TestPC", "Revelator", 10);
+    },
+    run: async ({ fixtures, assert, wait }) => {
+      const actor = fixtures.TestPC;
+      if (!actor) { assert(false, "TestPC fixture missing"); return; }
+      await wait(300);
+
+      const features = actor.getFlag(MODULE_ID, "features") ?? {};
+      assert(features.revelator_sacrosanct === true,
+        `expected revelator_sacrosanct=true at L10; features=${JSON.stringify(features)}`);
+
+      // saves.{reflex,endure,will}.bonus is an array (Foundry array-bonus pattern);
+      // sum the values and check ≥ 2 for each save.
+      const sumBonus = (path) => {
+        const v = foundry.utils.getProperty(actor.system, path);
+        if (Array.isArray(v)) return v.reduce((s, n) => s + Number(n || 0), 0);
+        return Number(v || 0);
+      };
+      assert(sumBonus("saves.reflex.bonus") >= 2,
+        `Sacrosanct should add +2 to reflex saves; got ${JSON.stringify(actor.system?.saves?.reflex?.bonus)}`);
+      assert(sumBonus("saves.endure.bonus") >= 2,
+        `Sacrosanct should add +2 to endure saves; got ${JSON.stringify(actor.system?.saves?.endure?.bonus)}`);
+      assert(sumBonus("saves.will.bonus") >= 2,
+        `Sacrosanct should add +2 to will saves; got ${JSON.stringify(actor.system?.saves?.will?.bonus)}`);
     }
   },
 
