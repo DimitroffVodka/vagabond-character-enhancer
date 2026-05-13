@@ -78,6 +78,15 @@ function _makePerkTest(perkName, entry) {
           }
         }
       }
+
+      // BEHAVIORAL: for catalog-backed perks, verify the actor's derived
+      // data reflects the AE's changes — not just that the AE exists.
+      // Currently the catalog only has `perk-spin-to-win` (cleaveTargets 98);
+      // additional perk canonicals can be added here as the catalog grows.
+      if (entry.canonicalIds?.includes("perk-spin-to-win")) {
+        assert((a.system?.cleaveTargets ?? 0) >= 98,
+          `Spin-to-Win catalog AE should set cleaveTargets ≥ 98; got ${a.system?.cleaveTargets}`);
+      }
       // Cleanup is automatic via runner snapshot/restore — items added are wiped.
     }
   };
