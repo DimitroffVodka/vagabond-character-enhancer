@@ -86,6 +86,10 @@ export const tests = [
       // bard_virtuoso: level 1, status:"module"
       assert(features.bard_virtuoso === true,
         `expected bard_virtuoso=true; features=${JSON.stringify(features)}`);
+      // NOTE: hasActiveInspiration() has surprising out-of-combat semantics
+      // (returns true if any character with bard_virtuoso is on canvas,
+      // regardless of any actual Inspiration AE). Behavioral upgrade for
+      // the favor-injection path requires a combat fixture, deferred.
     }
   },
 
@@ -110,12 +114,13 @@ export const tests = [
       assert(features.merchant_deepPockets === true,
         `expected merchant_deepPockets=true; features=${JSON.stringify(features)}`);
 
-      // Deep Pockets uses a managed AE writing to system.inventory.bonusSlots.
-      // At L5: ceil(5/2) = 3 bonus slots. Check the derived value.
-      // The AE applies via mode 2 (ADD) to system.inventory.bonusSlots.
+      // BEHAVIORAL: Deep Pockets writes ceil(level / 2) to inventory.bonusSlots
+      // via a dynamically-rebuilt AE (see merchant.mjs `_applyDeepPocketsScaling`).
+      // At L5 the formula yields exactly +3 slots — assert the exact value
+      // rather than just "> 0" so a regression in the scaler is caught.
       const bonusSlots = actor.system.inventory?.bonusSlots ?? 0;
-      assert(bonusSlots > 0,
-        `expected inventory.bonusSlots > 0 (Deep Pockets L5 = +3); got ${bonusSlots}`);
+      assert(bonusSlots === 3,
+        `Deep Pockets at L5 should give exactly +3 bonusSlots (ceil(5/2)); got ${bonusSlots}`);
     }
   },
 

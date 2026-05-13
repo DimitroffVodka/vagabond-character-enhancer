@@ -68,6 +68,23 @@ export const tests = [
       const features = actor.getFlag(MODULE_ID, "features") ?? {};
       assert(features.hunter_huntersMark === true,
         `expected hunter_huntersMark=true; features=${JSON.stringify(features)}`);
+
+      // BEHAVIORAL: call the internal _markTarget (bypasses the chat-button
+      // UI) and verify the hunterMark flag actually stores the target.
+      const { HunterFeatures } = await import("../../../class-features/hunter.mjs");
+      const target = game.actors.getName("_smoke-HostileNPC");
+      if (target) {
+        if (actor.getFlag(MODULE_ID, "hunterMark")) await actor.unsetFlag(MODULE_ID, "hunterMark");
+        await HunterFeatures._markTarget(actor, target);
+        await wait(150);
+        const mark = actor.getFlag(MODULE_ID, "hunterMark");
+        assert(mark?.targetId === target.id,
+          `_markTarget should store target.id; got ${JSON.stringify(mark)}`);
+        assert(mark?.targetName === target.name,
+          `_markTarget should store target.name; got ${mark?.targetName}`);
+        // Cleanup
+        await HunterFeatures._unmarkTarget(actor).catch(() => {});
+      }
     }
   },
 
