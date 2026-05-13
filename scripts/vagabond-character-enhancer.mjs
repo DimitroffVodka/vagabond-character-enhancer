@@ -1159,29 +1159,14 @@ Hooks.once("ready", async () => {
           log("Imbue", `${actor.name}: +${addition} (${imbue.spellName}) added to ${formula}`);
         }
 
-        // Exalt: +1 per damage die (+2 vs Undead/Hellspawn) — added to roll formula.
-        // Runs AFTER silver so its bonus die is counted.
+        // Exalt: handled natively by Vagabond system v5.7+ via
+        // `system.bonusPerDamageDie` and `system.bonusPerDamageDieDoubleVsBeingTypes`.
+        // The system applies these AT DAMAGE-APPLY TIME (rollDamageFromButton),
+        // covering weapons, spells, AND alchemical items uniformly with proper
+        // post-explosion dice counting. The aura AE in aura/aura-manager.mjs
+        // writes these fields via v14-native `system.changes`; we keep this
+        // variable declared so the restore-block below stays a clean no-op.
         let exaltOrigDamage;
-        const focusedIds = actor.system?.focus?.spellIds || [];
-        const hasExaltAura = !!actor.effects.find(e => e.getFlag(MODULE_ID, "auraSpell") === "Exalt");
-        const hasExaltFocus = focusedIds.some(id => actor.items.get(id)?.name?.toLowerCase() === "exalt");
-        if (hasExaltAura || hasExaltFocus) {
-          const formula = this.system.currentDamage || "d6";
-          const numDice = VagabondDamageHelper._countDiceInFormula(formula);
-          if (numDice > 0) {
-            // Check if any target is Undead or Hellspawn
-            const targets = this._vceAttackTargets || Array.from(game.user.targets);
-            const isDoubled = targets.some(t => {
-              const bt = t.actor?.system?.beingType || "";
-              return ["Undead", "Hellspawn"].includes(bt);
-            });
-            const bonusPerDie = isDoubled ? 2 : 1;
-            const exaltBonus = numDice * bonusPerDie;
-            exaltOrigDamage = this.system.currentDamage;
-            this.system.currentDamage = `${formula} + ${exaltBonus}`;
-            log("Exalt", `${actor.name}: +${bonusPerDie} × ${numDice} dice = +${exaltBonus} added to ${formula}${isDoubled ? " (vs Undead/Hellspawn)" : ""}`);
-          }
-        }
 
         try {
           const damageRoll = await origRollDamage.call(this, actor, isCritical, statKey);
@@ -1189,6 +1174,51 @@ Hooks.once("ready", async () => {
           if ((silverOrigDamage !== undefined || this._vceImbueWeaknessPreRolled) && damageRoll) {
             damageRoll._weaknessPreRolled = true;
           }
+
+          // Apply `system.bonusPerDamageDie` here too. The system's native
+          // `rollDamageFromButton` does this when the player clicks the
+          // "Roll Damage" button, but auto-roll attacks (the default for
+          // most weapons) skip that path and call `item.rollDamage()`
+          // directly — leaving the per-die bonus unapplied. We mirror the
+          // system's logic post-roll so weapon damage matches what spells
+          // (which always route through the button) already get.
+          if (damageRoll) {
+            const equipmentType = this.system?.equipmentType
+              || (this.type === "spell" ? "spell" : null);
+            const typePerDieBonus = equipmentType === "weapon" ? (actor.system.weaponBonusPerDamageDie || 0)
+              : equipmentType === "spell" ? (actor.system.spellBonusPerDamageDie || 0)
+              : equipmentType === "alchemical" ? (actor.system.alchemicalBonusPerDamageDie || 0)
+              : 0;
+            const universalPerDieBonus = actor.system.bonusPerDamageDie || 0;
+            let totalPerDieBonus = typePerDieBonus + universalPerDieBonus;
+            if (totalPerDieBonus !== 0) {
+              // Doubling vs Undead/Hellspawn — `_shouldDoublePerDieBonus`
+              // expects targets in the system's stored shape
+              // ({ sceneId, tokenId }), not Token placeables. Convert
+              // `game.user.targets` (and any cached _vceAttackTargets) to
+              // that shape before calling the helper.
+              const liveTargets = this._vceAttackTargets || Array.from(game.user.targets);
+              const storedTargets = liveTargets.map(t => {
+                const tokenDoc = t?.document ?? t; // Token placeable → TokenDocument; TokenDocument stays as-is
+                const sceneId = tokenDoc?.parent?.id ?? tokenDoc?.scene?.id ?? canvas.scene?.id;
+                const tokenId = tokenDoc?.id ?? t?.id;
+                return (sceneId && tokenId) ? { sceneId, tokenId } : null;
+              }).filter(Boolean);
+              try {
+                if (VagabondDamageHelper._shouldDoublePerDieBonus?.(actor, storedTargets)) {
+                  totalPerDieBonus *= 2;
+                }
+              } catch { /* helper signature mismatch — best effort */ }
+              const diceCount = VagabondDamageHelper._countRolledDice?.(damageRoll) ?? 0;
+              if (diceCount > 0) {
+                damageRoll._perDieBonusPerDie = totalPerDieBonus;
+                damageRoll._perDieBonusDiceCount = diceCount;
+                damageRoll._perDieBonusTotal = totalPerDieBonus * diceCount;
+                damageRoll._total = (damageRoll._total ?? damageRoll.total) + damageRoll._perDieBonusTotal;
+              }
+            }
+          }
+
           // Sneak Attack: post-roll cleanup + chat notification
           RogueFeatures.onPostRollDamage(ctx);
           return damageRoll;

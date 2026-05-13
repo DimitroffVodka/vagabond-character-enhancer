@@ -1,0 +1,53 @@
+{
+  "_id": "c939364503b445b8",
+  "name": "Mental Fortress",
+  "img": "icons/magic/control/control-influence-puppet.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.statusImmunities",
+      "mode": 4,
+      "value": "berserk",
+      "priority": null
+    },
+    {
+      "key": "system.statusImmunities",
+      "mode": 4,
+      "value": "charmed",
+      "priority": null
+    },
+    {
+      "key": "system.statusImmunities",
+      "mode": 4,
+      "value": "confused",
+      "priority": null
+    },
+    {
+      "key": "system.statusImmunities",
+      "mode": 4,
+      "value": "frightened",
+      "priority": null
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "psychic-mental-fortress"
+    }
+  },
+  "_key": "!effects!c939364503b445b8"
+}

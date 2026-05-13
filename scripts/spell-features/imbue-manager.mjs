@@ -702,42 +702,30 @@ export const ImbueManager = {
       return;
     }
 
-    const content = `
-      <p>Choose a weapon to imbue with <strong>${spellData.spellName}</strong>:</p>
-      <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
-        ${weapons.map(w => `
-          <button type="button" class="vce-imbue-weapon-btn" data-weapon-id="${w.id}"
-            style="display:flex; align-items:center; gap:8px; padding:6px 10px;">
-            <img src="${w.img}" width="24" height="24" style="border:none;">
-            <span>${w.name}</span>
-            <span style="opacity:0.6; font-size:0.85em;">(${w.system.currentDamage || "—"})</span>
-          </button>
-        `).join("")}
-      </div>
-    `;
+    const content = `<p>Choose a weapon to imbue with <strong>${spellData.spellName}</strong>:</p>`;
 
-    return new Promise((resolve) => {
-      const d = new foundry.applications.api.DialogV2({
-        window: { title: `${actor.name} — Imbue Weapon` },
-        position: { width: 360 },
-        content,
-        buttons: [
-          { action: "cancel", icon: '<i class="fas fa-times"></i>', label: "Cancel", default: true, callback: () => resolve(null) },
-        ],
-        render: (event, dialog) => {
-          dialog.element.querySelectorAll(".vce-imbue-weapon-btn").forEach(btn => {
-            btn.addEventListener("click", async (ev) => {
-              const weaponId = ev.currentTarget.dataset.weaponId;
-              await this.applyImbue(actor, weaponId, spellData, opts);
-              d.close();
-              resolve(weaponId);
-            });
-          });
-        },
-        close: () => resolve(null),
-      });
-      d.render(true);
+    const weaponButtons = weapons.map(w => ({
+      action: w.id,
+      label: `${w.name} (${w.system.currentDamage || "—"})`,
+      icon: `<img src="${w.img}" width="20" height="20" style="border:none; vertical-align:middle;">`,
+      callback: () => w.id,
+    }));
+
+    const choice = await foundry.applications.api.DialogV2.wait({
+      window: { title: `${actor.name} — Imbue Weapon` },
+      position: { width: 380 },
+      content,
+      buttons: [
+        ...weaponButtons,
+        { action: "cancel", icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => null },
+      ],
+      rejectClose: false,
+      close: () => null,
     });
+
+    if (!choice || choice === "cancel") return null;
+    await this.applyImbue(actor, choice, spellData, opts);
+    return choice;
   },
 
   /* -------------------------------------------- */

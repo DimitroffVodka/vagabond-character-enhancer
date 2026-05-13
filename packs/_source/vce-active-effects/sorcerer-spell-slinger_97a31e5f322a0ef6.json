@@ -1,0 +1,39 @@
+{
+  "_id": "97a31e5f322a0ef6",
+  "name": "Spell-Slinger",
+  "img": "icons/magic/lightning/bolt-strike-blue.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.castCritBonus",
+      "mode": 2,
+      "value": "-1"
+    },
+    {
+      "key": "system.spellDamageDieSize",
+      "mode": 5,
+      "value": "8"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "sorcerer-spell-slinger"
+    }
+  },
+  "_key": "!effects!97a31e5f322a0ef6"
+}

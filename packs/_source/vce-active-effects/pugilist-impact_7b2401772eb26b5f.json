@@ -1,0 +1,34 @@
+{
+  "_id": "7b2401772eb26b5f",
+  "name": "Impact",
+  "img": "icons/skills/melee/unarmed-punch-fist.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.brawlDamageDieSizeBonus",
+      "mode": 2,
+      "value": "2"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "pugilist-impact"
+    }
+  },
+  "_key": "!effects!7b2401772eb26b5f"
+}

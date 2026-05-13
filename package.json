@@ -8,6 +8,7 @@
     "lint": "eslint scripts"
   },
   "devDependencies": {
+    "@foundryvtt/foundryvtt-cli": "^3.0.3",
     "eslint": "^9.18.0",
     "globals": "^15.14.0"
   }

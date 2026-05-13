@@ -1,0 +1,28 @@
+{
+  "_id": "6166c3661c283ec9",
+  "name": "Wall (Large)",
+  "img": "icons/equipment/shield/heater-crystal-blue.webp",
+  "type": "base",
+  "description": "",
+  "changes": [],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "vanguard-wall-large"
+    }
+  },
+  "_key": "!effects!6166c3661c283ec9"
+}

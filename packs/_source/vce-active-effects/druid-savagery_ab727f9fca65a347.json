@@ -1,0 +1,34 @@
+{
+  "_id": "ab727f9fca65a347",
+  "name": "Savagery (+1 Armor)",
+  "img": "icons/creatures/abilities/bear-roar-bite-brown-green.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.armorBonus",
+      "mode": 2,
+      "value": "1"
+    }
+  ],
+  "disabled": true,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "druid-savagery"
+    }
+  },
+  "_key": "!effects!ab727f9fca65a347"
+}

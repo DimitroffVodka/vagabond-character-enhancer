@@ -1,0 +1,37 @@
+{
+  "_id": "791b51daf6532b31",
+  "name": "Exalt (Aura)",
+  "img": "icons/magic/holy/prayer-hands-glowing-yellow.webp",
+  "type": "base",
+  "description": "+1 per damage die (+2 vs Undead/Hellspawn), +1 Will Saves vs Frightened.",
+  "changes": [
+    {
+      "key": "system.saves.will.bonus",
+      "mode": 2,
+      "value": "1"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [
+    "exalted"
+  ],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "exalt-aura",
+      "auraTemplate": true
+    }
+  },
+  "_key": "!effects!791b51daf6532b31"
+}

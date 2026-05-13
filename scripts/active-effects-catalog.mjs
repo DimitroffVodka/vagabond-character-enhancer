@@ -3,35 +3,31 @@
  *
  * Canonical home for Active Effect templates that VCE applies to actors.
  * Source-of-truth definitions live below in `CATALOG` (diffable, reviewable
- * in code); runtime instances live as embedded effects on a single hidden
- * world actor named `_VCE Active Effects Catalog`. Stable UUIDs come out
- * the back: `Actor.<catalogId>.ActiveEffect.<aeId>`.
+ * in code) and are shipped as a Foundry v14 native ActiveEffect compendium
+ * pack at `Compendium.vagabond-character-enhancer.vce-active-effects`. Stable
+ * UUIDs are derived deterministically from each canonicalId so re-packs
+ * produce identical IDs.
  *
- * Why a hidden actor rather than a real compendium pack:
- *   - Foundry reads `module.json` packs at process startup, so adding a
- *     pack would require every user to restart Foundry — not a smooth
- *     migration story.
- *   - Empty LevelDB pack directories aren't valid without authored
- *     content; offline authoring needs the Foundry CLI.
- *   - The hidden-actor approach bootstraps idempotently on `ready` and
- *     produces stable UUIDs that Foundry's `applyActiveEffect` Region
- *     behavior accepts identically.
- *   - Future migration to a real compendium pack is a backing-store swap;
- *     the lookup API (uuidFor / cloneFor / canonicalId) stays unchanged.
+ * Adding an entry: append to CATALOG with a unique canonicalId, then re-run
+ *   node build-ae-pack.mjs
+ *   npx fvtt package pack -n vce-active-effects --in packs/_source/vce-active-effects --out packs --id vagabond-character-enhancer --type Module
+ * to regenerate the LevelDB pack. The deterministic ID derivation means
+ * existing entries keep their UUIDs; only new entries get new IDs.
  *
- * Adding an entry: append to CATALOG with a unique canonicalId. Bootstrap
- * on next world load picks it up and writes the new AE to the hidden
- * actor. Idempotent — re-bootstrap skips existing entries.
+ * Bootstrap on `ready` is now a one-shot legacy cleanup: deletes the old
+ * hidden `_VCE Active Effects Catalog` world actor + the even older
+ * `_VCE Aura Templates` actor that pre-catalog versions used. After both
+ * are gone, bootstrap is effectively a no-op.
  *
  * Lookup API:
- *   uuidFor("bless-aura")  →  "Actor.<id>.ActiveEffect.<id>"
+ *   uuidFor("bless-aura")  →  "Compendium.vagabond-character-enhancer.vce-active-effects.ActiveEffect.<id>"
  *   cloneFor("bless-aura") →  AE data object ready for createEmbeddedDocuments
  */
 
 import { MODULE_ID, log } from "./utils.mjs";
 
-const CATALOG_ACTOR_NAME = "_VCE Active Effects Catalog";
-const CATALOG_ACTOR_FLAG = "activeEffectsCatalogActor";
+const PACK_ID = "vagabond-character-enhancer.vce-active-effects";
+const LEGACY_CATALOG_ACTOR_FLAG = "activeEffectsCatalogActor";
 
 /* -------------------------------------------- */
 /*  Catalog Definitions                          */
@@ -125,7 +121,7 @@ export const CATALOG = [
   {
     canonicalId: "druid-ancient-growth",
     name: "Ancient Growth (+1 Focus)",
-    img: "icons/magic/nature/leaf-glow-yellow.webp",
+    img: "icons/magic/nature/leaf-glow-triple-orange.webp",
     disabled: true,
     changes: [
       { key: "system.focus.maxBonus", mode: 2, value: "1" },
@@ -143,7 +139,7 @@ export const CATALOG = [
   {
     canonicalId: "monk-empowered-strikes",
     name: "Empowered Strikes",
-    img: "icons/skills/melee/unarmed-punch-fist-yellow.webp",
+    img: "icons/skills/melee/unarmed-punch-fist-yellow-red.webp",
     changes: [
       { key: "system.finesseDamageDieSizeBonus", mode: 2, value: "2" },
     ],
@@ -256,57 +252,54 @@ export const CATALOG = [
 ];
 
 /* -------------------------------------------- */
-/*  Backing Storage (Hidden Actor)               */
-/* -------------------------------------------- */
-
-const _uuidCache = new Map();
-let _cachedActor = null;
-
-/**
- * Find or create the hidden catalog actor that owns the template AEs.
- * GM-only bootstrap; players get a read-only reference once it exists.
- * @returns {Promise<Actor|null>}
- */
-async function getCatalogActor() {
-  if (_cachedActor && game.actors.get(_cachedActor.id)) return _cachedActor;
-  let actor = game.actors.find(a => a.getFlag(MODULE_ID, CATALOG_ACTOR_FLAG));
-  if (actor) {
-    _cachedActor = actor;
-    return actor;
-  }
-  if (!game.user.isGM) return null;
-  actor = await Actor.create({
-    name: CATALOG_ACTOR_NAME,
-    type: "npc",
-    img: "icons/svg/aura.svg",
-    ownership: { default: 1 }, // OBSERVER — players read, can't edit
-    flags: { [MODULE_ID]: { [CATALOG_ACTOR_FLAG]: true } },
-  });
-  _cachedActor = actor;
-  return actor;
-}
-
-/* -------------------------------------------- */
 /*  Lookup API                                   */
 /* -------------------------------------------- */
 
+const _uuidCache = new Map();
+let _packIndexPromise = null;
+
 /**
- * Return a stable UUID for the canonicalId, or null if the entry hasn't
- * been bootstrapped yet. Cached for the session.
+ * Get the AE compendium pack. Returns null if missing (e.g., user hasn't
+ * restarted Foundry server since the pack was added to module.json).
+ * @returns {CompendiumCollection|null}
+ */
+function getCatalogPack() {
+  return game.packs?.get(PACK_ID) ?? null;
+}
+
+/**
+ * Build a canonicalId → UUID map by indexing the pack. Cached after the
+ * first call. The pack index includes all flags so we can resolve without
+ * loading each document.
+ * @returns {Promise<Map<string, string>>}
+ */
+async function getCanonicalIndex() {
+  if (_packIndexPromise) return _packIndexPromise;
+  _packIndexPromise = (async () => {
+    const pack = getCatalogPack();
+    const map = new Map();
+    if (!pack) return map;
+    const index = await pack.getIndex({ fields: [`flags.${MODULE_ID}.canonicalId`] });
+    for (const entry of index) {
+      const cid = entry.flags?.[MODULE_ID]?.canonicalId;
+      if (cid) map.set(cid, entry.uuid);
+    }
+    return map;
+  })();
+  return _packIndexPromise;
+}
+
+/**
+ * Return a stable UUID for the canonicalId, or null if not in the pack.
+ * Cached for the session.
  *
  * @param {string} canonicalId
  * @returns {Promise<string|null>}
  */
 export async function uuidFor(canonicalId) {
   if (_uuidCache.has(canonicalId)) return _uuidCache.get(canonicalId);
-  const actor = await getCatalogActor();
-  if (!actor) return null;
-  const ae = actor.effects.find(e => e.getFlag(MODULE_ID, "canonicalId") === canonicalId);
-  if (!ae) {
-    _uuidCache.set(canonicalId, null);
-    return null;
-  }
-  const uuid = ae.uuid;
+  const index = await getCanonicalIndex();
+  const uuid = index.get(canonicalId) ?? null;
   _uuidCache.set(canonicalId, uuid);
   return uuid;
 }
@@ -325,69 +318,64 @@ export async function cloneFor(canonicalId) {
   const doc = await fromUuid(uuid);
   if (!doc) return null;
   const obj = doc.toObject();
+  // Strip bookkeeping fields that the v14 data model rejects when null/source-less.
+  // Notably `_stats` carries createdTime/modifiedTime nulls which fail schema
+  // validation on createEmbeddedDocuments and cause it to silently return [].
   delete obj._id;
+  delete obj._stats;
+  delete obj.start;
+  delete obj.folder;
+  delete obj.sort;
   return obj;
 }
 
 /* -------------------------------------------- */
-/*  Bootstrap                                    */
+/*  Bootstrap (legacy cleanup only)             */
 /* -------------------------------------------- */
 
 /**
- * Ensure every CATALOG entry exists on the catalog actor. Idempotent —
- * only creates missing entries. GM-only (Actor.create + AE embedding
- * both require it). Safe to call multiple times.
+ * Verify the compendium pack is registered, then clean up legacy backing
+ * stores from earlier catalog architectures. Safe to call multiple times;
+ * the cleanups are best-effort and silent when there's nothing to do.
+ *
+ * Legacy actors to remove:
+ *   - `_VCE Active Effects Catalog` (hidden world actor, v0.4.16 catalog)
+ *   - `_VCE Aura Templates` (older pre-catalog Exalt migration)
  */
 export async function bootstrapActiveEffectsCatalog() {
-  if (!game.user.isGM) return;
-  const actor = await getCatalogActor();
-  if (!actor) {
-    log("AECatalog", "Could not create or find the catalog actor — skipping bootstrap.");
+  const pack = getCatalogPack();
+  if (!pack) {
+    log("AECatalog", `Pack '${PACK_ID}' not registered. Did you restart the Foundry server after updating module.json?`);
     return;
   }
 
-  const presentByCanonical = new Map();
-  for (const ae of actor.effects) {
-    const cid = ae.getFlag(MODULE_ID, "canonicalId");
-    if (cid) presentByCanonical.set(cid, ae);
+  // Validate the pack actually contains entries (smoke-check after install).
+  const index = await getCanonicalIndex();
+  const missing = CATALOG.filter(d => !index.has(d.canonicalId));
+  if (missing.length > 0) {
+    log("AECatalog", `Pack is missing ${missing.length} catalog entries: ${missing.map(d => d.canonicalId).join(", ")}. Re-run \`node build-ae-pack.mjs\` + \`fvtt package pack\`.`);
+  } else {
+    log("AECatalog", `Pack '${PACK_ID}' indexed: ${index.size} effects available.`);
   }
 
-  const toCreate = [];
-  for (const def of CATALOG) {
-    if (presentByCanonical.has(def.canonicalId)) continue;
-    toCreate.push({
-      name: def.name,
-      img: def.img,
-      description: def.description ?? "",
-      statuses: def.statuses ?? [],
-      changes: def.changes ?? [],
-      disabled: def.disabled ?? false,
-      flags: {
-        [MODULE_ID]: {
-          canonicalId: def.canonicalId,
-          ...(def.moduleFlags ?? {}),
-        },
-      },
-    });
-  }
-
-  if (toCreate.length > 0) {
-    await actor.createEmbeddedDocuments("ActiveEffect", toCreate);
-    log("AECatalog", `Bootstrapped ${toCreate.length} catalog entries: ${toCreate.map(d => d.flags[MODULE_ID].canonicalId).join(", ")}`);
-    _uuidCache.clear();
-  }
-
-  // One-shot cleanup: an older path (v14-pre-catalog Exalt migration)
-  // created a separate "_VCE Aura Templates" actor with `auraTemplateActor:
-  // true`. The catalog supersedes it; the prior actor is now orphaned. Best
-  // effort delete; ignore if absent or permission-denied.
-  const legacy = game.actors.find(a => a.getFlag(MODULE_ID, "auraTemplateActor"));
-  if (legacy && legacy.id !== actor.id) {
+  // One-shot cleanup of older backing stores (GM only).
+  if (!game.user.isGM) return;
+  const legacyHiddenActor = game.actors.find(a => a.getFlag(MODULE_ID, LEGACY_CATALOG_ACTOR_FLAG));
+  if (legacyHiddenActor) {
     try {
-      await legacy.delete();
-      log("AECatalog", `Deleted orphaned legacy template actor (${legacy.name})`);
+      await legacyHiddenActor.delete();
+      log("AECatalog", `Deleted legacy hidden catalog actor (${legacyHiddenActor.name})`);
     } catch (err) {
-      log("AECatalog", `Could not delete legacy actor: ${err.message}`);
+      log("AECatalog", `Could not delete legacy hidden actor: ${err.message}`);
+    }
+  }
+  const legacyTemplateActor = game.actors.find(a => a.getFlag(MODULE_ID, "auraTemplateActor"));
+  if (legacyTemplateActor) {
+    try {
+      await legacyTemplateActor.delete();
+      log("AECatalog", `Deleted legacy aura template actor (${legacyTemplateActor.name})`);
+    } catch (err) {
+      log("AECatalog", `Could not delete legacy template actor: ${err.message}`);
     }
   }
 }

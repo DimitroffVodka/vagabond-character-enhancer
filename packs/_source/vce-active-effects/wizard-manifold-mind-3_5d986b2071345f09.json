@@ -1,0 +1,34 @@
+{
+  "_id": "5d986b2071345f09",
+  "name": "Manifold Mind (3)",
+  "img": "icons/magic/perception/eye-ringed-glow-angry-small-teal.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.focus.maxBonus",
+      "mode": 2,
+      "value": "1"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "wizard-manifold-mind-3"
+    }
+  },
+  "_key": "!effects!5d986b2071345f09"
+}

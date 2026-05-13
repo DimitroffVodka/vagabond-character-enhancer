@@ -1,0 +1,34 @@
+{
+  "_id": "0a6adcb8fb8f29f5",
+  "name": "Rip and Tear",
+  "img": "icons/skills/melee/strike-axe-blood-red.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.incomingDamageReductionPerDie",
+      "mode": 2,
+      "value": "1"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "barbarian-rip-and-tear"
+    }
+  },
+  "_key": "!effects!0a6adcb8fb8f29f5"
+}

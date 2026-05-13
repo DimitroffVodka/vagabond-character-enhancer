@@ -1,0 +1,34 @@
+{
+  "_id": "ca9065894726e970",
+  "name": "Spin-to-Win",
+  "img": "icons/skills/melee/strike-sword-slashing-red.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.cleaveTargets",
+      "mode": 2,
+      "value": "98"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "perk-spin-to-win"
+    }
+  },
+  "_key": "!effects!ca9065894726e970"
+}

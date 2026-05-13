@@ -1,13 +1,62 @@
 # Changelog
 
-## v0.4.16 — Foundry v14.360 + Vagabond 5.7.0 compatibility (WIP)
+## v0.5.0 — Foundry v14.360 + Vagabond 5.7.0 compatibility
 
 Tracks the v14 compatibility pass. See `docs/superpowers/specs/2026-05-12-v14-compatibility-pass-design.md` for the full plan.
+
+### Known limitations / TODO
+
+- **Exalt — multi-target AoE doubling**: when a single AoE spell hits a mixed target list (e.g., one Undead + one non-Undead), the `+1 → +2` per-die doubling applies to *both* targets, not just the matching one. Root cause is in the system's `_shouldDoublePerDieBonus` helper which uses `targetActors.some(...)` — Vagabond's damage model produces one rolled total that's then applied to every target equally, so per-target differentiation has to happen at apply-time. Filed upstream with mordachai; will revisit once the system grows per-target bonus handling. Workaround for now: split mixed-type AoEs into separate casts targeting one type at a time.
 
 ### Compatibility
 
 - `module.json` `compatibility.verified` → `14.360` (was `13.351`). `minimum` stays at `13` — module still works on v13.
 - `relationships.systems[vagabond].compatibility.verified` → `5.7.0` (was `5.3.0`).
+- Module version bumped to `0.5.0` to signal the architectural changes (Region-based auras, Active Effects catalog, native v14 hook surface).
+
+### Active Effects catalog as a v14 compendium pack
+
+VCE now ships an `ActiveEffect`-type compendium pack at `Compendium.vagabond-character-enhancer.vce-active-effects` (22 entries), replacing the prior hidden `_VCE Active Effects Catalog` world actor. Pack source files live at `packs/_source/vce-active-effects/*.json` with deterministic IDs derived from each `canonicalId` so re-packs don't churn IDs.
+
+- Add a new effect: append to `CATALOG` in `scripts/active-effects-catalog.mjs`, run `node build-ae-pack.mjs`, then `npx fvtt package pack -n vce-active-effects --in packs/_source/vce-active-effects --out packs --id vagabond-character-enhancer --type Module`. Existing IDs stay stable; only new entries get new IDs.
+- Bootstrap on `ready` is now one-shot cleanup: deletes the old hidden actor + the older `_VCE Aura Templates` actor if either is still present.
+- `cloneFor(canonicalId)` strips `_stats`, `start`, `folder`, and `sort` from clones — Foundry v14's data model silently rejects creates with null `_stats.createdTime` and friends, causing `createEmbeddedDocuments` to return `[]` without throwing. Nasty silent failure that bit us mid-debug.
+
+### Region-based aura system (Bless / Ward / Exalt + generic damage-tick)
+
+All four aura types migrated from `MeasuredTemplate` to v14 `Region` documents with `attachment.token` so the aura follows the caster natively (no more per-move `updateToken` hook for position).
+
+- **Generic tick auras** (Burn, Pyrokinesis-style talents) use an `executeScript` behavior that fires `Hooks.callAll("vagabondCharacterEnhancer.regionAuraTick", ...)` on `tokenMoveIn` / `tokenRoundStart`. Region creation kicks off a one-shot `_tickAura` for tokens already inside.
+- **Buff auras** (Bless / Ward / Exalt) use a *visual-only* region (no `applyActiveEffect` behavior — that double-applies on top of the legacy `_tickAura` path). Activation calls `_applyBuffsInRange` so allies-already-inside (caster included) get the buff at cast; the `updateToken` hook + `_tickAura` handle entry/exit on token move. Matches the pre-v14 template-based behavior exactly, with the added region-follow visual.
+- **`_deactivateRegion`** sweeps both the region AND any legacy flag-tagged AEs (`auraBuff: <casterId>`) via `_removeAllBuffs`. Earlier intermediate versions left orphaned AEs after cancel because the region-path deactivate didn't call `_removeAllBuffs` like the template-path one did.
+- **Disposition filter** on `preCreateActiveEffect` for `bless` / `ward` / `exalt` region origins blocks hostile NPCs from receiving allies-only buffs. Belt-and-suspenders — `_applyBuffsInRange` already filters by `FRIENDLY`, but if any future code path skips that filter the hook still catches it.
+- **Non-GM region delete** routes through `socket-relay.mjs` (`removeRegion` op) so player casters can clean up their own auras without GM permission errors.
+
+### Exalt rewired to use system-native `bonusPerDamageDie`
+
+VCE's hand-rolled Exalt damage hook (which parsed `system.currentDamage` and appended `+ N`) was incomplete: it only worked for weapon `rollDamage`, couldn't see relic Strike I/II extra dice, and missed spell + alchemical damage paths entirely.
+
+The Exalt aura AE now writes v14-native `system.changes`:
+
+- `system.bonusPerDamageDie: +1` (universal — applies to weapons, spells, alchemical)
+- `system.bonusPerDamageDieDoubleVsBeingTypes: ["Hellspawn", "Undead"]`
+- `saveVsStatusBonuses: "frightened:will:1"` (matches the system's canonical "Exalted" AE)
+- `flags.vagabond.applicationMode: "permanent"` (required marker — without it the system's data prep skips the changes)
+
+The system's `rollDamageFromButton` reads these fields and applies the bonus per ROLLED die (post-explosion, includes relic extras), with proper Undead/Hellspawn doubling via `_shouldDoublePerDieBonus`. To also cover the auto-roll path (when weapons skip the damage button and call `item.rollDamage()` directly), VCE's `rollDamage` wrapper now mirrors the same calculation post-roll: reads bonus + type-specific, calls `_shouldDoublePerDieBonus` with targets converted to the system's `{ sceneId, tokenId }` shape (Token placeables don't work directly), counts rolled dice via `_countRolledDice`, and sets `_perDieBonusPerDie` / `_perDieBonusDiceCount` / `_perDieBonusTotal` on the roll so the chat card renders the "+1 per die × N die(s)" badge.
+
+`_applyBuff` now splits AE changes by schema: v14-native (with `type` field) go in `system.changes` for the Vagabond data model; legacy (with numeric `mode`) stay at the top-level `changes` array for Foundry's generic AE engine. Mixed-shape configs handled cleanly.
+
+Verified working: weapons (including Strike I relic dice), spells (single + multi-die), alchemical items, exploding dice, and Undead doubling for all three damage types.
+
+### DialogV2 migration (18 sites)
+
+All V1 `Dialog` usages migrated to `foundry.applications.api.DialogV2`. Two regressions surfaced where `render: (event, dialog) => {...}` was being passed as a constructor option — `DialogV2` doesn't accept that field, so custom buttons inside the dialog body never got their click listeners. Fixed both by routing through native button callbacks via `DialogV2.wait()`:
+
+- `ancestry-features/draken.mjs` — Draconic Resilience type picker (Acid / Cold / Fire / Shock buttons now actually fire on click).
+- `spell-features/imbue-manager.mjs` — Imbue weapon picker.
+
+A second imbue dialog (ally picker with live count) still uses the `render` option for an interactive counter — its primary buttons still work via proper `callback`, only the live count update is dead. Will revisit if anyone hits it in play.
 
 ### Aura template re-create (v14)
 

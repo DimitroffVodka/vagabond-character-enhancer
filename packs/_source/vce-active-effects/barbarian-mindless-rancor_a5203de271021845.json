@@ -1,0 +1,39 @@
+{
+  "_id": "a5203de271021845",
+  "name": "Mindless Rancor",
+  "img": "icons/magic/defensive/shield-barrier-deflect-gold.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.statusImmunities",
+      "mode": 2,
+      "value": "charmed"
+    },
+    {
+      "key": "system.statusImmunities",
+      "mode": 2,
+      "value": "confused"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "barbarian-mindless-rancor"
+    }
+  },
+  "_key": "!effects!a5203de271021845"
+}

@@ -1,0 +1,34 @@
+{
+  "_id": "d1efce9473182fbf",
+  "name": "Empowered Strikes",
+  "img": "icons/skills/melee/unarmed-punch-fist-yellow-red.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.finesseDamageDieSizeBonus",
+      "mode": 2,
+      "value": "2"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "monk-empowered-strikes"
+    }
+  },
+  "_key": "!effects!d1efce9473182fbf"
+}

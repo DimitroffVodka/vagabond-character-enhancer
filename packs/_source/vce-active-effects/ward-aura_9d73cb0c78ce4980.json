@@ -1,0 +1,32 @@
+{
+  "_id": "9d73cb0c78ce4980",
+  "name": "Ward (Aura)",
+  "img": "icons/magic/defensive/shield-barrier-blue.webp",
+  "type": "base",
+  "description": "Reactive damage reduction via the Ward caster's Cast Check while inside the aura.",
+  "changes": [],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [
+    "warded"
+  ],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "ward-aura",
+      "auraTemplate": true,
+      "wardAE": true
+    }
+  },
+  "_key": "!effects!9d73cb0c78ce4980"
+}

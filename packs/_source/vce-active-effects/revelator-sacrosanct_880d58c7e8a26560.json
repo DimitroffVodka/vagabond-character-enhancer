@@ -1,0 +1,44 @@
+{
+  "_id": "880d58c7e8a26560",
+  "name": "Sacrosanct",
+  "img": "icons/magic/holy/chalice-glowing-gold.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.saves.reflex.bonus",
+      "mode": 2,
+      "value": "2"
+    },
+    {
+      "key": "system.saves.endure.bonus",
+      "mode": 2,
+      "value": "2"
+    },
+    {
+      "key": "system.saves.will.bonus",
+      "mode": 2,
+      "value": "2"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "revelator-sacrosanct"
+    }
+  },
+  "_key": "!effects!880d58c7e8a26560"
+}

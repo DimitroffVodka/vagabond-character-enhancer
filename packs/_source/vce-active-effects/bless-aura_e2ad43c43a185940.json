@@ -1,0 +1,32 @@
+{
+  "_id": "e2ad43c43a185940",
+  "name": "Bless (Aura)",
+  "img": "icons/magic/holy/prayer-hands-glowing-yellow.webp",
+  "type": "base",
+  "description": "+d4 bonus to Saves while inside the Bless aura.",
+  "changes": [],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [
+    "blessed"
+  ],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "bless-aura",
+      "auraTemplate": true,
+      "blessAE": true
+    }
+  },
+  "_key": "!effects!e2ad43c43a185940"
+}

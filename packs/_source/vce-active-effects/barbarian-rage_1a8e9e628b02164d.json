@@ -1,0 +1,34 @@
+{
+  "_id": "1a8e9e628b02164d",
+  "name": "Rage",
+  "img": "icons/skills/melee/hand-grip-sword-red.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.incomingDamageReductionPerDie",
+      "mode": 2,
+      "value": "1"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "barbarian-rage"
+    }
+  },
+  "_key": "!effects!1a8e9e628b02164d"
+}

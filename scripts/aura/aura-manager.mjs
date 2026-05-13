@@ -39,9 +39,19 @@ const AURA_SPELLS = {
     templateBorder: "#DAA520",
     description: "+1 per damage die (+2 vs Undead/Hellspawn), +1 Will Saves vs Frightened",
     fx: "jb2a.bless",
-    // Per-die damage bonus is handled by calculateFinalDamage hook, not AE
+    // v14-native changes that mirror the system's canonical "Exalted" AE
+    // (Compendium.vagabond.active-effects.ActiveEffect.CeoreuhLLhpCECDp).
+    // The system's `rollDamageFromButton` reads `system.bonusPerDamageDie`
+    // and applies the bonus per ROLLED die — covering weapons, spells,
+    // AND alchemical items uniformly, and counting post-explosion dice
+    // (including relic Strike I/II extras). Doubling vs Undead/Hellspawn
+    // is handled by the system via `bonusPerDamageDieDoubleVsBeingTypes`.
+    // VCE's hand-rolled hook is removed; this AE is the source of truth.
     changes: [
-      { key: "system.saves.will.bonus", mode: 2, value: "1" }
+      { key: "system.bonusPerDamageDie", type: "add", value: 1, phase: "initial", priority: null },
+      { key: "system.bonusPerDamageDieDoubleVsBeingTypes", type: "add", value: "Hellspawn", phase: "initial", priority: null },
+      { key: "system.bonusPerDamageDieDoubleVsBeingTypes", type: "add", value: "Undead", phase: "initial", priority: null },
+      { key: "saveVsStatusBonuses", type: "add", value: "frightened:will:1", phase: "initial", priority: null },
     ]
   },
   bless: {
@@ -128,6 +138,45 @@ export const AuraManager = {
     Hooks.on("vagabondCharacterEnhancer.regionAuraTick", (ctx) => {
       AuraManager._handleRegionAuraEvent(ctx).catch(err =>
         console.warn(`${MODULE_ID} | regionAuraTick error:`, err));
+    });
+
+    // Disposition filter for region buff auras (Bless, Ward, Exalt).
+    // v14's native `applyActiveEffect` region behavior fires on every
+    // tokenEnter regardless of side, so a hostile NPC walking into a
+    // Bless aura would otherwise get the buff. We cancel the AE creation
+    // here when the target token's disposition doesn't match the caster's.
+    Hooks.on("preCreateActiveEffect", (effect, data, options, userId) => {
+      const origin = data?.origin ?? effect?.origin;
+      if (!origin) return;
+      // Match `Scene.<id>.Region.<id>...` — the AE origin set by
+      // `applyActiveEffect` for region-applied effects.
+      const m = origin.match(/^Scene\.([^.]+)\.Region\.([^.]+)\./);
+      if (!m) return;
+      const [, sceneId, regionId] = m;
+      const scene = game.scenes.get(sceneId);
+      const region = scene?.regions?.get(regionId);
+      if (!region) return;
+      const auraOwner = region.getFlag(MODULE_ID, "auraOwner");
+      const spellKey = region.getFlag(MODULE_ID, "spellKey");
+      if (!auraOwner) return; // Not a VCE aura
+      // Only filter buff auras — generic damage/effect auras don't go
+      // through applyActiveEffect, so this guard is belt-and-suspenders.
+      if (!["bless", "ward", "exalt"].includes(spellKey)) return;
+
+      const casterActor = game.actors.get(auraOwner);
+      if (!casterActor) return;
+      const casterToken = AuraManager._getCasterToken(casterActor);
+      const casterDisp = casterToken?.document?.disposition ?? casterToken?.disposition;
+
+      const targetActor = effect.parent;
+      const targetToken = targetActor?.getActiveTokens?.(false, true)?.[0];
+      const targetDisp = targetToken?.disposition;
+
+      if (casterDisp == null || targetDisp == null) return;
+      if (targetDisp !== casterDisp) {
+        log("AuraManager", `Blocked ${spellKey} AE on ${targetActor.name} — disposition ${targetDisp} ≠ caster ${casterDisp}`);
+        return false; // Cancel creation
+      }
     });
 
     // Round change: (1) deactivate auras whose source focus has dropped,
@@ -509,11 +558,11 @@ export const AuraManager = {
         color: spellDef.templateColor || "#87CEEB",
         attachment: { token: token.id },
         shapes: [{ type: "circle", x: center.x, y: center.y, radius: radiusPx, hole: false, gridBased: false }],
-        behaviors: [{
-          type: "applyActiveEffect",
-          name: "Bless Buff",
-          system: { effects: [templateUuid] },
-        }],
+        // Region is purely visual + token-follow. AE application is handled
+        // by the legacy `_applyBuffsInRange` path which runs on activation
+        // (below) and on every token move via `updateToken` → `_tickAura`.
+        // Adding an `applyActiveEffect` behavior here causes duplicate AEs
+        // (catalog clone + flag-tagged clone) and stacked buffs.
         flags: { [MODULE_ID]: { auraOwner: actor.id, spellKey: "bless" } },
       }]);
 
@@ -525,6 +574,12 @@ export const AuraManager = {
         regionId: region.id,
         // No sourceAeId — template lives in the shared catalog.
       });
+
+      // Activation-time scan: legacy `_applyBuffsInRange` runs once at cast
+      // time so allies already standing in the radius (including the caster)
+      // get the buff immediately. Subsequent token moves fire `updateToken`
+      // → `_rescanAllAuras` → `_applyBuffsInRange` which handles entry/exit.
+      await AuraManager._applyBuffsInRange(actor, token, "bless", radius);
 
       AuraManager._playAuraFX(token, spellDef, radius);
 
@@ -607,11 +662,8 @@ export const AuraManager = {
         color: spellDef.templateColor || "#4a90d9",
         attachment: { token: token.id },
         shapes: [{ type: "circle", x: center.x, y: center.y, radius: radiusPx, hole: false, gridBased: false }],
-        behaviors: [{
-          type: "applyActiveEffect",
-          name: "Ward Buff",
-          system: { effects: [templateUuid] },
-        }],
+        // See _activateBlessAlliesAsRegion: region is purely visual, the
+        // legacy _applyBuffsInRange + _tickAura path owns AE lifecycle.
         flags: { [MODULE_ID]: { auraOwner: actor.id, spellKey: "ward" } },
       }]);
 
@@ -622,6 +674,9 @@ export const AuraManager = {
         regionId: region.id,
         // No sourceAeId — template lives in the shared catalog.
       });
+
+      // See Bless: legacy scan handles activation-time application.
+      await AuraManager._applyBuffsInRange(actor, token, "ward", radius);
 
       AuraManager._playAuraFX(token, spellDef, radius);
 
@@ -693,6 +748,13 @@ export const AuraManager = {
       }
     }
 
+    // Region path runs alongside the legacy _tickAura scan, which writes
+    // its own flag-tagged buff AEs (`auraBuff: <casterId>`) onto every ally
+    // in range on every token move. Region.delete() only cleans up AEs
+    // created by the applyActiveEffect behavior — it leaves the legacy
+    // ones behind. Sweep them explicitly so auraEnd produces no orphans.
+    await AuraManager._removeAllBuffs(actor);
+
     if (auraState.sourceAeId) {
       const ae = actor.effects.get(auraState.sourceAeId);
       if (ae) {
@@ -741,11 +803,8 @@ export const AuraManager = {
         color: spellDef.templateColor || "#FFD700",
         attachment: { token: token.id },
         shapes: [{ type: "circle", x: center.x, y: center.y, radius: radiusPx, hole: false, gridBased: false }],
-        behaviors: [{
-          type: "applyActiveEffect",
-          name: "Exalt Buff",
-          system: { effects: [templateUuid] },
-        }],
+        // See _activateBlessAlliesAsRegion: region is purely visual, the
+        // legacy _applyBuffsInRange + _tickAura path owns AE lifecycle.
         flags: { [MODULE_ID]: { auraOwner: actor.id, spellKey: "exalt" } },
       }]);
 
@@ -757,6 +816,9 @@ export const AuraManager = {
         // Intentionally no sourceAeId — template AE is shared and owned by
         // the template-actor; never deleted at deactivate.
       });
+
+      // See Bless: legacy scan handles activation-time application.
+      await AuraManager._applyBuffsInRange(actor, token, "exalt", radius);
 
       AuraManager._playAuraFX(token, spellDef, radius);
 
@@ -1301,6 +1363,20 @@ export const AuraManager = {
     const statusMap = { ward: "warded", bless: "blessed" };
     const statusId = statusMap[labelLc] ?? labelLc.replace(/[^a-z0-9-]+/g, "-");
 
+    // Split changes by schema:
+    //   • Legacy (numeric `mode`, no `type`)        → top-level `changes`
+    //   • v14-native (string `type`, `phase`, etc.) → `system.changes`
+    //
+    // Vagabond system v5.7's actor data prep reads its own keys
+    // (`bonusPerDamageDie`, `saveVsStatusBonuses`, etc.) from `system.changes`
+    // and would silently ignore them if we left them at the legacy top
+    // level. Foundry's generic AE engine still reads top-level `changes`
+    // for core/system keys with numeric modes, so we keep both arrays
+    // populated as appropriate.
+    const allChanges = spellDef.changes ?? [];
+    const v14Changes = allChanges.filter(c => c.type !== undefined && c.mode === undefined);
+    const legacyChanges = allChanges.filter(c => !v14Changes.includes(c));
+
     const aeData = {
       name: `${spellDef.label} (Aura: ${casterActor.name})`,
       img: spellDef.icon,
@@ -1309,8 +1385,19 @@ export const AuraManager = {
       disabled: false,
       statuses: [statusId],
       flags,
-      changes: spellDef.changes
+      changes: legacyChanges,
     };
+    if (v14Changes.length > 0) {
+      aeData.type = "base";
+      aeData.system = { changes: v14Changes };
+      // Vagabond system v5.7's data prep only applies an AE's `system.changes`
+      // when `flags.vagabond.applicationMode` is "permanent". Without this
+      // marker, the system treats the effect as non-permanent and skips it.
+      aeData.flags = {
+        ...aeData.flags,
+        vagabond: { applicationMode: "permanent" },
+      };
+    }
 
     await targetActor.createEmbeddedDocuments("ActiveEffect", [aeData]);
   },

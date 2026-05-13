@@ -1,0 +1,34 @@
+{
+  "_id": "7aed988e3c2b59e9",
+  "name": "Overpowered",
+  "img": "icons/magic/lightning/bolt-strike-purple.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.castCritBonus",
+      "mode": 2,
+      "value": "-1"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "sorcerer-overpowered"
+    }
+  },
+  "_key": "!effects!7aed988e3c2b59e9"
+}

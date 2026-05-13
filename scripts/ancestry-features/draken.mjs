@@ -76,41 +76,38 @@ export const DrakenFeatures = {
     const content = `
       <p>Choose the damage type for <strong>Draconic Resilience</strong>:</p>
       <p style="font-size: 0.85em; opacity: 0.8;">You take half damage from this source (applied after saves, before armor).</p>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;">
-        ${RESILIENCE_TYPES.map(t => {
-          const active = t === current ? ' style="border: 2px solid #ff6400; font-weight: bold;"' : '';
-          const label = t.charAt(0).toUpperCase() + t.slice(1);
-          return `<button type="button" class="vce-resilience-btn" data-type="${t}"${active}>${label}</button>`;
-        }).join("")}
-      </div>
     `;
 
-    return new Promise((resolve) => {
-      const d = new foundry.applications.api.DialogV2({
-        window: { title: `${actor.name} — Draconic Resilience` },
-        position: { width: 320 },
-        content,
-        buttons: [
-          { action: "cancel", icon: '<i class="fas fa-times"></i>', label: "Cancel", default: true, callback: () => resolve(null) },
-        ],
-        render: (event, dialog) => {
-          dialog.element.querySelectorAll(".vce-resilience-btn").forEach(btn => {
-            btn.addEventListener("click", async (ev) => {
-              const type = ev.currentTarget.dataset.type;
-              await actor.setFlag(MODULE_ID, FLAG_RESILIENCE_TYPE, type);
-              const label = type.charAt(0).toUpperCase() + type.slice(1);
-              log("Draken", `${actor.name} chose Draconic Resilience: ${label}`);
-              ui.notifications.info(`${actor.name}: Draconic Resilience set to ${label}`);
-              await this._syncResilienceAE(actor, type);
-              d.close();
-              resolve(type);
-            });
-          });
-        },
-        close: () => resolve(null),
-      });
-      d.render(true);
+    const typeButtons = RESILIENCE_TYPES.map(t => {
+      const label = t.charAt(0).toUpperCase() + t.slice(1);
+      return {
+        action: t,
+        label: t === current ? `${label} (current)` : label,
+        default: t === current,
+        callback: () => t,
+      };
     });
+
+    const result = await foundry.applications.api.DialogV2.wait({
+      window: { title: `${actor.name} — Draconic Resilience` },
+      position: { width: 360 },
+      content,
+      buttons: [
+        ...typeButtons,
+        { action: "cancel", icon: '<i class="fas fa-times"></i>', label: "Cancel", callback: () => null },
+      ],
+      rejectClose: false,
+      close: () => null,
+    });
+
+    if (!result || !RESILIENCE_TYPES.includes(result)) return null;
+
+    await actor.setFlag(MODULE_ID, FLAG_RESILIENCE_TYPE, result);
+    const label = result.charAt(0).toUpperCase() + result.slice(1);
+    log("Draken", `${actor.name} chose Draconic Resilience: ${label}`);
+    ui.notifications.info(`${actor.name}: Draconic Resilience set to ${label}`);
+    await this._syncResilienceAE(actor, result);
+    return result;
   },
 
   /**

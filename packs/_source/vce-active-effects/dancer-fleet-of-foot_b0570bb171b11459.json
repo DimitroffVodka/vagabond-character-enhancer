@@ -1,0 +1,34 @@
+{
+  "_id": "b0570bb171b11459",
+  "name": "Fleet of Foot (Reflex Crit)",
+  "img": "icons/skills/movement/feet-winged-sandals-tan.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.reflexCritBonus",
+      "mode": 2,
+      "value": "-1"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "dancer-fleet-of-foot"
+    }
+  },
+  "_key": "!effects!b0570bb171b11459"
+}

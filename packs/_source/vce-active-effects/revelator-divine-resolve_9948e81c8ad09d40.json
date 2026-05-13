@@ -1,0 +1,44 @@
+{
+  "_id": "9948e81c8ad09d40",
+  "name": "Divine Resolve",
+  "img": "icons/magic/holy/barrier-shield-winged-cross.webp",
+  "type": "base",
+  "description": "",
+  "changes": [
+    {
+      "key": "system.statusImmunities",
+      "mode": 2,
+      "value": "blinded"
+    },
+    {
+      "key": "system.statusImmunities",
+      "mode": 2,
+      "value": "paralyzed"
+    },
+    {
+      "key": "system.statusImmunities",
+      "mode": 2,
+      "value": "sickened"
+    }
+  ],
+  "disabled": false,
+  "transfer": true,
+  "statuses": [],
+  "duration": {
+    "startTime": null,
+    "seconds": null,
+    "combat": null,
+    "rounds": null,
+    "turns": null,
+    "startRound": null,
+    "startTurn": null
+  },
+  "origin": null,
+  "tint": "#ffffff",
+  "flags": {
+    "vagabond-character-enhancer": {
+      "canonicalId": "revelator-divine-resolve"
+    }
+  },
+  "_key": "!effects!9948e81c8ad09d40"
+}
