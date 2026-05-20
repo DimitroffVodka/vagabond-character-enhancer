@@ -32,9 +32,11 @@
  * (clicking the focus star on the spell card / sheet); we read
  * `actor.system.focus.spellIds`.
  *
- * Out of combat: imbue REQUIRES focus to stick — handleImbueCast aborts with
- * a notification if the caster isn't focusing. There's no round tick to
- * anchor expiry against, so focus is the only sustain.
+ * Out of combat: focus is what sustains the imbue (no round tick to anchor
+ * expiry against). As of 2026-05-20 this is NO LONGER enforced — handleImbueCast
+ * casts regardless and shows only a non-blocking reminder when focus is absent
+ * (the RAW is ambiguous; the old hard block created friction from the crawler).
+ * An unfocused out-of-combat imbue persists until it discharges or is cleared.
  *
  * Manual end:
  *   - Delete the imbue AE on the wielder (player clicks the AE icon)
@@ -771,7 +773,8 @@ export const ImbueManager = {
       pendingDeliveryCost: spellData.pendingDeliveryCost ?? 1,
       // Duration: expires at end of `expiresAtRound` unless caster is focusing
       // on `spellId`. Out-of-combat casts have no round to anchor to and rely
-      // entirely on focus — handleImbueCast already gated those.
+      // on focus — but that's no longer gated at cast (see handleImbueCast), so
+      // an unfocused out-of-combat imbue persists until it discharges or clears.
       castInCombat: spellData.castInCombat ?? !!game.combats.contents.find(c => c.started),
       expiresAtRound: spellData.expiresAtRound ?? (game.combats.contents.find(c => c.started)?.round ?? null)
     };
@@ -914,20 +917,24 @@ export const ImbueManager = {
       return true;
     }
 
-    // Out-of-combat: Imbue requires the caster to be focusing on the spell at
-    // cast time, since there's no round-tick to expire it. (In-combat cast
-    // without focus is fine — it expires at end of round.)
-    //
-    // Note: `game.combat` can return a stale reference to a deleted combat
-    // (Foundry caches the viewer's tracked encounter). Iterate the live
-    // collection so the check is always correct.
+    // Combat state drives the imbue's expiry metadata below (castInCombat /
+    // expiresAtRound). Iterate the live collection because `game.combat` can
+    // return a stale reference to a deleted combat (Foundry caches the viewer's
+    // tracked encounter).
     const activeCombat = game.combats.contents.find(c => c.started);
     const inCombat = !!activeCombat;
+
+    // Out-of-combat imbue without Focus: RAW probably intends Focus to sustain
+    // it (no round-tick to expire against), but the rulebook is ambiguous and
+    // the old hard block created friction — especially from the crawler, whose
+    // "Focus Spell" toggle applies AFTER the cast and so can never satisfy a
+    // pre-cast check. Relaxed 2026-05-20: the cast proceeds with a non-blocking
+    // reminder. The unfocused imbue then persists until it discharges on a hit
+    // or is cleared manually. To reinstate the gate, restore the `return true`.
     if (!inCombat) {
       const focusedIds = actor.system?.focus?.spellIds || [];
       if (!focusedIds.includes(spell.id)) {
-        ui.notifications.warn(`${spell.name}: Imbue requires Focus when cast outside of combat.`);
-        return true; // Handled (blocked)
+        ui.notifications.info(`${spell.name}: imbued without Focus — won't sustain outside of combat.`);
       }
     }
 
