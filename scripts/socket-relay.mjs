@@ -139,12 +139,25 @@ async function _handleRequest(data) {
       // Non-GM aura casters route their `_deactivateRegion` through this
       // action so the region (and its cascading AE clones on every token
       // in range) actually gets removed.
+      //
+      // GATE: only VCE aura Regions (carrying our `auraOwner` flag) may be
+      // removed via this relay, and only by a user who owns that caster (or
+      // the GM). Without this, any client could ask the GM to delete an
+      // arbitrary scene Region by ID.
       const scene = game.scenes.get(data.sceneId);
       if (!scene) return { error: "Scene not found" };
       const region = scene.regions.get(data.regionId);
-      if (region) {
-        await scene.deleteEmbeddedDocuments("Region", [data.regionId]);
+      if (!region) return { ok: true }; // already gone
+      const auraOwner = region.getFlag(MODULE_ID, "auraOwner");
+      if (!auraOwner) return { error: "removeRegion refused: not a VCE aura region" };
+      const requester = data.userId ? game.users.get(data.userId) : null;
+      if (requester && !requester.isGM) {
+        const caster = game.actors.get(auraOwner);
+        if (!caster || !caster.testUserPermission(requester, "OWNER")) {
+          return { error: "removeRegion refused: requester does not own this aura's caster" };
+        }
       }
+      await scene.deleteEmbeddedDocuments("Region", [data.regionId]);
       return { ok: true };
     }
 

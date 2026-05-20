@@ -442,7 +442,12 @@ export const AuraManager = {
     // activated via the new path; delete the region (which auto-removes
     // all cloned AEs on in-range tokens) and the source AE on the caster.
     if (auraState.regionId) {
-      await AuraManager._deactivateRegion(actor, auraState);
+      const removed = await AuraManager._deactivateRegion(actor, auraState);
+      if (!removed) {
+        ui.notifications.warn(`${actor.name}: couldn't fully end the aura — region cleanup failed. Try again.`);
+        log("AuraManager", `Region aura deactivation incomplete for ${actor.name} — activeAura kept`);
+        return;
+      }
       // Post the standard "ends aura" chat card and we're done — none of
       // the legacy template/FX/buff cleanup applies in the region path.
       ChatMessage.create({
@@ -723,11 +728,14 @@ export const AuraManager = {
    * all cloned AEs from in-range tokens) and the source template AE on
    * the caster (if the path stored one there). Auras using a shared
    * template-actor (Exalt) don't have a per-caster source AE to delete.
-   * Caller is responsible for clearing the `activeAura` flag.
+   * Clears the caster's `activeAura` flag only when the Region is actually
+   * removed, and returns true on full teardown / false if the Region survived
+   * (so the caller can warn and the player can retry, not orphan it).
    */
   async _deactivateRegion(actor, auraState) {
     AuraManager._stopAuraFX(actor);
 
+    let regionRemoved = true;
     if (auraState.regionId) {
       // Scene-level Region documents require GM permissions to delete.
       // Non-GM aura casters route through the socket-relay GM proxy so
@@ -745,6 +753,10 @@ export const AuraManager = {
             log("AuraManager", `Socket-relay removeRegion failed: ${err.message}`);
           }
         }
+        // Confirm the Region is actually gone — the GM relay can resolve (or be
+        // refused) without deleting. If it survived, don't drop the tracking
+        // flag below, or we orphan it.
+        if (canvas.scene?.regions?.get(auraState.regionId)) regionRemoved = false;
       }
     }
 
@@ -762,7 +774,15 @@ export const AuraManager = {
       }
     }
 
-    await actor.unsetFlag(MODULE_ID, "activeAura");
+    // Only drop the tracking flag if the Region is truly gone. If it survived,
+    // keep `activeAura` so the caller can surface the failure and the player can
+    // retry teardown instead of leaving an untracked orphan Region behind.
+    if (regionRemoved) {
+      await actor.unsetFlag(MODULE_ID, "activeAura");
+    } else {
+      log("AuraManager", `Region ${auraState.regionId} still present after teardown — keeping activeAura for retry`);
+    }
+    return regionRemoved;
   },
 
   /**
@@ -2163,6 +2183,11 @@ export const AuraManager = {
     for (const actor of game.actors) {
       const auraState = actor.getFlag(MODULE_ID, "activeAura");
       if (!auraState?.generic) continue;
+      // Region-based generic auras tick via their Region's `tokenMoveIn`
+      // behavior (→ _handleRegionAuraEvent). Ticking them here too would
+      // double-apply on the same move — both the updateToken hook and
+      // tokenMoveIn fire for one movement. Let the Region path own them.
+      if (auraState.isRegionAura) continue;
       if (auraState.behavior !== "damageTick" && auraState.behavior !== "effectTick") continue;
       await AuraManager._tickAura(actor, auraState, movedTokenOverride);
     }
