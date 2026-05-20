@@ -1951,60 +1951,62 @@ Hooks.once("ready", async () => {
     // See the rollAttack patch above. Cleanup is in brawl-intent._injectButtons().
     console.log(`${MODULE_ID} | RollHandler.rollWeapon — brawl intent now handled at rollAttack level.`);
 
-    // --- SpellHandler.castSpell: Stash _currentRollActor + Imbue delivery bypass ---
+    // --- SpellHandler._executeCast: VCE cast hooks at the REAL cast chokepoint ---
+    // Both cast paths funnel the player's FINAL state through _executeCast:
+    //   • legacy (dialog off): castSpell → _executeCast
+    //   • dialog (on):         castSpell → SpellCastDialog → onCast → _executeCast
+    // We patch HERE, not castSpell, so Imbue delivery, Fx gating, Focus/Effect
+    // coupling, and damage-source attribution act on the player's final dialog
+    // choices. (The old castSpell patch ran BEFORE the dialog opened, off the
+    // stale saved state, so anything chosen in the dialog silently bypassed VCE.)
     const { SpellHandler } = await import("/systems/vagabond/module/sheets/handlers/spell-handler.mjs");
-    const origCastSpell = SpellHandler.prototype.castSpell;
-    SpellHandler.prototype.castSpell = async function (event, target) {
-      // Check if this cast uses Imbue delivery — if so, bypass d20/damage rolls
-      const spellId = target.dataset.spellId;
-      const state = this._getSpellState?.(spellId);
-
-      // Focus + Effect coupling: per Vagabond core rules, Focus sustains a
-      // spell's EFFECT — the damage portion is always Instant. So Focus on a
-      // cast with `useFx === false` is invalid (nothing to sustain). Block at
-      // cast time; the player can either turn Effect on or unfocus the spell.
-      // The system's cast dialog currently lets the toggles be set independently.
+    const origExecuteCast = SpellHandler.prototype._executeCast;
+    SpellHandler.prototype._executeCast = async function (event, spellId, finalState, manaOverrideDelta = 0) {
       const spell = this.actor?.items?.get(spellId);
-      if (!_validateFocusEffectCoupling(this.actor, spell, state)) return;
 
-      // Record useFx for this cast so processCausedStatuses can gate the
-      // spell's Effect at apply time. Without this, the system's apply path
-      // reads spell.system.causedStatuses unconditionally and fires the Effect
-      // even when the player didn't pay the +1 Mana Fx surcharge.
-      if (state) _recordCastUseFx(this.actor?.id, spellId, !!state.useFx);
+      // Focus + Effect coupling on the FINAL state: Focus sustains a spell's
+      // Effect, but its damage is always Instant — so Focus with useFx === false
+      // is invalid. Block; the player turns Effect on or unfocuses the spell.
+      if (!_validateFocusEffectCoupling(this.actor, spell, finalState)) return;
 
-      if (state?.deliveryType === "imbue") {
-        const spell = this.actor.items.get(spellId);
-        if (spell) {
-          const costs = this._calculateSpellCost(spellId);
-          const handled = await ImbueManager.handleImbueCast(this.actor, spell, state, costs);
-          if (handled) {
-            // Reset spell state
+      // Record useFx so StatusHelper.processCausedStatuses gates the Effect at
+      // apply time (else causedStatuses fire even without the +1 Fx mana).
+      if (finalState) _recordCastUseFx(this.actor?.id, spellId, !!finalState.useFx);
+
+      // Imbue delivery: bypass the d20/damage cast, run the weapon-imbue flow.
+      // Cost is computed from the FINAL state (+ any dialog mana override).
+      if (finalState?.deliveryType === "imbue" && spell) {
+        let costs;
+        try {
+          const { SpellCastDialog } = await import("/systems/vagabond/module/applications/spell-cast-dialog.mjs");
+          const base = SpellCastDialog.calculateCosts(spell, this.actor, finalState);
+          costs = { ...base, totalCost: Math.max(0, (base.totalCost ?? 0) + (manaOverrideDelta || 0)) };
+        } catch (_e) {
+          costs = this._calculateSpellCost?.(spellId) ?? { totalCost: 0 };
+        }
+        const handled = await ImbueManager.handleImbueCast(this.actor, spell, finalState, costs);
+        if (handled) {
+          // Reset the saved row state so the next cast starts fresh (keep imbue).
+          try {
             const defaultUseFx = spell.system.damageType === "-";
-            this.spellStates[spellId] = {
-              damageDice: 1,
-              deliveryType: state.deliveryType,
-              deliveryIncrease: 0,
-              useFx: defaultUseFx
-            };
-            this._saveSpellStates();
-            this._updateSpellDisplay(spellId);
-            return;
-          }
+            this.spellStates[spellId] = { damageDice: 1, deliveryType: "imbue", deliveryIncrease: 0, useFx: defaultUseFx };
+            this._saveSpellStates?.();
+            this._updateSpellDisplay?.(spellId);
+          } catch (_e) { /* non-fatal cosmetic reset */ }
+          return;
         }
       }
 
+      // Normal cast — stash the caster for spell-damage attribution; the roll +
+      // damage happen inside origExecuteCast.
       _currentRollActor = this.actor;
       try {
-        const result = await origCastSpell.call(this, event, target);
+        return await origExecuteCast.call(this, event, spellId, finalState, manaOverrideDelta);
+      } finally {
         _currentRollActor = null;
-        return result;
-      } catch (e) {
-        _currentRollActor = null;
-        throw e;
       }
     };
-    console.log(`${MODULE_ID} | Patched SpellHandler.castSpell.`);
+    console.log(`${MODULE_ID} | Patched SpellHandler._executeCast (dialog + legacy cast chokepoint).`);
 
     // --- CrawlerSpellDialog._cast: Capture useFx for crawler-strip casts ---
     // The vagabond-crawler module has its own spell cast UI that bypasses
