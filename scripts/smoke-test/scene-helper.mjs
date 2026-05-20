@@ -68,6 +68,15 @@ export const SceneHelper = {
       flags: { [MODULE_ID]: { [TOKEN_FLAG]: true } },
     };
 
+    // Remove any pre-existing tokens for this fixture actor (strays left by a
+    // prior run whose cleanup didn't complete). Without this, getActiveTokens()
+    // [0] inside product code can resolve to a stray token instead of the one we
+    // place — which silently broke the ranged-at-Close hinder test (it measured
+    // off a leftover token 25ft away instead of the 5ft placement). Safe: these
+    // are `_smoke-*` fixtures, never user tokens.
+    const strayIds = scene.tokens.filter(t => t.actorId === actor.id).map(t => t.id);
+    if (strayIds.length) await scene.deleteEmbeddedDocuments("Token", strayIds);
+
     const [tokenDoc] = await scene.createEmbeddedDocuments("Token", [tokenData]);
     return { actor, token: tokenDoc };
   },

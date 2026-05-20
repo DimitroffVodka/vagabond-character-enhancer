@@ -41,15 +41,30 @@ export const Runner = {
     const consoleToken = ConsoleWatcher.snapshot();
     const { assert, failures } = createAssert();
 
+    // Per-test timeout so a test that awaits an unanswered dialog (or any other
+    // never-resolving promise) can't hang the whole suite — it aborts as an
+    // error and the run continues. No legit test approaches this; the slow-test
+    // warning fires at 5s.
+    const TEST_TIMEOUT_MS = 30000;
+    let timeoutId;
     try {
       if (test.setup) await test.setup({ fixtures });
-      await test.run({
-        fixtures,
-        assert,
-        wait,
-        chatTail: () => Array.from(game.messages).slice(chatBaseline),
-        consoleErrors: () => ConsoleWatcher.collect(consoleToken)
+      const timeoutP = new Promise((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`test exceeded ${TEST_TIMEOUT_MS}ms — aborted (hung dialog or await?)`)),
+          TEST_TIMEOUT_MS
+        );
       });
+      await Promise.race([
+        test.run({
+          fixtures,
+          assert,
+          wait,
+          chatTail: () => Array.from(game.messages).slice(chatBaseline),
+          consoleErrors: () => ConsoleWatcher.collect(consoleToken)
+        }),
+        timeoutP
+      ]);
       base.failures = failures;
       base.consoleErrors = ConsoleWatcher.collect(consoleToken);
       if (failures.length > 0) base.status = "fail";
@@ -59,6 +74,16 @@ export const Runner = {
       base.errors = [{ message: e?.message ?? String(e), stack: e?.stack }];
       base.consoleErrors = ConsoleWatcher.collect(consoleToken);
     } finally {
+      clearTimeout(timeoutId);
+      // Dismiss any dialog the test (or a fire-and-forget auto-prompt hook like
+      // Draken's Draconic Resilience postScan) left open. Leaked dialogs both
+      // hang the next "click the top-most dialog" test and accumulate on screen.
+      try {
+        const inst = foundry.applications?.instances;
+        if (inst?.forEach) inst.forEach(app => {
+          if (app?.constructor?.name === "DialogV2") { try { app.close(); } catch { /* ignore */ } }
+        });
+      } catch { /* ignore */ }
       try {
         await this._restoreFixtures(snapshot);
         await this._trimNewChat(chatBaseline);
