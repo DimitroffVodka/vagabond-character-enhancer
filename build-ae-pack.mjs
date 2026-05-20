@@ -43,7 +43,10 @@ for (const def of CATALOG) {
     disabled: def.disabled ?? false,
     transfer: true,
     statuses: def.statuses ?? [],
-    duration: { startTime: null, seconds: null, combat: null, rounds: null, turns: null, startRound: null, startTurn: null },
+    // NOTE: `duration.startTime` is intentionally omitted — it is a runtime
+    // tracking field set when the effect is applied, and emitting it in source
+    // data triggers a v14 deprecation warning. Foundry fills the default.
+    duration: { seconds: null, combat: null, rounds: null, turns: null, startRound: null, startTurn: null },
     origin: null,
     tint: "#ffffff",
     flags: {

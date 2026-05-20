@@ -9,7 +9,6 @@
   "transfer": true,
   "statuses": [],
   "duration": {
-    "startTime": null,
     "seconds": null,
     "combat": null,
     "rounds": null,
