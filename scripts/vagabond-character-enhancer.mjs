@@ -236,8 +236,9 @@ async function _applyImbueStatusesIfPresent(button, targets) {
  *
  * Returns true if the cast may proceed, false if it should be blocked.
  *
- * Called from both SpellHandler.castSpell (sheet path) and
- * CrawlerSpellDialog._cast (crawler-strip path).
+ * Called from both SpellHandler._executeCast (sheet path — covers the legacy
+ * direct cast and the SpellCastDialog onCast flow) and CrawlerSpellDialog._cast
+ * (crawler-strip path).
  */
 function _validateFocusEffectCoupling(actor, spell, state) {
   if (!actor || !spell || !state) return true; // missing context — let it through
@@ -2021,7 +2022,7 @@ Hooks.once("ready", async () => {
           CrawlerSpellDialog.prototype._cast = async function () {
             // Focus + Effect coupling — same rule as the sheet path. The
             // crawler dialog has its own toggle layout, so this gate is a
-            // belt-and-suspenders mirror of the SpellHandler.castSpell patch.
+            // belt-and-suspenders mirror of the SpellHandler._executeCast patch.
             if (!_validateFocusEffectCoupling(this.actor, this.spell, this.spellState)) return;
 
             _recordCastUseFx(this.actor?.id, this.spell?.id, !!this.spellState?.useFx);
