@@ -120,6 +120,11 @@ export const Runner = {
         hp: actor.system?.health?.value,
         statuses: [...(actor.statuses ?? [])],
         itemIds: actor.items.map(i => i.id),
+        // Full item data (not just ids) so restore can RE-ADD items a test
+        // removed — e.g. the original class that swapClass deletes. Without
+        // this, restore only deletes added items and leaves class-swap
+        // fixtures class-less, corrupting every subsequent class test.
+        itemData: actor.items.map(i => i.toObject()),
         effectIds: actor.effects.map(e => e.id)
       });
     }
@@ -134,6 +139,14 @@ export const Runner = {
       // Delete items added during the test
       const newItems = actor.items.filter(i => !s.itemIds.includes(i.id)).map(i => i.id);
       if (newItems.length) await actor.deleteEmbeddedDocuments("Item", newItems);
+
+      // Re-add items the test removed (e.g. a class deleted by swapClass).
+      // Recreating items with keepId fires the same item-CRUD hooks the
+      // feature-detector listens on, so it rebuilds the correct features +
+      // managed AEs from the restored items — no manual AE bookkeeping.
+      const presentIds = new Set(actor.items.map(i => i.id));
+      const removed = (s.itemData ?? []).filter(d => !presentIds.has(d._id));
+      if (removed.length) await actor.createEmbeddedDocuments("Item", removed, { keepId: true });
 
       // Delete effects added during the test
       const newEffects = actor.effects.filter(e => !s.effectIds.includes(e.id)).map(e => e.id);

@@ -85,6 +85,10 @@ export function onRenderChatMessage(callback) {
 export function onRenderActorSheet(callback, { type = "character" } = {}) {
   Hooks.on("renderApplicationV2", (app, html, data) => {
     if (!app?.actor) return;
+    // Genuine actor sheets are DocumentSheetV2 instances exposing `.document`.
+    // The system's VagabondCharacterHud carries `.actor` but no `.document`;
+    // filter it out so sheet-injection consumers don't fire against the HUD.
+    if (!app.document) return;
     if (type && app.actor.type !== type) return;
     const el = html instanceof HTMLElement ? html : (html?.[0] ?? html);
     callback(app, el, data);

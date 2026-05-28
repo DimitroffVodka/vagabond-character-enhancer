@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.5.2 — Vagabond 5.13.2 HUD compatibility + smoke-harness fix
+
+### Fixes
+
+- **`VagabondCharacterHud` crash (`Cannot read properties of undefined (reading 'getFlag')`)**: Vagabond 5.13.2 introduced a floating `VagabondCharacterHud` ApplicationV2 that fires the `renderApplicationV2` hook with `.actor` set but **no `.document`**. VCE's `onRenderActorSheet` helper (`scripts/utils.mjs`) only gated on `app?.actor`, so the HUD slipped through to every sheet-injection consumer — `focus-manager.mjs`'s `_injectFocusUI` then read `sheet.document` (undefined) and threw at `_getFeatureFocus`. Fixed at the root: `onRenderActorSheet` now also requires `app.document` (genuine `DocumentSheetV2`), and `_injectFocusUI` falls back to `sheet.actor ?? sheet.document` with a `getFlag` guard. Verified against a forced HUD render + `setFlag` cycle: 0 console errors.
+
+### Smoke test harness
+
+- **Fixture restore now re-adds removed items.** `swapClass`-based class tests delete the fixture's existing class item; `_restoreFixtures` previously only deleted *added* items, leaving the fixture class-less and cross-contaminating every later class test (94 cascading failures). `_snapshotFixtures` now captures full `itemData`; `_restoreFixtures` recreates removed items with `{ keepId: true }`, which re-fires the item-CRUD hooks so the feature-detector rebuilds the correct features + managed AEs — no manual AE bookkeeping. Full suite after the fix: 226 passed / 0 failed / 0 errored / 4 skipped (was 94 failures).
+
+### Compatibility
+
+- `module.json` `compatibility.verified` → `14.363` (was `14.360`).
+- `relationships.systems[vagabond].compatibility.verified` → `5.13.2` (was `5.7.0`).
+
+## v0.5.1 — Drop deprecated AE `duration.startTime`
+
+- Removed the deprecated `duration.startTime` field from managed Active Effect definitions. Foundry v14 sets it automatically; passing it explicitly logged deprecation warnings. Version bump otherwise.
+
 ## v0.5.0 — Foundry v14.360 + Vagabond 5.7.0 compatibility
 
 Tracks the v14 compatibility pass. See `docs/superpowers/specs/2026-05-12-v14-compatibility-pass-design.md` for the full plan.

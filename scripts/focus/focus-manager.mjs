@@ -709,7 +709,8 @@ export const FocusManager = {
    * Shows focused features below the spell list with release buttons.
    */
   _injectFocusUI(sheet) {
-    const actor = sheet.document;
+    const actor = sheet.actor ?? sheet.document;
+    if (!actor?.getFlag) return;
     const featureFocus = this._getFeatureFocus(actor);
     const el = sheet.element;
     if (!el) return;
