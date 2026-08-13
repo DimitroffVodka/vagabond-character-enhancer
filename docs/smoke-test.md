@@ -1,6 +1,6 @@
 # VCE Smoke Test Suite
 
-Automated in-Foundry test harness covering focus, companion, polymorph, spell-manager, AE-distribution, and per-class hook paths. ~157 tests across three tiers, runs in ~2-3 minutes.
+Automated in-Foundry test harness covering focus, companion, polymorph, spell-manager, AE-distribution, and per-class hook paths. 230 tests across three tiers, runs in ~90 seconds.
 
 ## Running
 
@@ -43,26 +43,32 @@ Six fixture actors auto-create on first run in a folder named `VCE Smoke Test (d
 
 The fixture builder is idempotent — re-runs heal drift. To reset fixtures completely, delete the folder and run the suite again.
 
-## Known signal failures
+## Expected result
 
-Two tests are currently failing because they correctly detect real bugs in VCE that should be fixed:
+A clean run is **green**: every test passes, with only the environmental skips below. There are no known-failing tests — any red is a real regression.
 
-1. **`boot.feature-detector-runs-on-create`** — Creating an actor and adding a class item doesn't auto-populate feature flags. The `createItem` hook appears to fire before the item is fully committed to the actor's items collection. Workaround: callers can run `api.rescan(actor)` after item creation.
+(This section previously documented `boot.feature-detector-runs-on-create` and `focus.berserk-drops-all-focus` as intentionally-failing signal tests. Both pass now; the underlying bugs were fixed.)
 
-2. **`focus.berserk-drops-all-focus`** — Applying the berserk status leaves 1 focus slot still active instead of clearing all focus. The drop logic likely processes per-entry rather than as a whole.
+## Known skips
 
-These tests are intentionally left failing so the red banner is visible until they're fixed.
+Four tests skip on a normal run. None indicate a defect — each is gated on a setting or a fixture the builder doesn't produce:
 
-## Known infrastructure gaps (skip list)
+| Test | Why it skips | To un-skip |
+|---|---|---|
+| `encumbrance.over-capacity-applies-encumbered` | `homebrewEncumbranceSpeedPenalty` setting is OFF | Turn the setting on |
+| `dialogv2.imbue-weapon-picker-button-fires` | Needs ≥2 equipped weapons on the Witch fixture (1 auto-selects, 0 errors) | Give `_smoke-Witch` a second equipped weapon |
+| `vanguard.indestructible-cancels-melee-damage` | Unconditional `skip: () => true` — needs an equipped-armor fixture for `system.armor >= 1`, which is derived and not directly writable | Build an armour fixture, then drop the skip |
+| `perk.primordial-summoner` | Perk is in `PERK_REGISTRY` but missing from the `vagabond.perks` system compendium (v5.3.0) | Remove from `TIER_C_SKIPS.perks` once the system ships it |
 
-Some tests are skipped because the underlying compendium content is incomplete:
+Separately, `spell.polymorph` is listed in `TIER_C_SKIPS.spells` and is therefore **never generated** — it doesn't appear as a skipped row at all. It's redundant with the Tier A polymorph round-trip test.
 
-- `perk.primordial-summoner` — Perk is in `PERK_REGISTRY` but missing from `vagabond.perks` system compendium (v5.3.0).
-- `spell.polymorph` — Already covered by the Tier A polymorph round-trip test; second test would be redundant.
-- Monk class signature test — Monk is missing from `vagabond.classes` system compendium (v5.3.0). Substituted with Vanguard.
-- Summoner class flag check — Summoner is missing from `vagabond.classes` compendium. Test asserts API surface only.
+Note that a Tier C skip for a *perk* still emits a row with `status: "skip"`, whereas a skip for a *spell* suppresses generation entirely. That asymmetry is why the counts don't line up with the config at a glance.
 
-When the compendiums are updated, remove the corresponding skips from `scripts/smoke-test/tier-c-config.mjs` and substitute the originally-intended class in the Tier B martial test file.
+### Monk and Summoner are no longer gaps
+
+This section used to list the Monk and Summoner class tests as skipped for missing compendium content. They aren't. Both are still absent from the system's `vagabond.classes` pack (18 entries), but VCE now ships its own `vce-classes` pack (Dragoon, Summoner, Samurai, Jester, Psychic, Monk), so `Fixtures.swapClass` resolves them and `monk.empowered-strikes-die-bonus`, `monk.martial-arts-flag` and `summoner.arcanum-flag` all pass.
+
+One leftover: `summoner.conjure-api-callable` in `tests/tier-b/specialists.mjs` still carries a comment saying `swapClass` will silently fail for Summoner, and asserts only the API surface. The test passes, but that comment is stale and the flag assertion it forgoes could now be restored.
 
 ## Adding tests
 
