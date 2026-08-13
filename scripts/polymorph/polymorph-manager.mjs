@@ -168,13 +168,7 @@ export const PolymorphManager = {
     // --- Swap placed token ---
     if (token) {
       const beastTokenImg = await this._resolveTokenImage(beastActor);
-      const gridSize = SIZE_MAP[beastData.size] ?? 1;
-      await token.document.update({
-        "texture.src": beastTokenImg,
-        width: gridSize,
-        height: gridSize
-      });
-      log("PolymorphManager",`Token swapped to ${beastTokenImg} (${gridSize}x${gridSize})`);
+      await this._swapToken(token, beastTokenImg, SIZE_MAP[beastData.size] ?? 1, beastActor.name);
     }
 
     // --- Apply stat overlay AEs ---
@@ -206,19 +200,17 @@ export const PolymorphManager = {
     } : null);
 
     // --- Resolve beast image ---
-    // Fetch the full document to try resolving a token image.
-    // If the prototype token is just the default NPC SVG, fall back to the
-    // actor portrait (which art modules like art-for-vagabond may have set).
+    // Prefer the full document (token-art modules rewrite it on load and the
+    // pack index can still hold the pre-rewrite placeholder), then the index
+    // entry, then give up rather than shipping a placeholder to the canvas.
     const fullBeast = await BeastCache.fetchFullBeast(cacheEntry.name);
-    const beastImg = fullBeast?.img || cacheEntry.img || "icons/svg/mystery-man.svg";
-    let beastTokenImg = beastImg; // default: use portrait
-    if (fullBeast) {
-      const resolved = await this._resolveTokenImage(fullBeast);
-      // Only use the resolved token if it's not the generic default
-      if (resolved && !resolved.includes("default-npc")) {
-        beastTokenImg = resolved;
-      }
-    }
+    const portrait = [fullBeast?.img, cacheEntry.img]
+      .find(i => this._isTokenArt(i) && !this._isPlaceholderArt(i)) ?? null;
+    const beastImg = portrait ?? "icons/svg/mystery-man.svg";
+    // _resolveTokenImage already rejects placeholders and falls back to the
+    // beast's portrait, so its result is either real art or null.
+    let beastTokenImg = fullBeast ? await this._resolveTokenImage(fullBeast) : null;
+    beastTokenImg ??= portrait;
 
     // --- Build polymorph data from cache entry ---
     const beastData = {
@@ -242,13 +234,7 @@ export const PolymorphManager = {
 
     // --- Swap placed token ---
     if (token) {
-      const gridSize = SIZE_MAP[beastData.size] ?? 1;
-      await token.document.update({
-        "texture.src": beastTokenImg,
-        width: gridSize,
-        height: gridSize
-      });
-      log("PolymorphManager",`Token swapped to ${beastTokenImg} (${gridSize}x${gridSize})`);
+      await this._swapToken(token, beastTokenImg, SIZE_MAP[beastData.size] ?? 1, cacheEntry.name);
     }
 
     // --- Apply stat overlay AEs ---
@@ -272,12 +258,20 @@ export const PolymorphManager = {
     log("PolymorphManager",`Reverting ${actor.name} from ${polyData.beastName}`);
 
     // --- Restore token ---
+    // If originalToken was never captured (no token on the canvas when the
+    // form was applied) fall back to the prototype token, so the actor can
+    // never be left stranded wearing the beast's art.
     const token = this._getLinkedToken(actor);
-    if (token && polyData.originalToken) {
+    if (token) {
+      const original = polyData.originalToken ?? {
+        texture: actor.prototypeToken?.texture?.src || actor.img,
+        width: actor.prototypeToken?.width ?? 1,
+        height: actor.prototypeToken?.height ?? 1
+      };
       await token.document.update({
-        "texture.src": polyData.originalToken.texture,
-        width: polyData.originalToken.width,
-        height: polyData.originalToken.height
+        "texture.src": original.texture,
+        width: original.width,
+        height: original.height
       });
     }
 
@@ -604,26 +598,93 @@ export const PolymorphManager = {
   },
 
   /**
-   * Resolve a Beast actor's token image, handling wildcard paths.
-   * Wildcard paths like "modules/foo/Crocodile/*" need to be resolved
-   * via getTokenImages() to pick an actual file.
+   * Resize/retexture a placed token for a beast form.
+   *
+   * The size change matters more than the artwork, so a rejected texture must
+   * not take the rest of the transformation down with it: retry size-only if
+   * the combined update fails validation.
+   *
+   * @param {Token} token          Placed token to swap.
+   * @param {string|null} img      Resolved beast art, or null to keep current art.
+   * @param {number} gridSize      Token width/height in grid squares.
+   * @param {string} beastName     For logging.
    */
-  async _resolveTokenImage(beastActor) {
-    const src = beastActor.prototypeToken.texture.src || "";
+  async _swapToken(token, img, gridSize, beastName) {
+    const update = { width: gridSize, height: gridSize };
+    if (img) update["texture.src"] = img;
+    else log("PolymorphManager", `No usable token art for ${beastName} — keeping current texture.`);
 
-    // If it's a wildcard path, resolve it
-    if (src.includes("*") || beastActor.prototypeToken.randomImg) {
+    try {
+      await token.document.update(update);
+      log("PolymorphManager", `Token swapped to ${img ?? "(unchanged)"} (${gridSize}x${gridSize})`);
+    } catch (e) {
+      log("PolymorphManager", `Token texture rejected for ${beastName} (${img}) — resizing only:`, e);
       try {
-        const images = await beastActor.getTokenImages();
-        if (images.length > 0) {
-          return images[Math.floor(Math.random() * images.length)];
-        }
-      } catch (e) {
-        log("PolymorphManager",`Wildcard token resolution failed for ${beastActor.name}:`, e);
+        await token.document.update({ width: gridSize, height: gridSize });
+      } catch (e2) {
+        log("PolymorphManager", `Token resize also failed for ${beastName}:`, e2);
       }
     }
+  },
 
-    // Non-wildcard or fallback
-    return src || beastActor.img;
+  /**
+   * Placeholder artwork that must never be used as a beast token — these are
+   * the "no image set" defaults, and shipping one to the canvas is what makes
+   * a polymorphed token look broken.
+   */
+  _isPlaceholderArt(src) {
+    if (!src) return true;
+    return /default-npc|mystery-man|default-avatar/i.test(src);
+  },
+
+  /**
+   * True if `src` is something TokenDocument will actually accept as texture.src.
+   * Wildcard browses return *every* file in the folder — token art packs happily
+   * ship a `Prompts.txt` alongside the images, and handing one of those to
+   * token.update() throws "does not have a valid file extension" and aborts the
+   * whole transformation.
+   */
+  _isTokenArt(src) {
+    if (!src) return false;
+    const ext = src.split("?")[0].split(".").pop()?.toLowerCase();
+    if (!ext) return false;
+    return (ext in (CONST.IMAGE_FILE_EXTENSIONS ?? {})) || (ext in (CONST.VIDEO_FILE_EXTENSIONS ?? {}));
+  },
+
+  /**
+   * Resolve a Beast actor's token image, handling wildcard paths.
+   *
+   * Deliberately does NOT use Actor#getTokenImages(): it memoises its result on
+   * the document and short-circuits on `randomImg`, so for compendium beasts
+   * whose prototype token is rewritten after load (token-art modules do this)
+   * it hands back the stale `systems/vagabond/assets/ui/default-npc.svg`
+   * instead of the real artwork. Browsing the wildcard directly is accurate.
+   *
+   * @returns {Promise<string|null>} A usable image path, or null if none exists.
+   */
+  async _resolveTokenImage(beastActor) {
+    const src = beastActor.prototypeToken?.texture?.src || "";
+
+    if (src.includes("*")) {
+      try {
+        const FP = foundry.applications.apps.FilePicker?.implementation ?? FilePicker;
+        const { files } = await FP.browse("data", src, { wildcard: true });
+        const usable = (files ?? []).filter(f => this._isTokenArt(f) && !this._isPlaceholderArt(f));
+        if (usable.length > 0) {
+          // Browse returns URI-encoded paths; store the decoded form so the
+          // value matches what the rest of Foundry writes for these files.
+          return decodeURIComponent(usable[Math.floor(Math.random() * usable.length)]);
+        }
+      } catch (e) {
+        log("PolymorphManager", `Wildcard token resolution failed for ${beastActor.name}:`, e);
+      }
+    } else if (this._isTokenArt(src) && !this._isPlaceholderArt(src)) {
+      return src;
+    }
+
+    // Prototype token is a placeholder (or unresolvable) — fall back to the
+    // actor portrait, which is what token-art modules reliably populate.
+    const img = beastActor.img;
+    return (this._isTokenArt(img) && !this._isPlaceholderArt(img)) ? img : null;
   }
 };

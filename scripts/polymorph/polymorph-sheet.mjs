@@ -29,36 +29,20 @@ export const PolymorphSheet = {
       });
     });
 
-    // 1. Use render hook to inject beast form on every character sheet render.
-    //    Foundry V2 ApplicationV2 fires "renderApplicationV2" and "renderActorSheetV2".
+    // Use render hook to inject beast form on every character sheet render.
+    // Foundry V2 ApplicationV2 fires "renderApplicationV2" and "renderActorSheetV2".
     onRenderActorSheet((app) => self._injectBeastForm(app));
 
-    // 2. Register custom actions via Foundry's V2 action delegation system.
-    const sheetClass = CONFIG.Actor.sheetClasses?.character?.["vagabond.VagabondCharacterSheet"]?.cls;
-    const actions = sheetClass?.DEFAULT_OPTIONS?.actions;
-    if (actions) {
-      actions.vceBeastAction = async function (event, target) {
-        event.preventDefault();
-        event.stopPropagation();
-        const actor = this.document;
-        const polyData = actor?.getFlag(MODULE_ID, "polymorphData");
-        if (!polyData) return;
-        const idx = parseInt(target.closest("[data-action-index]")?.dataset?.actionIndex ?? target.dataset?.actionIndex);
-        if (isNaN(idx)) return;
-        await self._rollBeastAction(actor, idx, polyData);
-      };
-      actions.vceEndPolymorph = async function (event, target) {
-        event.preventDefault();
-        event.stopPropagation();
-        const actor = this.document;
-        const spellIds = actor.system.focus?.spellIds ?? [];
-        const filtered = spellIds.filter(id => {
-          const spell = actor.items.get(id);
-          return !spell?.name?.toLowerCase().includes("polymorph");
-        });
-        await actor.update({ "system.focus.spellIds": filtered });
-      };
-    }
+    // NOTE: we deliberately do NOT register handlers on
+    // VagabondCharacterSheet.DEFAULT_OPTIONS.actions. ApplicationV2 snapshots
+    // (deep-clones) DEFAULT_OPTIONS into `instance.options` in the constructor,
+    // and Actor#sheet caches that instance for the lifetime of the session.
+    // Anything that touches `actor.sheet` before this ready-time patch runs
+    // (the initial feature scan does, for every character) permanently freezes
+    // a copy of the action map without our entries, so the buttons silently do
+    // nothing. Beast Form clicks are bound as real listeners in _bindActions()
+    // instead, using data-vce-action so ApplicationV2's own click delegation
+    // never sees them.
 
     this._patched = true;
     console.log(`${MODULE_ID} | PolymorphSheet | Registered render hooks for beast form injection.`);
@@ -446,7 +430,7 @@ export const PolymorphSheet = {
             <span class="vce-bf-tag">Beast</span>
           </div>
         </div>
-        <button class="vce-bf-end" data-action="vceEndPolymorph"
+        <button type="button" class="vce-bf-end" data-vce-action="end"
                 title="End Polymorph (drop focus)" aria-label="End beast form and revert to normal">
           <i class="fas fa-times" aria-hidden="true"></i> End Form
         </button>
@@ -547,7 +531,7 @@ export const PolymorphSheet = {
 
         const ariaLabel = `Roll ${a.name}${dmgStr ? `, ${dmgStr} damage` : ""}`;
         html += `
-          <div class="vce-bf-action" data-action="vceBeastAction" data-action-index="${i}"
+          <div class="vce-bf-action" data-vce-action="beast-action" data-action-index="${i}"
                role="button" tabindex="0" aria-label="${ariaLabel}">
             <div class="vce-bf-action-header">
               <i class="fas fa-dice-d20 vce-bf-roll-icon" aria-hidden="true"></i>
@@ -581,14 +565,71 @@ export const PolymorphSheet = {
   },
 
   /**
-   * Bind any non-action click handlers.
-   * Beast action clicks and End Form button use Foundry's V2 data-action
-   * delegation (registered in patchSheet), so no addEventListener needed.
+   * Bind Beast Form click handlers directly on the injected panel.
+   *
+   * These cannot go through ApplicationV2's data-action delegation — see the
+   * note in patchSheet(). The panel's HTML is rebuilt on every render, so the
+   * listeners land on fresh nodes each time and never accumulate.
    */
   _bindActions(container, actor, polyData) {
-    // All click handlers now use data-action="vceBeastAction" and
-    // data-action="vceEndPolymorph" via Foundry's V2 action system.
-    // No manual addEventListener needed.
+    const endBtn = container.querySelector('[data-vce-action="end"]');
+    if (endBtn) {
+      endBtn.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (endBtn.disabled) return;
+        endBtn.disabled = true;
+        try {
+          await this.endPolymorph(actor);
+        } finally {
+          endBtn.disabled = false;
+        }
+      });
+    }
+
+    container.querySelectorAll('[data-vce-action="beast-action"]').forEach(el => {
+      const fire = async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const idx = parseInt(el.dataset.actionIndex);
+        if (isNaN(idx)) return;
+        // Re-read the flag: polyData may be stale if the form changed mid-render.
+        const current = actor.getFlag(MODULE_ID, "polymorphData");
+        if (!current) return;
+        await this._rollBeastAction(actor, idx, current);
+      };
+      el.addEventListener("click", fire);
+      el.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") fire(event);
+      });
+    });
+  },
+
+  /**
+   * End the beast form.
+   *
+   * Drops Polymorph from focus *and* reverts explicitly. The revert used to be
+   * driven purely as a side effect of the focus change (via druid.mjs's
+   * updateActor hook), which meant the button did nothing whenever the actor
+   * wasn't actually focusing a spell named "Polymorph" — the focus update was a
+   * no-op, so no hook fired and the druid stayed stuck in beast form.
+   */
+  async endPolymorph(actor) {
+    const { PolymorphManager } = await import("./polymorph-manager.mjs");
+
+    const spellIds = actor.system.focus?.spellIds ?? [];
+    const filtered = spellIds.filter(id => {
+      const spell = actor.items.get(id);
+      return !spell?.name?.toLowerCase().includes("polymorph");
+    });
+
+    if (filtered.length !== spellIds.length) {
+      // vcePolymorphRevert suppresses the hook's own revert (we do it below),
+      // but still lets Savagery / Ancient Growth toggle back off.
+      await actor.update({ "system.focus.spellIds": filtered }, { vcePolymorphRevert: true });
+    }
+
+    await PolymorphManager.revertBeastForm(actor);
   },
 
   /**
