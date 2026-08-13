@@ -171,6 +171,28 @@ export const CompanionSpawner = {
     // "modules/too-many-tokens-dnd/Wolf/*" → picks a random Wolf image) so the
     // spawned token actually shows the creature's art instead of a broken-image
     // placeholder.
+    //
+    // IMPORTANT: that only works because `creatureActor` is the *world* actor
+    // the import step above produced — do not "optimise" the import away for
+    // compendium sources. getTokenDocument() delegates to Actor#getTokenImages(),
+    // which asks the *server* for the wildcard matches
+    // (FilePicker.requestTokenImages). The server reads the actor from its own
+    // store, so:
+    //   - world actor  → server sees the art module's rewritten wildcard and
+    //                    browses the real folder. Correct art.
+    //   - compendium doc → server reads the on-disk pack, which still holds the
+    //                    pre-rewrite `systems/vagabond/assets/ui/default-npc.svg`.
+    //                    Every companion would spawn as a blank silhouette.
+    // Art modules (art-for-vagabond) patch prototype tokens client-side only,
+    // which is why the two disagree.
+    //
+    // Going through core here also keeps us clear of a trap that bit polymorph:
+    // the server-side endpoint filters wildcard matches to image extensions,
+    // whereas a raw client-side FilePicker.browse() does not — the token packs
+    // ship a Prompts.txt next to the images, and feeding one to token.update()
+    // throws "does not have a valid file extension" and aborts the whole update.
+    // See PolymorphManager._resolveTokenImage, which has to browse directly
+    // (it has no world actor) and therefore filters by extension itself.
     const overrides = {
       x: casterPos.x + gridSize,
       y: casterPos.y,
