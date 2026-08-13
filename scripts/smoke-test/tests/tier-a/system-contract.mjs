@@ -28,13 +28,17 @@ import { MODULE_ID } from "../../../utils.mjs";
 /* -------------------------------------------- */
 
 /**
- * Every system method VCE replaces or wraps.
+ * Every system method VCE REPLACES, reachable by importing a system module.
  *
  * MAINTENANCE: when you add a monkey-patch anywhere in the module, add it here.
  * This list is the explicit contract between VCE and the system — if it drifts
- * out of date the canary still passes, it just guards less. To regenerate:
+ * out of date the canary still passes, it just guards less. Regenerate with a
+ * CLASS-AGNOSTIC scan; an earlier version of this list was built by grepping
+ * for known system class names and therefore silently missed every patch
+ * applied to a class resolved at runtime (see CONFIG_PATCH_TARGETS below):
  *
- *   grep -rhoE '\b(VagabondItem|VagabondDamageHelper|VagabondRollBuilder|VagabondChatCard|RollHandler|SpellHandler)\.(prototype\.)?[A-Za-z_][A-Za-z0-9_]*\s*=' scripts
+ *   grep -rhoE '[A-Za-z_][A-Za-z0-9_]*\.prototype\.[A-Za-z_][A-Za-z0-9_]*\s*=[^=]' scripts
+ *   grep -rhoE '\b[A-Z][A-Za-z0-9_]*\.[a-zA-Z_][A-Za-z0-9_]*\s*=[^=]' scripts
  */
 const PATCH_TARGETS = [
   ["documents/item.mjs",                  "VagabondItem",         "prototype.roll"],
@@ -52,9 +56,8 @@ const PATCH_TARGETS = [
   ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "_removeHighestDie"],
   ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "_getDamageSourceDieSize"],
   ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "_shouldDoublePerDieBonus"],
-  // Not patched, but read by the spell path — see the "Spell Damage Path" note
-  // in CLAUDE.md. Its disappearance would still break us.
-  ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "rollSpellDamage"],
+
+  ["helpers/status-helper.mjs",           "StatusHelper",         "processCausedStatuses"],
 
   ["helpers/roll-builder.mjs",            "VagabondRollBuilder",  "buildAndEvaluateD20"],
   ["helpers/roll-builder.mjs",            "VagabondRollBuilder",  "buildAndEvaluateD20WithRollData"],
@@ -64,15 +67,43 @@ const PATCH_TARGETS = [
   ["helpers/roll-builder.mjs",            "VagabondRollBuilder",  "calculateCritThreshold"],
 
   ["helpers/chat-card.mjs",               "VagabondChatCard",     "npcAction"],
-  ["helpers/chat-card.mjs",               "VagabondChatCard",     "spellCast"],
 
   ["sheets/handlers/roll-handler.mjs",    "RollHandler",          "prototype.roll"],
 
   ["sheets/handlers/spell-handler.mjs",   "SpellHandler",         "prototype._executeCast"],
   ["sheets/handlers/spell-handler.mjs",   "SpellHandler",         "prototype._calculateSpellCost"],
   ["sheets/handlers/spell-handler.mjs",   "SpellHandler",         "prototype.toggleSpellFocus"],
-  ["sheets/handlers/spell-handler.mjs",   "SpellHandler",         "prototype.castSpell"],
+];
 
+/**
+ * Patches applied to classes VCE resolves at RUNTIME rather than by import —
+ * data models and region behaviours come off CONFIG, so no `import` reaches
+ * them. These were invisible to the original class-name-based scan and were
+ * therefore entirely unguarded, including the character data model, which
+ * every derived stat flows through.
+ *
+ * Each entry is [label, resolver, methodPath].
+ */
+const CONFIG_PATCH_TARGETS = [
+  ["CONFIG.Actor.dataModels.character",
+    () => CONFIG.Actor?.dataModels?.character, "prototype.prepareDerivedData"],
+  ["CONFIG.RegionBehavior.dataModels.modifyMovementCost",
+    () => CONFIG.RegionBehavior?.dataModels?.modifyMovementCost, "prototype._getTerrainEffects"],
+];
+
+/**
+ * System methods VCE CALLS but never replaces. Their disappearance breaks us
+ * exactly as hard as a patched method's would, but they are not patches — the
+ * previous version of this list conflated the two and so overstated how many
+ * methods VCE actually monkey-patches.
+ */
+const DEPENDENCIES = [
+  // Read by the spell path — see the "Spell Damage Path" note in CLAUDE.md.
+  ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "rollSpellDamage"],
+  ["helpers/chat-card.mjs",               "VagabondChatCard",     "spellCast"],
+  ["helpers/roll-builder.mjs",            "VagabondRollBuilder",  "calculateCritThreshold"],
+  ["sheets/handlers/spell-handler.mjs",   "SpellHandler",         "prototype.castSpell"],
+  // Imbue cost authority — called from the _executeCast patch.
   ["applications/spell-cast-dialog.mjs",  "SpellCastDialog",      "calculateCosts"],
 ];
 
@@ -169,6 +200,32 @@ async function _collectAEKeys() {
   return keys;
 }
 
+/**
+ * Resolve a list of [file, exportName, methodPath] against the system's
+ * modules. Returns human-readable descriptions of whatever didn't resolve.
+ */
+async function _checkModuleTargets(list) {
+  const missing = [];
+  const cache = new Map();
+
+  for (const [file, exportName, path] of list) {
+    const spec = `/systems/vagabond/module/${file}`;
+    if (!cache.has(spec)) {
+      try { cache.set(spec, await import(spec)); }
+      catch (e) { cache.set(spec, { __importError: e.message }); }
+    }
+    const mod = cache.get(spec);
+    if (mod.__importError) { missing.push(`${file} — import failed: ${mod.__importError}`); continue; }
+
+    const root = mod[exportName];
+    if (!root) { missing.push(`${file} → ${exportName} (export gone)`); continue; }
+
+    const target = path.split(".").reduce((o, k) => o?.[k], root);
+    if (typeof target !== "function") missing.push(`${exportName}.${path} (${typeof target})`);
+  }
+  return missing;
+}
+
 export const tests = [
 
   // ── The system still exposes everything we patch ─────────────────────────
@@ -177,29 +234,54 @@ export const tests = [
     name: "System contract: every monkey-patched system method still exists",
     tier: "a",
     run: async ({ assert }) => {
-      const missing = [];
-      const cache = new Map();
+      const missing = await _checkModuleTargets(PATCH_TARGETS);
 
-      for (const [file, exportName, path] of PATCH_TARGETS) {
-        const spec = `/systems/vagabond/module/${file}`;
-        if (!cache.has(spec)) {
-          try { cache.set(spec, await import(spec)); }
-          catch (e) { cache.set(spec, { __importError: e.message }); }
-        }
-        const mod = cache.get(spec);
-        if (mod.__importError) { missing.push(`${file} — import failed: ${mod.__importError}`); continue; }
-
-        const root = mod[exportName];
-        if (!root) { missing.push(`${file} → ${exportName} (export gone)`); continue; }
-
+      // CONFIG-resolved classes (data models, region behaviours).
+      for (const [label, resolve, path] of CONFIG_PATCH_TARGETS) {
+        let root;
+        try { root = resolve(); } catch (e) { missing.push(`${label} — resolver threw: ${e.message}`); continue; }
+        if (!root) { missing.push(`${label} (not registered on CONFIG)`); continue; }
         const target = path.split(".").reduce((o, k) => o?.[k], root);
-        if (typeof target !== "function") {
-          missing.push(`${exportName}.${path} (${typeof target})`);
-        }
+        if (typeof target !== "function") missing.push(`${label}.${path} (${typeof target})`);
       }
 
       assert(missing.length === 0,
-        `System API drift — VCE patches ${PATCH_TARGETS.length} methods, these no longer resolve to functions: ${missing.join("; ")}`);
+        `System API drift — these patched methods no longer resolve to functions: ${missing.join("; ")}`);
+    },
+  },
+
+  // ── Methods we call but don't patch ──────────────────────────────────────
+  {
+    id: "contract.dependencies-still-exist",
+    name: "System contract: every system method VCE calls still exists",
+    tier: "a",
+    run: async ({ assert }) => {
+      const missing = await _checkModuleTargets(DEPENDENCIES);
+      assert(missing.length === 0,
+        `System API drift — VCE calls these but they no longer resolve: ${missing.join("; ")}`);
+    },
+  },
+
+  // ── Cross-module patch into the optional Crawler ─────────────────────────
+  // Soft: the Crawler is an optional dependency. Only assert when it's active,
+  // otherwise a user without it would see a permanent red.
+  {
+    id: "contract.crawler-spell-dialog-patch-target",
+    name: "System contract: CrawlerSpellDialog._cast still exists when the Crawler is active",
+    tier: "a",
+    skip: () => !game.modules.get("vagabond-crawler")?.active,
+    skipReason: "vagabond-crawler not active — cross-module patch not applicable",
+    run: async ({ assert }) => {
+      let cls = null;
+      try {
+        const mod = await import("/modules/vagabond-crawler/scripts/npc-action-menu.mjs");
+        cls = mod.CrawlerSpellDialog;
+      } catch (e) {
+        assert(false, `Could not import the Crawler's npc-action-menu.mjs: ${e.message}`);
+        return;
+      }
+      assert(typeof cls?.prototype?._cast === "function",
+        "CrawlerSpellDialog.prototype._cast is gone — VCE's cast-time state capture silently stops working from the Crawler strip (see the 'Spell Cast-Time Tracking' note in CLAUDE.md)");
     },
   },
 

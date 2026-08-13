@@ -1,6 +1,6 @@
 # VCE Smoke Test Suite
 
-Automated in-Foundry test harness covering focus, companion, polymorph, spell-manager, AE-distribution, and per-class hook paths. 230 tests across three tiers, runs in ~90 seconds.
+Automated in-Foundry test harness covering focus, companion, polymorph, spell-manager, AE-distribution, and per-class hook paths. 235 tests across three tiers, runs in ~90 seconds.
 
 ## Running
 
@@ -57,9 +57,18 @@ jump does, so it gets its own canary:
 
 | Test | Asserts |
 |---|---|
-| `contract.patch-targets-still-exist` | all ~29 monkey-patched system methods still resolve to functions |
+| `contract.patch-targets-still-exist` | every system method VCE **replaces** still resolves — both the import-reachable ones and those patched on classes resolved off `CONFIG` (the character data model, region movement-cost behaviour) |
+| `contract.dependencies-still-exist` | every system method VCE **calls but does not patch** still resolves |
+| `contract.crawler-spell-dialog-patch-target` | `CrawlerSpellDialog.prototype._cast` exists when the Crawler is active (skips otherwise) |
 | `contract.ae-field-paths-still-resolve` | every `system.*` AE path resolves on a character or an NPC |
 | `contract.declared-system-compat-is-current` | `module.json`'s verified system version tracks the installed one |
+
+Patches and dependencies are listed **separately on purpose**: an earlier version
+lumped them together and so overstated how many methods VCE actually patches.
+Regenerate the patch list with a **class-agnostic** scan — the first version
+grepped for known system class names and therefore missed every patch applied to
+a class resolved at runtime, including `prepareDerivedData` on the character
+data model.
 
 The AE list is **derived** from the Active Effects catalog and the feature registries,
 so new features are covered automatically; only the imperative paths (polymorph
