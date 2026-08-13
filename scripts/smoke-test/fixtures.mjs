@@ -165,15 +165,40 @@ export const Fixtures = {
     if (!def.items?.length) return;
     // In the Vagabond system all physical items (weapons, armor, gear) use type "equipment".
     // The fixture def uses "weapon" as a logical category; map it to the correct doc type.
-    const existing = new Set(actor.items.filter(i => i.type === "equipment").map(i => i.name));
+    const existing = new Map(
+      actor.items.filter(i => i.type === "equipment").map(i => [i.name, i])
+    );
+
     const toAdd = def.items.filter(it => !existing.has(it.name));
-    if (!toAdd.length) return;
-    const stubs = toAdd.map(it => ({
-      name: it.name,
-      type: "equipment",
-      system: { equipmentType: it.type }
-    }));
-    await actor.createEmbeddedDocuments("Item", stubs);
+    if (toAdd.length) {
+      const stubs = toAdd.map(it => ({
+        name: it.name,
+        type: "equipment",
+        system: { equipmentType: it.type, equipmentState: this._equipmentStateFor(it) }
+      }));
+      await actor.createEmbeddedDocuments("Item", stubs);
+    }
+
+    // Heal drift on items that already exist. Without this an actor built
+    // before a def gained `equipped` keeps the old state forever, and the
+    // tests that depend on it silently skip instead of running.
+    const fixes = def.items
+      .filter(it => it.equipped !== undefined && existing.has(it.name))
+      .map(it => ({ it, doc: existing.get(it.name), want: this._equipmentStateFor(it) }))
+      .filter(({ doc, want }) => doc.system?.equipmentState !== want)
+      .map(({ doc, want }) => ({ _id: doc.id, "system.equipmentState": want }));
+    if (fixes.length) await actor.updateEmbeddedDocuments("Item", fixes);
+  },
+
+  /**
+   * Translate the fixture def's friendly `equipped: true` into the field the
+   * system actually stores. `system.equipped` is DERIVED
+   * (`equipped = equipmentState !== "unequipped"`), so writing it directly is
+   * silently discarded on the next data prep — `equipmentState` is authoritative.
+   */
+  _equipmentStateFor(it) {
+    if (!it.equipped) return "unequipped";
+    return it.type === "armor" ? "worn" : "oneHand";
   },
 
   isFixtureActor(actor) {

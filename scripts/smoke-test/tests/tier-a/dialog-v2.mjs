@@ -92,18 +92,11 @@ export const tests = [
     name: "DialogV2: Imbue weapon picker — clicking a weapon records imbue state",
     tier: "a",
     usesFixtures: ["Witch"],
-    skip: () => {
-      // Need a Witch with at least 2 equipped weapons for the picker to fire.
-      // (1 weapon auto-selects; 0 weapons errors out.) Skip if the fixture
-      // hasn't been set up that way — better than a false fail.
-      const witch = game.actors.getName("_smoke-Witch");
-      if (!witch) return true;
-      const weapons = witch.items.filter(i =>
-        i.type === "weapon" || (i.type === "equipment" && i.system?.equipmentType === "weapon")
-      );
-      return weapons.filter(w => w.system?.equipped).length < 2;
-    },
-    skipReason: "Needs ≥2 equipped weapons on Witch fixture",
+    // The Witch fixture now ships two equipped weapons (see fixture-defs), which
+    // is what makes the picker open at all — 1 auto-selects, 0 warns out. This
+    // used to carry a skip guarding that precondition; the guard outlived its
+    // purpose and hid the fact that the test called a method that no longer
+    // exists. If it regresses, let it fail loudly.
     run: async ({ fixtures, assert, wait }) => {
       const actor = fixtures.Witch;
       if (!actor) { assert(false, "Witch fixture missing"); return; }
@@ -125,7 +118,7 @@ export const tests = [
         hasEffect: false,
       };
 
-      const dialogPromise = ImbueManager.promptWeaponPicker(actor, spellData);
+      const dialogPromise = ImbueManager.showWeaponDialog(actor, spellData);
       const clicked = await _clickDialogButton(targetWeapon.id, 1500);
       assert(clicked, `Imbue weapon button '${targetWeapon.id}' should be clickable within 1.5s`);
 

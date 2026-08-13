@@ -62,8 +62,12 @@ export const FIXTURE_DEFS = {
     ancestryName: "Human",
     stats: { mig: 3, dex: 3, awr: 6, rsn: 3, prs: 3, lck: 3 },
     perks: [],
+    // Two *equipped* weapons: the Imbue weapon picker only opens with 2+ to
+    // choose from (1 auto-selects and skips the dialog entirely, 0 warns out),
+    // so dialogv2.imbue-weapon-picker-button-fires needs both of these.
     items: [
-      { name: "Dagger", type: "weapon" }
+      { name: "Dagger", type: "weapon", equipped: true },
+      { name: "Shortsword", type: "weapon", equipped: true }
     ],
     spells: ["Burn", "Bless", "Imbue", "Ward", "Hex"],
   },

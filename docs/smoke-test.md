@@ -51,14 +51,18 @@ A clean run is **green**: every test passes, with only the environmental skips b
 
 ## Known skips
 
-Four tests skip on a normal run. None indicate a defect — each is gated on a setting or a fixture the builder doesn't produce:
+Three tests skip on a normal run. None indicate a defect — each is gated on a setting or a fixture the builder doesn't produce:
 
 | Test | Why it skips | To un-skip |
 |---|---|---|
 | `encumbrance.over-capacity-applies-encumbered` | `homebrewEncumbranceSpeedPenalty` setting is OFF | Turn the setting on |
-| `dialogv2.imbue-weapon-picker-button-fires` | Needs ≥2 equipped weapons on the Witch fixture (1 auto-selects, 0 errors) | Give `_smoke-Witch` a second equipped weapon |
 | `vanguard.indestructible-cancels-melee-damage` | Unconditional `skip: () => true` — needs an equipped-armor fixture for `system.armor >= 1`, which is derived and not directly writable | Build an armour fixture, then drop the skip |
 | `perk.primordial-summoner` | Perk is in `PERK_REGISTRY` but missing from the `vagabond.perks` system compendium (v5.3.0) | Remove from `TIER_C_SKIPS.perks` once the system ships it |
+
+> **Equipping fixture gear:** `system.equipped` is *derived*
+> (`equipped = equipmentState !== "unequipped"`), so writing it is silently
+> discarded. Declare `equipped: true` in the fixture def and let
+> `Fixtures._equipmentStateFor` translate it to `equipmentState`.
 
 Separately, `spell.polymorph` is listed in `TIER_C_SKIPS.spells` and is therefore **never generated** — it doesn't appear as a skipped row at all. It's redundant with the Tier A polymorph round-trip test.
 
