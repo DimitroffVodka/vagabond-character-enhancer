@@ -43,6 +43,36 @@ Six fixture actors auto-create on first run in a folder named `VCE Smoke Test (d
 
 The fixture builder is idempotent — re-runs heal drift. To reset fixtures completely, delete the folder and run the suite again.
 
+## Drift canary
+
+`tests/tier-a/system-contract.mjs` answers a different question from the rest of the
+suite: not "does my feature behave correctly?" but "is the ground still there?".
+
+VCE monkey-patches system methods and writes Active Effects at specific `system.*`
+paths. Neither is a stable public API, and when the system renames one the failure is
+**silent** — a patch installed on a method nobody calls, or an AE writing a field that
+no longer exists, does nothing and throws nothing. Every other test can stay green
+while half the module quietly stops working. That is the exact damage a big system
+jump does, so it gets its own canary:
+
+| Test | Asserts |
+|---|---|
+| `contract.patch-targets-still-exist` | all ~29 monkey-patched system methods still resolve to functions |
+| `contract.ae-field-paths-still-resolve` | every `system.*` AE path resolves on a character or an NPC |
+| `contract.declared-system-compat-is-current` | `module.json`'s verified system version tracks the installed one |
+
+The AE list is **derived** from the Active Effects catalog and the feature registries,
+so new features are covered automatically; only the imperative paths (polymorph
+overlay, undead template, aura buffs) are listed by hand, and that list can only
+under-cover, never false-fail. The patch-target list is explicit — **add to it
+whenever you add a monkey-patch**, or the canary silently guards less.
+
+Run it alone after any system update:
+
+```js
+await game.vagabondCharacterEnhancer.smokeTest({ pattern: /^contract\./ });
+```
+
 ## Expected result
 
 A clean run is **green**: every test passes, with only the environmental skips below. There are no known-failing tests — any red is a real regression.

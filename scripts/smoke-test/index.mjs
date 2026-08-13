@@ -42,6 +42,10 @@ export const SmokeTest = {
       await import("./tests/tier-a/aura-buff-propagation.mjs"),
       await import("./tests/tier-a/exalt-damage.mjs"),
       await import("./tests/tier-a/dialog-v2.mjs"),
+      // Drift canary: asserts the system APIs we monkey-patch and the
+      // system.* paths our AEs write to still exist. Both fail SILENTLY when
+      // the system renames them, so nothing else in the suite would notice.
+      await import("./tests/tier-a/system-contract.mjs"),
       await import("./tests/tier-b/martial.mjs"),
       await import("./tests/tier-b/skirmisher.mjs"),
       await import("./tests/tier-b/casters.mjs"),
