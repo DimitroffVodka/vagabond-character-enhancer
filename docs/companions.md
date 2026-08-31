@@ -28,7 +28,24 @@ When the controller PC's owner clicks an action on a companion's chat card, the 
 | Conjurer perk          | Action button                  | Per-perk conjure rules                                                                             |
 | Reanimator perk        | Action button                  | Per-perk reanimate rules                                                                           |
 | Animal Companion perk  | Action button                  | One companion; persists across rests                                                               |
-| Hireling (manual)      | GM-managed via Crawler         | Saves and actions route through hiring Hero's Leadership                                           |
+| Hireling (manual)      | **Set Save Controller…** button on the actor sheet header | Not a spawn — flags an actor you already placed. Checks, saves, and weapon attacks route through the hiring Hero's Leadership |
+
+---
+
+## Hirelings
+
+Hirelings are the one source that is **not** spawned by the module — you place the NPC yourself, then flag it. This is entirely a VCE feature; **Vagabond Crawler is not involved and is not required.**
+
+To hand a player control of a hireling (or any pet/ally NPC):
+
+1. **Grant Foundry ownership.** Right-click the actor in the sidebar → **Configure Ownership** → set the player to **Owner**. This is what actually lets them select and move the token and open its sheet. VCE does not do this step for you — only auto-spawned companions (summons, familiars, Animal Companion perk) get ownership granted automatically.
+2. **Flag the controller.** Open the actor sheet and click **Set Save Controller…** (the people-arrows icon in the sheet header) → pick the Hero → choose **Hireling** → Save.
+
+The actor now appears on that Hero's **Companions** tab, and its Checks, Saves, and weapon attacks roll against the Hero's Leadership Skill per RAW (*Core Rulebook — Bestiary*: "Use the Hero's Leadership Skill for any Checks and Saves the Hireling makes that Round").
+
+The button appears on **both** NPC and character actor sheets, since a hireling built as a character-type actor needs the same routing. A hireling that is never placed on a scene still shows on the Companions tab.
+
+> Choose **Companion** instead of **Hireling** in that dialog to route through the Hero's Mana Skill (Mysticism / Arcana) rather than Leadership — useful for an inherited summon or an Animate Object that changed hands.
 
 ---
 

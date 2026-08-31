@@ -62,6 +62,7 @@ Module-level enforcement of status-vs-status interactions the system describes b
 - **Countdown Dice Overlay** — Visual overlay for tracking countdown dice on effects.
 - **NPC Ability Automation** — With Vagabond Crawler module enabled: morale checks, NPC abilities (Magic Ward, Pack Tactics, Nimble, Soft Underbelly, etc.), and combat AI.
 - **Brawl Intent System** — Grapple/Shove intent dialog for Brawl attacks. Works from the character sheet AND the vagabond-crawler combat strip.
+- **Hirelings** — Any NPC (or character) actor can be flagged as a Hero's hireling with the **Set Save Controller…** button in the actor sheet header. Its Checks and Saves then route through the hiring Hero's Leadership. This is a VCE feature and does not require Vagabond Crawler. See the [Companion System](companions.md#hirelings).
 
 ---
 
@@ -74,4 +75,3 @@ If both modules are active, several features compose:
 - **Dancer Step Up** — Crawler exposes Step Up on the combat strip dropdown.
 - **Merchant Gold Sink** — Favorited shop items appear in the crawler combat strip dropdown for quick purchasing.
 - **Alchemy Cookbook** — Favorited formulae appear in the crawler combat strip dropdown for use as weapons.
-- **Hireling Routing** — Hirelings created via Crawler use the [Companion System](companions.md) for save and action routing.
