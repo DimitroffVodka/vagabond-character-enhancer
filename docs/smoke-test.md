@@ -90,12 +90,11 @@ A clean run is **green**: every test passes, with only the environmental skips b
 
 ## Known skips
 
-Three tests skip on a normal run. None indicate a defect — each is gated on a setting or a fixture the builder doesn't produce:
+Two tests skip on a normal run. Neither indicates a defect — each is gated on a setting or a perk the system doesn't ship:
 
 | Test | Why it skips | To un-skip |
 |---|---|---|
 | `encumbrance.over-capacity-applies-encumbered` | `homebrewEncumbranceSpeedPenalty` setting is OFF | Turn the setting on |
-| `vanguard.indestructible-cancels-melee-damage` | Unconditional `skip: () => true` — needs an equipped-armor fixture for `system.armor >= 1`, which is derived and not directly writable | Build an armour fixture, then drop the skip |
 | `perk.primordial-summoner` | Perk is in `PERK_REGISTRY` but missing from the `vagabond.perks` system compendium (v5.3.0) | Remove from `TIER_C_SKIPS.perks` once the system ships it |
 
 > **Equipping fixture gear:** `system.equipped` is *derived*
