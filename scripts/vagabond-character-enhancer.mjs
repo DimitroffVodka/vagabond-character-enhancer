@@ -1610,7 +1610,9 @@ Hooks.once("ready", async () => {
         // Fix Cleave save path: all targets take half damage (RAW: "half damage to two targets")
         const cleaveSaveSource = resolveActorRef(button.dataset.actorId);
         const cleaveSaveItem = cleaveSaveSource?.items.get(button.dataset.itemId);
-        const hasCleaveS = cleaveSaveItem?.system?.properties?.includes('Cleave');
+        // Pre-5.38 Cleave only. 5.38 steps the damage die down at roll time and every
+        // Target takes the full amount (weaponDieSteps marks the new rules).
+        const hasCleaveS = !CONFIG.VAGABOND?.weaponDieSteps && cleaveSaveItem?.system?.properties?.includes('Cleave');
         let cleaveSaveTargets;
         try { cleaveSaveTargets = JSON.parse((button.dataset.targets || '[]').replace(/&quot;/g, '"')); } catch { cleaveSaveTargets = []; }
 
@@ -1780,7 +1782,8 @@ Hooks.once("ready", async () => {
 
         // Fix Cleave: system splits evenly, RAW is full to first + half to rest
         const sourceItem = directSourceActor?.items.get(button.dataset.itemId);
-        const hasCleave = sourceItem?.system?.properties?.includes('Cleave');
+        // Pre-5.38 Cleave only (see the save path above).
+        const hasCleave = !CONFIG.VAGABOND?.weaponDieSteps && sourceItem?.system?.properties?.includes('Cleave');
         let targets;
         try { targets = JSON.parse((button.dataset.targets || '[]').replace(/&quot;/g, '"')); } catch { targets = []; }
 

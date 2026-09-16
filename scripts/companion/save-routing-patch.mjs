@@ -1,4 +1,4 @@
-import { MODULE_ID, log, actorIdFromRef } from "../utils.mjs";
+import { MODULE_ID, log, actorIdFromRef, resolveActorRef } from "../utils.mjs";
 import { resolveSaveRoller } from "./save-routing.mjs";
 
 /**
@@ -87,9 +87,11 @@ export async function patchedHandleSaveRoll(button, event = null) {
     actorsToRoll = targetTokens.map(t => t.actor).filter(a => a);
   }
 
-  const _saveSourceActor = actorId ? game.actors.get(actorId) : null;
+  const _saveSourceActor = resolveActorRef(button.dataset.actorId) ?? (actorId ? game.actors.get(actorId) : null);
   const _saveSourceItem = _saveSourceActor?.items.get(itemId);
-  const _hasCleave = _saveSourceItem?.system?.properties?.includes('Cleave') ?? false;
+  // Pre-5.38 Cleave split only: 5.38 steps the die down at roll time and every
+  // Target takes the full amount (CONFIG.VAGABOND.weaponDieSteps marks the new rules).
+  const _hasCleave = !CONFIG.VAGABOND?.weaponDieSteps && (_saveSourceItem?.system?.properties?.includes('Cleave') ?? false);
   const _saveTargetCount = actorsToRoll.length;
 
   for (let _saveIdx = 0; _saveIdx < actorsToRoll.length; _saveIdx++) {
@@ -122,10 +124,20 @@ export async function patchedHandleSaveRoll(button, event = null) {
     // Hinder/attacker modifier uses the DAMAGE TARGET (the NPC) since armor,
     // conditions, and status resistances live there.
     const isHindered = DH._isSaveHindered(saveType, attackType, damageTarget);
-    const sourceActor = actorId ? game.actors.get(actorId) : null;
+    const sourceActor = resolveActorRef(button.dataset.actorId) ?? (actorId ? game.actors.get(actorId) : null);
     let effectiveAttackerModifier = sourceActor?.system?.outgoingSavesModifier || 'none';
 
-    {
+    // 5.38: status resistance is an independent Favor vote passed to _rollSave,
+    // so it still counts when the attacker's modifier is already Favor. Older
+    // systems folded it into the attacker modifier (block below).
+    const _systemResistanceVote = typeof DH._hasStatusResistanceForSave === "function";
+    const resistanceFavor = _systemResistanceVote
+      ? await DH._hasStatusResistanceForSave(damageTarget, saveType, {
+          sourceActor, sourceItem: sourceActor?.items.get(itemId), actionIdx, attackWasCrit,
+        })
+      : false;
+
+    if (!_systemResistanceVote) {
       const { StatusHelper } = await import('/systems/vagabond/module/helpers/status-helper.mjs');
       const sourceItem = sourceActor?.items.get(itemId);
       const itemEntries = sourceItem?.system?.causedStatuses ?? [];
@@ -149,7 +161,7 @@ export async function patchedHandleSaveRoll(button, event = null) {
     const ctrlKey = event?.ctrlKey || false;
 
     // (3) Roll the save on the SAVE ROLLER.
-    const saveRoll = await DH._rollSave(saveRoller, saveType, isHindered, shiftKey, ctrlKey, effectiveAttackerModifier);
+    const saveRoll = await DH._rollSave(saveRoller, saveType, isHindered, shiftKey, ctrlKey, effectiveAttackerModifier, resistanceFavor);
 
     // (4) Difficulty and crit from SAVE ROLLER.
     const difficulty = saveRoller.system.saves?.[saveType]?.difficulty || 10;
@@ -172,8 +184,18 @@ export async function patchedHandleSaveRoll(button, event = null) {
     }
 
     const sourceItem = sourceActor?.items.get(itemId);
-    const baseAfterFinal = DH.calculateFinalDamage(damageTarget, damageAfterSave, damageType, sourceItem);
-    const armorReduction = damageAfterSave - baseAfterFinal;
+    // 5.38: detailed breakdown, fed the actual rolled dice count (Berserk per-die
+    // reduction counts explosions) — the card also shows its defense path.
+    let baseAfterFinal, armorReduction, defensePath = null, flankedBonus = 0;
+    if (typeof DH.calculateFinalDamageDetailed === "function") {
+      const rolledDiceCount = (rollTermsData.terms ?? []).reduce((n, t) =>
+        n + (t.type === 'Die' ? (t.results ?? []).filter(r => r.active !== false).length : 0), 0);
+      const breakdown = DH.calculateFinalDamageDetailed(damageTarget, damageAfterSave, damageType, sourceItem, { rolledDiceCount });
+      ({ final: baseAfterFinal, armorReduction, path: defensePath, flankedBonus = 0 } = breakdown);
+    } else {
+      baseAfterFinal = DH.calculateFinalDamage(damageTarget, damageAfterSave, damageType, sourceItem);
+      armorReduction = damageAfterSave - baseAfterFinal;
+    }
     let finalDamage = baseAfterFinal;
     const weaknessPreRolledSave = button.dataset.weaknessPreRolled === 'true';
     if (!weaknessPreRolledSave && DH._isWeakTo(damageTarget, damageType, sourceItem)) {
@@ -252,7 +274,9 @@ export async function patchedHandleSaveRoll(button, event = null) {
       finalDamage,
       damageType,
       autoApply,
-      autoApply ? null : statusContext
+      autoApply ? null : statusContext,
+      defensePath,
+      flankedBonus
     );
     if (routingNote && saveMessage) {
       try {
@@ -398,10 +422,18 @@ export async function patchedHandleSaveReminderRoll(button, event = null) {
     const { saveRoller, damageTarget, routingNote } = _routeTarget(targetActor);
 
     const isHindered = DH._isSaveHindered(saveType, attackType, damageTarget);
-    const sourceActor = actorId ? game.actors.get(actorId) : null;
+    const sourceActor = resolveActorRef(button.dataset.actorId) ?? (actorId ? game.actors.get(actorId) : null);
     let effectiveAttackerModifier2 = sourceActor?.system?.outgoingSavesModifier || 'none';
 
-    {
+    // 5.38: independent resistance Favor vote (see handleSaveRoll above).
+    const _systemResistanceVote2 = typeof DH._hasStatusResistanceForSave === "function";
+    const resistanceFavor2 = _systemResistanceVote2
+      ? await DH._hasStatusResistanceForSave(damageTarget, saveType, {
+          sourceActor, sourceItem: sourceActor?.items.get(itemId), actionIdx,
+        })
+      : false;
+
+    if (!_systemResistanceVote2) {
       const { StatusHelper } = await import('/systems/vagabond/module/helpers/status-helper.mjs');
       const sourceItem = sourceActor?.items.get(itemId);
       const itemEntries = sourceItem?.system?.causedStatuses ?? [];
@@ -424,7 +456,7 @@ export async function patchedHandleSaveReminderRoll(button, event = null) {
     const shiftKey = event?.shiftKey || false;
     const ctrlKey = event?.ctrlKey || false;
 
-    const saveRoll = await DH._rollSave(saveRoller, saveType, isHindered, shiftKey, ctrlKey, effectiveAttackerModifier2);
+    const saveRoll = await DH._rollSave(saveRoller, saveType, isHindered, shiftKey, ctrlKey, effectiveAttackerModifier2, resistanceFavor2);
 
     const difficulty = saveRoller.system.saves?.[saveType]?.difficulty || 10;
     const isSuccess = saveRoll.total >= difficulty;
