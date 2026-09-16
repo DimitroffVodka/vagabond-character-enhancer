@@ -6,7 +6,7 @@
 import { MODULE_ID, log, hasFeature, getFeatures, combineFavor, onRenderChatMessage, weaponAttackType } from "../utils.mjs";
 import { measureDistance } from "../range-validator.mjs";
 import { _saveSourceActorId, _directSourceAttackType, _saveSourceAttackType } from "../vagabond-character-enhancer.mjs";
-import { SIZE_ORDER, getActorSize, getEffectiveShoveSize } from "../brawl/brawl-intent.mjs";
+import { SIZE_ORDER, getActorSize, getEffectiveShoveSize, brawlShieldFlags } from "../brawl/brawl-intent.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -286,8 +286,8 @@ export const VanguardFeatures = {
     // Quick-check: must have Brawl or Shield weapon equipped
     const equippedItems = actor.items.filter(i => i.system?.equipped);
     const hasShoveWeapon = equippedItems.some(i => {
-      const props = i.system?.properties?.map(p => p.toLowerCase()) ?? [];
-      return props.includes("brawl") || props.includes("shield");
+      const { hasBrawl, hasShield } = brawlShieldFlags(i);
+      return hasBrawl || hasShield;
     });
     if (!hasShoveWeapon) {
       log("Vanguard", `Guard: ${actor.name} has no Brawl/Shield weapon equipped — skipping.`);

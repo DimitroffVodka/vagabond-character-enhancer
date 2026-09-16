@@ -385,7 +385,7 @@ function _detectEvadeDefenderFromTargets(button) {
 let _rangeFavorHinder = "none";
 
 // Brawl intent state. Set by rollWeapon patch, consumed by renderChatMessage.
-import { BrawlIntent, setBrawlIntent, resetBrawlIntent } from "./brawl/brawl-intent.mjs";
+import { BrawlIntent, setBrawlIntent, resetBrawlIntent, brawlShieldFlags } from "./brawl/brawl-intent.mjs";
 
 import { FeatureDetector } from "./feature-detector.mjs";
 import { registerMaterialsSlotCost } from "./alchemy/alchemy-helpers.mjs";
@@ -1071,9 +1071,8 @@ Hooks.once("ready", async () => {
         // Shove/Grapple intent (Bully, Beefy) can modify the attack.
         // This runs at the item.rollAttack level so it works from BOTH the
         // character sheet AND the vagabond-crawler action strip.
-        const isBrawlOrShield = this.system?.properties?.some(p =>
-          ["brawl", "shield"].includes(p.toLowerCase()));
-        if (isBrawlOrShield) {
+        const { hasBrawl, hasShield } = brawlShieldFlags(this);
+        if (hasBrawl || hasShield) {
           const { TargetHelper } = await import("/systems/vagabond/module/helpers/target-helper.mjs");
           const targetsAtRollTime = TargetHelper.captureCurrentTargets();
           if (targetsAtRollTime.length > 0) {

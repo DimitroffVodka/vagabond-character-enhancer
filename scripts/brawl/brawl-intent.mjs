@@ -51,6 +51,20 @@ export function getEffectiveShoveSize(actor, features) {
   return size;
 }
 
+/**
+ * Whether a weapon counts as Brawl / Shield for Grapple and Shove.
+ * Vagabond 5.38 made Brawl a weapon TYPE (`system.weaponSkill`) and strips the
+ * Brawl property on load; it dropped Shield entirely, so only legacy items
+ * still carry that one.
+ */
+export function brawlShieldFlags(item) {
+  const props = item?.system?.properties?.map(p => p.toLowerCase()) ?? [];
+  return {
+    hasBrawl: item?.system?.weaponSkill === "brawl" || props.includes("brawl"),
+    hasShield: props.includes("shield"),
+  };
+}
+
 /* -------------------------------------------- */
 /*  Module-Level State                           */
 /* -------------------------------------------- */
@@ -105,9 +119,7 @@ export const BrawlIntent = {
    * Returns { intent, favorModified } or null if cancelled.
    */
   async showIntentDialog(actor, item, targetsAtRollTime, features) {
-    const props = item.system.properties?.map(p => p.toLowerCase()) ?? [];
-    const hasBrawl = props.includes("brawl");
-    const hasShield = props.includes("shield");
+    const { hasBrawl, hasShield } = brawlShieldFlags(item);
     if (!hasBrawl && !hasShield) return { intent: "damage", favorModified: false };
 
     if (!targetsAtRollTime?.length) return { intent: "damage", favorModified: false };
