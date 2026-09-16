@@ -18,7 +18,7 @@ export const tests = [
   // ── Test 8 ──────────────────────────────────────────────────────────────
   {
     id: "encumbrance.over-capacity-applies-encumbered",
-    name: "EncumbranceManager: over-slot actor gets encumbered AE (setting-gated)",
+    name: "EncumbranceManager: over-slot actor gets encumbered AE and speed penalty (setting-gated)",
     tier: "a",
     usesFixtures: ["Generic"],
     skip: () => {
@@ -39,6 +39,12 @@ export const tests = [
       const maxSlots = actor.system?.inventory?.maxSlots ?? 8;
       const { computeQuantityAwareOccupiedSlots } = await import("../../../encumbrance/encumbrance-manager.mjs");
       const currentOccupied = computeQuantityAwareOccupiedSlots(actor);
+
+      // Unpenalized speed to measure the penalty against.
+      assert(currentOccupied <= maxSlots,
+        `precondition: Generic should start within capacity (${currentOccupied}/${maxSlots})`);
+      const baseSpeed = actor.system.speed?.base;
+      const baseCrawl = actor.system.speed?.crawl;
 
       // Create enough 2-slot items to push occupied > maxSlots
       // Each item uses system.baseSlots (the writable source field; "slots" is derived)
@@ -70,6 +76,17 @@ export const tests = [
         const hasStatus = actor.statuses?.has?.("encumbered") ??
           actor.effects.some(e => e.statuses?.has?.("encumbered"));
         assert(hasStatus, "actor.statuses should include 'encumbered'");
+
+        // Speed penalty (prepareDerivedData patch): -5 ft base per slot over,
+        // floor 0, with crawl re-derived from the reduced base.
+        const over = computeQuantityAwareOccupiedSlots(actor) - maxSlots;
+        const expected = Math.max(0, baseSpeed - over * 5);
+        assert(actor.system.speed?.base === expected,
+          `speed.base should be ${baseSpeed} - 5×${over} = ${expected}; got ${actor.system.speed?.base}`);
+        if (expected < baseSpeed) {
+          assert(actor.system.speed?.crawl < baseCrawl,
+            `speed.crawl should drop below ${baseCrawl} with the reduced base; got ${actor.system.speed?.crawl}`);
+        }
       } finally {
         // Clean up items (runner also does this, but belt-and-suspenders)
         if (created.length) {
@@ -79,6 +96,9 @@ export const tests = [
         await EncumbranceManager.refresh(actor).catch(() => {});
         await wait(200);
       }
+
+      assert(actor.system.speed?.base === baseSpeed && actor.system.speed?.crawl === baseCrawl,
+        `speed should return to ${baseSpeed}/${baseCrawl} once back under capacity; got ${actor.system.speed?.base}/${actor.system.speed?.crawl}`);
     }
   },
 
