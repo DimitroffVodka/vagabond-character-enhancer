@@ -900,9 +900,16 @@ export const ImbueManager = {
     // RAW: "Imbue: ... if you spend 1 Mana to do so when the attack hits."
     // The 1-Mana delivery cost is DEFERRED to the on-hit moment, not paid
     // at cast time. Only damage + effect mana are spent upfront.
-    const totalCost = costs.totalCost ?? 0;
     const PENDING_DELIVERY = 1;
-    const castTimeCost = Math.max(0, totalCost - PENDING_DELIVERY);
+    // Price from the components, not costs.totalCost: vagabond 5.38's calculator
+    // already defers Imbue's Damage/Effect mana (its Imbue base cost is 0 and the
+    // total excludes dice/effect), so "total − 1" charged nothing upfront. Older
+    // systems price the Imbue delivery at 1 — that 1 is what's deferred to the hit.
+    const deliveryBase = costs.deliveryBaseCost ?? 0;
+    const componentTotal = (costs.damageCost ?? 0) + (costs.fxCost ?? 0) + deliveryBase + (costs.deliveryIncreaseCost ?? 0);
+    const spellReduce = actor.system?.bonuses?.spellManaCostReduction || 0;
+    const totalCost = Math.max(0, componentTotal - spellReduce);
+    const castTimeCost = Math.max(0, totalCost - (deliveryBase >= PENDING_DELIVERY ? PENDING_DELIVERY : 0));
 
     // Validate caster has the upfront cost. castTimeCost can be 0 for an
     // effect-only or delivery-only spell — that's fine, no upfront mana then.
