@@ -22,7 +22,7 @@ export async function applyCalculatedDamage(targetActor, rawDamage, damageType, 
   let finalDamage = rawDamage;
   try {
     const { VagabondDamageHelper } = await import(
-      "../../../systems/vagabond/module/helpers/damage-helper.mjs"
+      "/systems/vagabond/module/helpers/damage-helper.mjs"
     );
     finalDamage = VagabondDamageHelper.calculateFinalDamage(
       targetActor, rawDamage, damageType, weapon
@@ -1175,12 +1175,9 @@ export function registerCountdownDamageHook() {
     if (!game.user.isGM) return;
 
     const content = message.content ?? "";
-    console.log(`${MODULE_ID} | createChatMessage hook — checking for countdown dice. Has "Countdown Dice": ${content.includes("Countdown Dice")}, Has "countdown": ${content.toLowerCase().includes("countdown")}`);
 
     // Check if this is a countdown dice chat card
     if (!content.toLowerCase().includes("countdown")) return;
-
-    console.log(`${MODULE_ID} | Countdown chat detected. Content snippet:`, content.substring(0, 500));
 
     // Extract the dice name from the chat card — try multiple patterns
     let diceName = null;
@@ -1193,7 +1190,6 @@ export function registerCountdownDamageHook() {
       if (nameMatch) diceName = nameMatch[1].trim();
     }
 
-    console.log(`${MODULE_ID} | Extracted dice name:`, diceName);
     if (!diceName) return;
 
     // Find the matching countdown die journal entry with our damage flags
@@ -1204,23 +1200,13 @@ export function registerCountdownDamageHook() {
       return !!j.flags?.[MODULE_ID]?.countdownDamage;
     });
 
-    console.log(`${MODULE_ID} | Journal match:`, journal ? `${journal.name} (id: ${journal.id})` : "NOT FOUND");
-    if (!journal) {
-      // Debug: list all countdown dice journals
-      const allCD = game.journal.filter(j => j.flags?.vagabond?.countdownDice?.type === "countdownDice");
-      console.log(`${MODULE_ID} | All countdown dice:`, allCD.map(j => ({
-        name: j.flags.vagabond.countdownDice.name,
-        hasOurFlags: !!j.flags?.[MODULE_ID]?.countdownDamage,
-      })));
-      return;
-    }
+    if (!journal) return;
 
     const dmgData = journal.flags[MODULE_ID].countdownDamage;
 
     // Extract roll result from the chat card
     const resultMatch = content.match(/Result:\s*(\d+)/);
     const rollResult = resultMatch ? parseInt(resultMatch[1]) : 0;
-    console.log(`${MODULE_ID} | Roll result:`, rollResult, "Damage data:", dmgData);
     if (rollResult <= 0) return;
 
     // Find the target — prefer the token actor (handles unlinked tokens)
@@ -1233,7 +1219,10 @@ export function registerCountdownDamageHook() {
     // Fallback to world actor
     if (!targetActor) targetActor = game.actors.get(dmgData.targetActorId);
     if (!targetActor) {
-      console.warn(`${MODULE_ID} | Target actor not found: ${dmgData.targetActorId}`);
+      // The target was deleted (e.g. a defeated token removed). The countdown has
+      // nothing left to damage — remove it instead of re-rolling it every round.
+      console.warn(`${MODULE_ID} | Countdown "${diceName}": target gone, removing it.`);
+      await journal.delete().catch(() => {});
       return;
     }
 
