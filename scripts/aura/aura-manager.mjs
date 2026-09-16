@@ -19,7 +19,7 @@
  * update position on every token move via the updateToken hook.
  */
 
-import { MODULE_ID, log, onRenderChatMessage, actorIdFromRef } from "../utils.mjs";
+import { MODULE_ID, log, onRenderChatMessage, actorIdFromRef, forcedDeletion } from "../utils.mjs";
 import { uuidFor as catalogUuidFor } from "../active-effects-catalog.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 
@@ -1464,7 +1464,7 @@ export const AuraManager = {
         if (origMetal === undefined) continue;
         await weapon.update({
           "system.metal": origMetal || "",
-          [`flags.${MODULE_ID}.-=blessOrigMetal`]: null
+          ...forcedDeletion(`flags.${MODULE_ID}.blessOrigMetal`)
         });
         log("AuraManager", `Restored ${weapon.name} metal to "${origMetal}" on ${actor.name}`);
       }

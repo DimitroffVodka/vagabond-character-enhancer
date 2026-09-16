@@ -1,4 +1,4 @@
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, forcedDeletion } from "../utils.mjs";
 import { Fixtures } from "./fixtures.mjs";
 import { createAssert } from "./assertions.mjs";
 import { ConsoleWatcher } from "./console-watcher.mjs";
@@ -206,7 +206,7 @@ export const Runner = {
     // Delete top-level keys absent from snapshot
     for (const k of Object.keys(current ?? {})) {
       if (!(k in snapshot)) {
-        out[`${prefix}.-=${k}`] = null;
+        Object.assign(out, forcedDeletion(`${prefix}.${k}`));
       }
     }
     // Recurse into nested objects that exist in both snapshot and current

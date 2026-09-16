@@ -8,7 +8,7 @@
  * A dialog asks the caster to choose mode, then applies the appropriate effect.
  */
 
-import { MODULE_ID, log, onRenderChatMessage, actorIdFromRef } from "../utils.mjs";
+import { MODULE_ID, log, onRenderChatMessage, actorIdFromRef, forcedDeletion } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -98,7 +98,7 @@ export const BlessManager = {
           if (origMetal === undefined) continue;
           await weapon.update({
             "system.metal": origMetal || "",
-            [`flags.${MODULE_ID}.-=blessOrigMetal`]: null
+            ...forcedDeletion(`flags.${MODULE_ID}.blessOrigMetal`)
           });
           log("Bless", `Restored ${weapon.name} metal to "${origMetal}" on ${actor.name}`);
         }
@@ -120,7 +120,7 @@ export const BlessManager = {
           if (origMetal === undefined) continue;
           await weapon.update({
             "system.metal": origMetal || "",
-            [`flags.${MODULE_ID}.-=blessOrigMetal`]: null
+            ...forcedDeletion(`flags.${MODULE_ID}.blessOrigMetal`)
           });
           log("Bless", `Restored ${weapon.name} metal to "${origMetal}" on ${actor.name} (aura effect removed)`);
         }
@@ -174,7 +174,7 @@ export const BlessManager = {
                 const origMetal = weapon.getFlag(MODULE_ID, "blessOrigMetal");
                 await weapon.update({
                   "system.metal": origMetal || "",
-                  [`flags.${MODULE_ID}.-=blessOrigMetal`]: null
+                  ...forcedDeletion(`flags.${MODULE_ID}.blessOrigMetal`)
                 });
               }
             }

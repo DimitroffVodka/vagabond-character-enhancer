@@ -67,6 +67,20 @@ export function resolveActorRef(ref) {
 }
 
 /**
+ * Update-object entry that deletes `path` (e.g. "flags.vce.someKey").
+ * Foundry 14 uses the `_del` operator; the legacy "-=key" form it replaces
+ * still works but logs a deprecation warning on every update. Foundry 13 only
+ * knows the legacy form.
+ * @param {string} path - dotted path to the key to delete
+ * @returns {object} spread into an update object
+ */
+export function forcedDeletion(path) {
+  if (globalThis._del !== undefined) return { [path]: globalThis._del };
+  const i = path.lastIndexOf(".");
+  return { [`${path.slice(0, i)}.-=${path.slice(i + 1)}`]: null };
+}
+
+/**
  * Bare actor id for a system actor reference (UUID on 5.38, bare id before).
  * VCE code compares these against `actor.id` and feeds them to
  * `game.actors.get`, so normalise system-written refs at the point they're read.

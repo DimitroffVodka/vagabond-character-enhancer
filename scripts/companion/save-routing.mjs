@@ -1,4 +1,4 @@
-import { MODULE_ID } from "../utils.mjs";
+import { MODULE_ID, forcedDeletion } from "../utils.mjs";
 
 export const FLAG_CONTROLLER_ACTOR = "controllerActorId";
 export const FLAG_CONTROLLER_TYPE  = "controllerType";
@@ -75,7 +75,7 @@ export async function setController(actor, { controllerId, type }) {
 export async function clearController(actor) {
   if (!actor) return;
   await actor.update({
-    [`flags.${MODULE_ID}.-=${FLAG_CONTROLLER_ACTOR}`]: null,
-    [`flags.${MODULE_ID}.-=${FLAG_CONTROLLER_TYPE}`]:  null
+    ...forcedDeletion(`flags.${MODULE_ID}.${FLAG_CONTROLLER_ACTOR}`),
+    ...forcedDeletion(`flags.${MODULE_ID}.${FLAG_CONTROLLER_TYPE}`)
   });
 }

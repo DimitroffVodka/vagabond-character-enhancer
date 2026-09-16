@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Barbarian features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage, resolveActorRef } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage, resolveActorRef, forcedDeletion } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -438,7 +438,7 @@ export const BarbarianFeatures = {
       updates.push({
         _id: weapon.id,
         "system.explodeValues": original,
-        [`flags.${MODULE_ID}.-=originalExplodeValues`]: null
+        ...forcedDeletion(`flags.${MODULE_ID}.originalExplodeValues`)
       });
     }
 
@@ -703,7 +703,7 @@ export const BarbarianFeatures = {
           log("Barbarian",`Rage: Weapon ${item.name} unequipped while berserk — restoring explodeValues`);
           await item.update({
             "system.explodeValues": original,
-            [`flags.${MODULE_ID}.-=originalExplodeValues`]: null
+            ...forcedDeletion(`flags.${MODULE_ID}.originalExplodeValues`)
           });
         }
         return;

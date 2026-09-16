@@ -14,7 +14,7 @@
  *   await gmRequest("updateActorFlags", { actorId, scope, flags: {key:value, ...} });
  */
 
-import { MODULE_ID, log } from "./utils.mjs";
+import { MODULE_ID, log, forcedDeletion } from "./utils.mjs";
 
 const SOCKET_KEY = `module.${MODULE_ID}`;
 
@@ -346,11 +346,11 @@ async function _handleRequest(data) {
         return { error: "updateActorFlags: flags object required" };
       }
       // Build the update payload from { key: value } map.
-      // value:null means unset — use the -= prefix syntax.
+      // value:null means unset.
       const payload = {};
       for (const [key, value] of Object.entries(data.flags)) {
         if (value === null || value === undefined) {
-          payload[`flags.${data.scope}.-=${key}`] = null;
+          Object.assign(payload, forcedDeletion(`flags.${data.scope}.${key}`));
         } else {
           payload[`flags.${data.scope}.${key}`] = value;
         }

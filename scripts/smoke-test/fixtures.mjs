@@ -1,4 +1,4 @@
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, forcedDeletion } from "../utils.mjs";
 import { FIXTURE_DEFS, FIXTURE_FOLDER_NAME, PACKS } from "./fixture-defs.mjs";
 
 const SMOKE_FLAG = "smokeTestFixture";
@@ -73,7 +73,7 @@ export const Fixtures = {
     const flags = actor.flags?.[MODULE_ID] ?? {};
     const deletions = {};
     for (const k of Object.keys(flags)) {
-      if (!KEEP.has(k)) deletions[`flags.${MODULE_ID}.-=${k}`] = null;
+      if (!KEEP.has(k)) Object.assign(deletions, forcedDeletion(`flags.${MODULE_ID}.${k}`));
     }
     if (Object.keys(deletions).length) {
       await actor.update(deletions, { diff: false });
