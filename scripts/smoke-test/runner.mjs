@@ -148,9 +148,12 @@ export const Runner = {
       const removed = (s.itemData ?? []).filter(d => !presentIds.has(d._id));
       if (removed.length) await actor.createEmbeddedDocuments("Item", removed, { keepId: true });
 
-      // Delete effects added during the test
+      // Delete effects added during the test. The item restores above make the
+      // feature detector remove managed AEs on its own; let that finish first,
+      // or both sides delete the same effect ("ActiveEffect … does not exist!").
+      if (newItems.length || removed.length) await game.vagabondCharacterEnhancer?.rescan?.(actor);
       const newEffects = actor.effects.filter(e => !s.effectIds.includes(e.id)).map(e => e.id);
-      if (newEffects.length) await actor.deleteEmbeddedDocuments("ActiveEffect", newEffects);
+      if (newEffects.length) await actor.deleteEmbeddedDocuments("ActiveEffect", newEffects.filter(id => actor.effects.has(id)));
 
       // Restore module flags. Foundry merges flag updates rather than replacing
       // them, so we must do two sequential actor.update() calls:
