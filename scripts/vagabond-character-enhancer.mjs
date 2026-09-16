@@ -869,7 +869,11 @@ Hooks.once("ready", async () => {
         });
       }
 
-      let result = unwrap(origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice));
+      const rawCalc = origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice);
+      let result = unwrap(rawCalc);
+      // 5.38 adds Flanked's flat bonus before armor inside the detailed calc; the
+      // caps below ("restore full damage") must include it or they strip the +2.
+      damage += rawCalc?.flankedBonus ?? 0;
 
       // Silver weakness fix: the system skips metal checks for typeless ("-") damage.
       // If the weapon is silvered and the target is weak to silver, bypass armor.
@@ -1023,19 +1027,24 @@ Hooks.once("ready", async () => {
       const count = VagabondDamageHelper._vceRemoveDiceCount || 1;
       if (count <= 1) return origRemoveHighestDie.call(this, rollTermsData);
 
-      // Remove N highest dice
+      // Remove N highest dice. Like the system's single-die version: skip inactive
+      // (exploded-away) results, and never remove the pre-rolled weakness die —
+      // weakness damage bypasses the save.
       let total = rollTermsData.total;
       const allResults = [];
+      let weaknessSum = 0;
       for (const term of rollTermsData.terms) {
         if (term.type === "Die" && term.results) {
           for (const result of term.results) {
+            if (result.active === false) continue;
+            if (result.weakness) { weaknessSum += result.result; continue; }
             allResults.push(result.result);
           }
         }
       }
 
-      // If dice count <= remove count, save completely negates damage
-      if (allResults.length <= count) return 0;
+      // If dice count <= remove count, the save negates all but the weakness die
+      if (allResults.length <= count) return weaknessSum;
 
       // Sort descending and remove the N highest
       allResults.sort((a, b) => b - a);
@@ -1069,7 +1078,9 @@ Hooks.once("ready", async () => {
       VagabondItem.prototype.rollAttack = async function (actor, favorHinder = "none", difficultyOverride = null, ...rest) {
         const ctx = {
           item: this, actor, features: getFeatures(actor), favorHinder,
-          VagabondDamageHelper
+          VagabondDamageHelper,
+          // 5.38 throw action: the system already merged the Far-range Hinder.
+          thrownBySystem: !!rest[0]?.thrown
         };
 
         // Stash current targets on the weapon for rollDamage to use
@@ -1833,7 +1844,7 @@ Hooks.once("ready", async () => {
 
     // --- _rollSave: Dispatch to Bard + Dancer ---
     const origRollSave = VagabondDamageHelper._rollSave;
-    VagabondDamageHelper._rollSave = async function (actor, saveType, isHindered, shiftKey = false, ctrlKey = false, attackerModifier = 'none') {
+    VagabondDamageHelper._rollSave = async function (actor, saveType, isHindered, shiftKey = false, ctrlKey = false, attackerModifier = 'none', ...rest) {
       const ctx = {
         actor, saveType, isHindered, ctrlKey, attackerModifier,
         saveSourceActorId: _saveSourceActorId,
@@ -1846,7 +1857,8 @@ Hooks.once("ready", async () => {
       HunterFeatures.onPreRollSave(ctx);
       PsychicFeatures.onPreRollSave(ctx);
       try {
-        const result = await origRollSave.call(this, actor, saveType, ctx.isHindered, shiftKey, ctx.ctrlKey, ctx.attackerModifier);
+        // ...rest = 5.38's resistanceFavor vote (status resistance grants its own Favor).
+        const result = await origRollSave.call(this, actor, saveType, ctx.isHindered, shiftKey, ctx.ctrlKey, ctx.attackerModifier, ...rest);
         if (ctx.needRestore) actor.system.favorHinder = ctx.origFH;
         if (ctx.rollBuilderPatched) {
           const { VagabondRollBuilder } = await import("/systems/vagabond/module/helpers/roll-builder.mjs");

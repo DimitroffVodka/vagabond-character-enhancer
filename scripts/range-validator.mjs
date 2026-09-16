@@ -218,7 +218,9 @@ export const RangeValidator = {
 
       // --- Out of range check ---
       if (distance > maxRange) {
-        // Thrown weapons can reach Far with Hinder
+        // Thrown weapons can reach Far with Hinder (a 5.38 throw action has
+        // already merged that Hinder, so don't add it again)
+        if (hasThrown && maxRange === RANGE_NEAR && ctx.thrownBySystem) continue;
         if (hasThrown && maxRange === RANGE_NEAR) {
           // Allow but apply Hinder
           ctx.favorHinder = combineFavor(ctx.favorHinder, "hinder");
