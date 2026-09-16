@@ -61,6 +61,7 @@ export const Fixtures = {
     await this._wipeStaleFlags(a);
     await this._syncStats(a, def);
     await this._syncClass(a, def);
+    await this._syncPerks(a, def);
     await this._syncAncestry(a, def);
     await this._syncSpells(a, def);
     await this._syncItems(a, def);
@@ -95,7 +96,14 @@ export const Fixtures = {
   },
 
   async _syncClass(actor, def) {
-    if (!def.className) return;
+    // A classless def must still shed classes: swapClass() adds one mid-test,
+    // and a run interrupted before restore would otherwise leave it baked into
+    // every later snapshot.
+    if (!def.className) {
+      const stale = actor.items.filter(i => i.type === "class");
+      if (stale.length) await actor.deleteEmbeddedDocuments("Item", stale.map(i => i.id));
+      return;
+    }
     const existing = actor.items.find(i => i.type === "class" && i.name === def.className);
     if (existing && existing.system?.level === def.level) return;
     const stale = actor.items.filter(i => i.type === "class" && i.name !== def.className);
@@ -125,6 +133,17 @@ export const Fixtures = {
       if (data.system) data.system.level = def.level;
       await actor.createEmbeddedDocuments("Item", [data]);
     }
+  },
+
+  /**
+   * Remove perk items the def doesn't list — tier C adds one per test, so an
+   * interrupted run leaves it behind. Only removes: every def declares
+   * `perks: []`, so adding perks from the def isn't needed yet.
+   */
+  async _syncPerks(actor, def) {
+    const keep = new Set(def.perks ?? []);
+    const stale = actor.items.filter(i => i.type === "perk" && !keep.has(i.name));
+    if (stale.length) await actor.deleteEmbeddedDocuments("Item", stale.map(i => i.id));
   },
 
   async _syncAncestry(actor, def) {
