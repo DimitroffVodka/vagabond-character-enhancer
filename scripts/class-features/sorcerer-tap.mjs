@@ -37,6 +37,9 @@
 
 import { MODULE_ID, log, hasFeature } from "../utils.mjs";
 
+/** SpellCastDialog → actor, captured from vagabond.spellCastMessages. */
+const _castDialogActors = new WeakMap();
+
 const FLAG_REDUCTION = "sorcererTapReduction";
 const FLAG_AE = "sorcererTapAE";
 
@@ -50,7 +53,11 @@ export const SorcererTap = {
     // Sheet button injection on the Tap feature row.
     Hooks.on("renderApplicationV2", (app, html) => this._injectSheetButton(app, html));
 
-    // Cast dialog "[Tap]" link injection.
+    // Cast dialog "[Tap]" link injection. 5.38's SpellCastDialog keeps its actor
+    // private; its message hook (fired while preparing each render) exposes it.
+    Hooks.on("vagabond.spellCastMessages", (dialog, _messages, ctx) => {
+      if (ctx?.actor) _castDialogActors.set(dialog, ctx.actor);
+    });
     Hooks.on("renderApplicationV2", (app, html) => this._injectCastDialogLink(app, html));
 
     // Rest detection — same content-match pattern as Revelator Lay on Hands.
@@ -297,7 +304,7 @@ export const SorcererTap = {
    * primary entry point regardless).
    */
   _injectCastDialogLink(app, html) {
-    const actor = app.actor || app.document;
+    const actor = app.actor || app.document || _castDialogActors.get(app);
     if (!actor || actor.type !== "character") return;
     if (!hasFeature(actor, "sorcerer_tap")) return;
 
@@ -307,7 +314,11 @@ export const SorcererTap = {
     // Look for typical cast dialog containers. The system uses ApplicationV2
     // for spell handling; the actual selector is fragile, so we fall back
     // gracefully if not present.
-    const castContainers = el.querySelectorAll(".spell-cast-dialog, .cast-dialog, .spell-handler__cast");
+    // The 5.38 dialog's root element IS .spell-cast-dialog (querySelectorAll never
+    // matches the element it's called on).
+    const castContainers = el.classList?.contains("spell-cast-dialog")
+      ? [el]
+      : el.querySelectorAll(".spell-cast-dialog, .cast-dialog, .spell-handler__cast");
     for (const container of castContainers) {
       if (container.querySelector(`.${MODULE_ID}-tap-link`)) continue;
 
@@ -325,7 +336,7 @@ export const SorcererTap = {
       });
 
       // Append to the first heading we find inside, else the container itself.
-      const heading = container.querySelector("h1, h2, h3, .header, .title");
+      const heading = container.querySelector(".vsc-name, h1, h2, h3, .header, .title");
       (heading || container).appendChild(link);
     }
   },
