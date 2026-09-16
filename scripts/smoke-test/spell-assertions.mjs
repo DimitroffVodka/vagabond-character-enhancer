@@ -17,64 +17,6 @@ import { MODULE_ID } from "../utils.mjs";
 export const SPELL_HANDLERS = {
 
   /* ---------------------------------------------------------------------- */
-  /*  imbue — ImbueManager.applyImbue(actor, weaponId, spellData, opts)      */
-  /* ---------------------------------------------------------------------- */
-  imbue: {
-    setupCaster: "Witch",
-    needsTarget: false,
-    cast: async (caster) => {
-      const weapon = caster.items.find(i =>
-        (i.type === "weapon" || (i.type === "equipment" && i.system?.equipmentType === "weapon"))
-      );
-      if (!weapon) throw new Error("imbue: Witch fixture has no weapon item");
-
-      const burnSpell = caster.items.find(i => i.name === "Burn" && i.type === "spell");
-      if (!burnSpell) throw new Error("imbue: Witch fixture has no Burn spell");
-
-      // Ensure weapon is equipped
-      if (!weapon.system?.equipped) {
-        await weapon.update({ "system.equipped": true }).catch(() => {});
-        await new Promise(r => setTimeout(r, 100));
-      }
-
-      const IM = game.vagabondCharacterEnhancer.imbue;
-      if (typeof IM?.applyImbue !== "function") {
-        throw new Error("ImbueManager.applyImbue is not a function on the exposed API");
-      }
-
-      // Clear any leftover imbue first
-      await IM.clearImbue(caster).catch(() => {});
-
-      const spellData = {
-        spellId: burnSpell.id,
-        spellName: burnSpell.name,
-        spellImg: burnSpell.img,
-        damageType: burnSpell.system?.damageType || "fire",
-        damageDice: 1,
-        dieSize: 6,
-        hasEffect: true,
-        effectDesc: "",
-        pendingDeliveryCost: 0, // skip mana deduction in test
-        castInCombat: false,
-        expiresAtRound: null,
-      };
-      await IM.applyImbue(caster, weapon.id, spellData, {});
-    },
-    assert: async ({ caster, assert }) => {
-      const flag = caster.getFlag(MODULE_ID, "imbue");
-      assert(!!flag, `imbue flag should be set on caster after applyImbue; got ${JSON.stringify(flag)}`);
-      if (flag) {
-        assert(typeof flag.weaponId === "string", `imbue.weaponId should be a string; got ${JSON.stringify(flag.weaponId)}`);
-        assert(typeof flag.spellId === "string", `imbue.spellId should be a string; got ${JSON.stringify(flag.spellId)}`);
-      }
-    },
-    cleanup: async ({ caster }) => {
-      const IM = game.vagabondCharacterEnhancer.imbue;
-      if (IM?.clearImbue) await IM.clearImbue(caster).catch(() => {});
-    }
-  },
-
-  /* ---------------------------------------------------------------------- */
   /*  bless — BlessManager._applyBlessAllies(caster, [{actorId, actorName}]) */
   /* ---------------------------------------------------------------------- */
   bless: {

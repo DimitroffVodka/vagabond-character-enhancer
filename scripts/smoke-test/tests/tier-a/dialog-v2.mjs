@@ -9,7 +9,7 @@
  * `DialogV2.wait()`. These tests confirm:
  *   1. Draconic Resilience picker — clicking a damage-type button persists
  *      the actor flag.
- *   2. Imbue weapon picker — clicking a weapon button records imbue state.
+ * (The Imbue weapon picker went away with VCE's Imbue — the system owns it.)
  *
  * Both tests programmatically click the button rather than waiting on UI
  * input; the dialog briefly appears and is auto-dismissed.
@@ -86,57 +86,4 @@ export const tests = [
     },
   },
 
-  // ── Imbue weapon picker: buttons fire applyImbue ─────────────────────────
-  {
-    id: "dialogv2.imbue-weapon-picker-button-fires",
-    name: "DialogV2: Imbue weapon picker — clicking a weapon records imbue state",
-    tier: "a",
-    usesFixtures: ["Witch"],
-    // The Witch fixture now ships two equipped weapons (see fixture-defs), which
-    // is what makes the picker open at all — 1 auto-selects, 0 warns out. This
-    // used to carry a skip guarding that precondition; the guard outlived its
-    // purpose and hid the fact that the test called a method that no longer
-    // exists. If it regresses, let it fail loudly.
-    run: async ({ fixtures, assert, wait }) => {
-      const actor = fixtures.Witch;
-      if (!actor) { assert(false, "Witch fixture missing"); return; }
-
-      // Pick the first equipped weapon to target
-      const weapons = actor.items.filter(i =>
-        i.system?.equipped && (i.type === "weapon" || (i.type === "equipment" && i.system?.equipmentType === "weapon"))
-      );
-      const targetWeapon = weapons[0];
-
-      const { ImbueManager } = await import("../../../spell-features/imbue-manager.mjs");
-      const spellData = {
-        spellId: "smoke-test-imbue",
-        spellName: "TestImbue",
-        spellImg: "icons/svg/aura.svg",
-        damageType: "fire",
-        damageDice: 1,
-        dieSize: 6,
-        hasEffect: false,
-      };
-
-      const dialogPromise = ImbueManager.showWeaponDialog(actor, spellData);
-      const clicked = await _clickDialogButton(targetWeapon.id, 1500);
-      assert(clicked, `Imbue weapon button '${targetWeapon.id}' should be clickable within 1.5s`);
-
-      const result = await dialogPromise.catch(() => null);
-      await wait(200);
-
-      assert(result === targetWeapon.id, `Dialog should resolve to weapon id, got ${result}`);
-      const imbueState = actor.getFlag(MODULE_ID, "imbue");
-      assert(!!imbueState, "Imbue flag should be set after button click");
-      if (imbueState) {
-        assert(imbueState.weaponId === targetWeapon.id,
-          `Imbue.weaponId should be the clicked weapon, got ${imbueState.weaponId}`);
-        assert(imbueState.spellName === "TestImbue",
-          `Imbue.spellName should be 'TestImbue', got ${imbueState.spellName}`);
-      }
-
-      // Cleanup — clearImbue removes the flag + display AE
-      try { await ImbueManager.clearImbue(actor); } catch {}
-    },
-  },
 ];

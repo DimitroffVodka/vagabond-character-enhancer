@@ -69,7 +69,6 @@ Module-level enforcement of status-vs-status interactions the system describes b
 
 If both modules are active, several features compose:
 
-- **Imbue dice + Relic dice** — Imbue's spell dice are appended to the Roll Damage button's `data-damage-formula`. When the player clicks Roll Damage, vagabond-crawler's relic engine injects relic dice (Strike I/II/III, Bane, Vicious crit, typed Strike) on top. Final roll formula is `weapon + imbue + relic`, all in one roll.
 - **Bard Virtuoso** — Crawler exposes a Virtuoso button on the combat strip dropdown.
 - **Dancer Step Up** — Crawler exposes Step Up on the combat strip dropdown.
 - **Merchant Gold Sink** — Favorited shop items appear in the crawler combat strip dropdown for quick purchasing.

@@ -227,7 +227,7 @@ saves.reflex.bonus, saves.endure.bonus, saves.will.bonus
 - `scripts/ancestry-features/` — One file per ancestry with trait registries
 - `scripts/perk-features.mjs` — Perk automation registry (all 104 perks with flags)
 - `scripts/perk-features/` — Per-perk subdirectory for complex perks: `familiar.mjs`, `animal-companion.mjs`, `conjurer.mjs`, `raise-perks.mjs` (Grim Harvest / Infesting Burst / Necromancer), `reanimator.mjs`. Simple flag-based perks stay in `perk-features.mjs`.
-- `scripts/spell-features/` — Spell automation. Managers: `bless-manager.mjs`, `imbue-manager.mjs`, `ward-manager.mjs`, `effect-only-handler.mjs`. Companion-summoning spell adapters (v0.4.0): `beast-spell.mjs`, `raise-spell.mjs`, `animate-spell.mjs`.
+- `scripts/spell-features/` — Spell automation. Managers: `bless-manager.mjs`, `ward-manager.mjs`, `effect-only-handler.mjs`. Companion-summoning spell adapters (v0.4.0): `beast-spell.mjs`, `raise-spell.mjs`, `animate-spell.mjs`.
 - `scripts/aura/aura-manager.mjs` — Persistent spell aura templates that follow tokens and apply buffs (Revelator Paragon's Aura)
 - `scripts/brawl/brawl-intent.mjs` — Grapple/Shove intent system for Brawl attacks
 - `scripts/merchant/gold-sink-sheet.mjs` — Merchant Gold Sink shop tab injection (shares junk flag with vagabond-crawler)
@@ -263,7 +263,7 @@ Key points:
 - **Bard:** `virtuoso(actor)`, `getVirtuosoData(actor)` (crawler API)
 - **Dancer:** `stepUp(actor)`, `getStepUpData(actor)` (crawler API)
 - **Hunter / Revelator / Draken:** `hunterMark(actor)`, `layOnHands(actor)`, `setDraconicResilience(actor)`
-- **Aura / Imbue / Brawl:** `aura(actor, spell, radius)`, `auraMenu(actor)`, `auraEnd(actor)`, `imbue` (ImbueManager), `clearImbue(actor)`, `brawlIntent` (BrawlIntent)
+- **Aura / Brawl:** `aura(actor, spell, radius)`, `auraMenu(actor)`, `auraEnd(actor)`, `brawlIntent` (BrawlIntent). Imbue is the system's (`helpers/imbue-helper.mjs`).
 - **Witch:** `witch`, `hex(...)`, `unhex(...)`, `betwixt(actor)`
 - **Summons / familiars:** `summoner`, `conjure(actor)`, `banish(actor)`, `getSummonData(actor)`, `familiar`, `conjureFamiliar(actor)`, `banishFamiliar(actor)`
 - **Alchemy / Polymorph:** `alchemist`, `alchemy`, `polymorph`

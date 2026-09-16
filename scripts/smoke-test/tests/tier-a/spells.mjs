@@ -2,10 +2,7 @@
  * Tier A spell-system tests.
  *
  * API notes (from source):
- * - ImbueManager: exposed as game.vagabondCharacterEnhancer.imbue (= ImbueManager object).
- *   Public entry points: applyImbue(actor, weaponId, spellData, opts),
- *   clearImbue(actor), handleImbueCast(actor, spell, state, costs).
- *   There is NO `.imbue(actor, spell, weapon)` convenience method per CLAUDE.md.
+ * - Imbue: the system's native flow (helpers/imbue-helper.mjs, weapon.system.imbuedSpell).
  * - BlessManager: entirely hook-driven via createChatMessage. No direct bless(caster, targets)
  *   call exists. _applyBlessAllies/_applyBlessWeapons are internal methods.
  * - WardManager: internal methods only (_applyWardAE, _promptWardReaction).
@@ -18,135 +15,26 @@ import { A } from "../../assertions.mjs";
 
 export const tests = [
   {
-    id: "imbue.attaches-to-weapon",
-    name: "ImbueManager.applyImbue attaches imbue flag to wielder actor",
+    id: "imbue.native-payload-roundtrip",
+    name: "Imbue is the system's: VagabondImbueHelper writes and clears weapon.system.imbuedSpell",
     tier: "a",
     usesFixtures: ["Witch"],
-    run: async ({ fixtures, assert, wait }) => {
+    run: async ({ fixtures, assert }) => {
       const a = fixtures.Witch;
-      const weapon = a.items.find(i =>
-        (i.type === "weapon" || (i.type === "equipment" && i.system?.equipmentType === "weapon"))
-        && i.system?.equipped
-      );
-      // Some fixture builders don't auto-equip — fall back to first weapon
-      const anyWeapon = weapon ?? a.items.find(i =>
-        i.type === "weapon" || (i.type === "equipment" && i.system?.equipmentType === "weapon")
-      );
-      assert(!!anyWeapon, `Witch fixture has a weapon; items: ${a.items.map(i => i.name).join(", ")}`);
-
-      const burnSpell = a.items.find(i => i.name === "Burn" && i.type === "spell");
-      assert(!!burnSpell, "Witch fixture has Burn spell");
-
-      if (!anyWeapon || !burnSpell) return;
-
-      const IM = game.vagabondCharacterEnhancer.imbue;
-      assert(typeof IM?.applyImbue === "function", "ImbueManager.applyImbue is a function");
-      if (typeof IM?.applyImbue !== "function") return;
-
-      // Ensure weapon is equipped (applyImbue gating may check equipped)
-      if (!anyWeapon.system?.equipped) {
-        try { await anyWeapon.update({ "system.equipped": true }); } catch (e) { /* ignore */ }
-        await wait(100);
-      }
-
-      // Clear any pre-existing imbue
-      await IM.clearImbue(a).catch(() => {});
-
+      const weapon = a.items.find(i => i.type === "equipment" && i.system?.equipmentType === "weapon");
+      const burn = a.items.find(i => i.name === "Burn" && i.type === "spell");
+      assert(!!weapon && !!burn, "Witch fixture has a weapon and Burn");
+      if (!weapon || !burn) return;
+      assert(game.vagabondCharacterEnhancer.imbue === undefined, "VCE no longer exposes its own Imbue");
+      const { VagabondImbueHelper } = await import("/systems/vagabond/module/helpers/imbue-helper.mjs");
       try {
-        const spellData = {
-          spellId: burnSpell.id,
-          spellName: burnSpell.name,
-          spellImg: burnSpell.img,
-          damageType: burnSpell.system?.damageType || "fire",
-          damageDice: 1,
-          dieSize: 6,
-          hasEffect: true,
-          effectDesc: burnSpell.system?.description || "",
-          pendingDeliveryCost: 0,  // skip mana cost for test
-          castInCombat: false,
-          expiresAtRound: null,
-        };
-        await IM.applyImbue(a, anyWeapon.id, spellData, {});
-        await wait(300);
-
-        const imbueFlag = a.getFlag?.(MODULE_ID, "imbue");
-        assert(!!imbueFlag, `actor should have imbue flag after applyImbue; got ${JSON.stringify(imbueFlag)}`);
-        if (imbueFlag) {
-          assert(imbueFlag.weaponId === anyWeapon.id, `imbue.weaponId should be "${anyWeapon.id}", got "${imbueFlag.weaponId}"`);
-          assert(imbueFlag.spellId === burnSpell.id, `imbue.spellId should be "${burnSpell.id}", got "${imbueFlag.spellId}"`);
-        }
-      } catch (e) {
-        assert(false, `ImbueManager.applyImbue threw: ${e.message}`);
+        await VagabondImbueHelper.imbueWeapon(weapon, { sourceActor: a, spell: burn, damageDice: 1, deferredMana: 0, deferredPayment: true, manaSkillKey: "" });
+        assert(weapon.system.imbuedSpell?.active === true, "imbuedSpell.active after imbueWeapon");
+        assert(weapon.system.imbuedSpell?.spellName === burn.name, `imbuedSpell.spellName is ${weapon.system.imbuedSpell?.spellName}`);
       } finally {
-        await IM.clearImbue(a).catch(() => {});
-        await wait(150);
+        await VagabondImbueHelper.clearImbue(weapon);
       }
-    }
-  },
-
-  {
-    id: "imbue.detaches-on-clear",
-    name: "ImbueManager.clearImbue removes the imbue flag and AE",
-    tier: "a",
-    usesFixtures: ["Witch"],
-    run: async ({ fixtures, assert, wait }) => {
-      const a = fixtures.Witch;
-      const anyWeapon = a.items.find(i =>
-        i.type === "weapon" || (i.type === "equipment" && i.system?.equipmentType === "weapon")
-      );
-      const burnSpell = a.items.find(i => i.name === "Burn" && i.type === "spell");
-
-      assert(!!anyWeapon && !!burnSpell, `prerequisites: weapon=${!!anyWeapon}, burn=${!!burnSpell}`);
-      if (!anyWeapon || !burnSpell) return;
-
-      const IM = game.vagabondCharacterEnhancer.imbue;
-      if (typeof IM?.applyImbue !== "function" || typeof IM?.clearImbue !== "function") {
-        assert(false, "ImbueManager.applyImbue or clearImbue not available");
-        return;
-      }
-
-      // Ensure weapon is equipped
-      if (!anyWeapon.system?.equipped) {
-        try { await anyWeapon.update({ "system.equipped": true }); } catch (e) { /* ignore */ }
-        await wait(100);
-      }
-
-      await IM.clearImbue(a).catch(() => {});
-
-      try {
-        const spellData = {
-          spellId: burnSpell.id,
-          spellName: burnSpell.name,
-          spellImg: burnSpell.img,
-          damageType: burnSpell.system?.damageType || "fire",
-          damageDice: 1,
-          dieSize: 6,
-          hasEffect: true,
-          effectDesc: "",
-          pendingDeliveryCost: 0,
-          castInCombat: false,
-          expiresAtRound: null,
-        };
-        await IM.applyImbue(a, anyWeapon.id, spellData, {});
-        await wait(200);
-
-        // Verify flag was set before clearing
-        const imbueBefore = a.getFlag?.(MODULE_ID, "imbue");
-        assert(!!imbueBefore, "imbue flag present after applyImbue (pre-clear)");
-
-        // Now clear it
-        await IM.clearImbue(a);
-        await wait(250);
-
-        const imbueAfter = a.getFlag?.(MODULE_ID, "imbue");
-        assert(!imbueAfter, `imbue flag should be cleared; got ${JSON.stringify(imbueAfter)}`);
-
-        // AE should also be gone
-        const imbueAE = a.effects.find(e => e.getFlag?.(MODULE_ID, "imbueAE"));
-        assert(!imbueAE, `imbue AE should be removed; got "${imbueAE?.name}"`);
-      } catch (e) {
-        assert(false, `imbue/clear threw: ${e.message}`);
-      }
+      assert(!weapon.system.imbuedSpell?.active, "imbuedSpell cleared");
     }
   },
 

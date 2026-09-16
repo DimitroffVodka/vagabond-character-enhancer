@@ -107,8 +107,6 @@ const DEPENDENCIES = [
   ["helpers/chat-card.mjs",               "VagabondChatCard",     "spellCast"],
   ["helpers/roll-builder.mjs",            "VagabondRollBuilder",  "calculateCritThreshold"],
   ["sheets/handlers/spell-handler.mjs",   "SpellHandler",         "prototype.castSpell"],
-  // Imbue cost authority — called from the _executeCast patch.
-  ["applications/spell-cast-dialog.mjs",  "SpellCastDialog",      "calculateCosts"],
 ];
 
 /* -------------------------------------------- */

@@ -153,81 +153,6 @@ function _recordCastUseFx(actorId, spellId, useFx) {
   setTimeout(() => _castUseFxBySpell.delete(key), 5 * 60_000);
 }
 
-/** Read the most recent recorded useFx for an actor+spell, or null if no
- *  record exists (entry expired, or this cast didn't go through the recorded
- *  paths). Returns the boolean recorded value when present. Used by the
- *  fallback imbue-button path to honor the original cast's Effect choice. */
-function _getCastUseFx(actorId, spellId) {
-  if (!actorId || !spellId) return null;
-  const key = `${actorId}:${spellId}`;
-  return _castUseFxBySpell.has(key) ? _castUseFxBySpell.get(key) : null;
-}
-
-/**
- * Apply the imbue's spell `causedStatuses` (and `critCausedStatuses` on a
- * crit) to all targets of a weapon attack. Reads the spell-effect payload
- * from the chat message's flag (set by ImbueManager._annotateWeaponAttackCard
- * after a delivery-authorized hit) so the apply path uses the SPELL's
- * statuses instead of the (always empty) WEAPON's statuses.
- *
- * Without this, an imbued attack with an effect-only spell like Charm would
- * silently apply nothing — the system's apply path reads
- * `sourceItem.system.causedStatuses` from the weapon, which is empty, and
- * never sees the imbue.
- *
- * `skipSaveRoll: true` mirrors the convention in handleApplyDirect — Apply
- * Direct treats the attack hit as the cast check (per Imbue's RAW: "The
- * Attack Check is used for the Cast Check"), so no separate status save.
- *
- * @param {HTMLElement} button - The Apply Direct button that was clicked
- * @param {Array} targets - Targets array from button.dataset.targets (already parsed)
- */
-async function _applyImbueStatusesIfPresent(button, targets) {
-  try {
-    const messageEl = button.closest?.("[data-message-id]");
-    const messageId = messageEl?.dataset?.messageId;
-    if (!messageId) return;
-    const message = game.messages.get(messageId);
-    if (!message) return;
-    const ctx = message.getFlag(MODULE_ID, "imbueStatusContext");
-    if (!ctx) return;
-
-    const isCritical = button.dataset.isCritical === "true";
-    const normalEntries = ctx.causedStatuses ?? [];
-    const critEntries = isCritical ? (ctx.critCausedStatuses ?? []) : [];
-    const mergedEntries = isCritical
-      ? [...critEntries, ...normalEntries.filter(e => !critEntries.some(c => c.statusId === e.statusId))]
-      : normalEntries;
-    if (mergedEntries.length === 0) return;
-
-    const { StatusHelper } = await import("/systems/vagabond/module/helpers/status-helper.mjs");
-    const { VagabondDamageHelper: VDH } = await import("/systems/vagabond/module/helpers/damage-helper.mjs");
-    const damageWasBlocked = (parseInt(button.dataset.damageAmount) || 0) === 0;
-
-    // Resolve targets via VagabondDamageHelper helper (it normalizes the
-    // stored-target shapes used by various card types).
-    let targetTokens = [];
-    try {
-      const stored = VDH._getTargetsFromButton?.(button) ?? targets ?? [];
-      targetTokens = VDH._resolveStoredTargets?.(stored) ?? [];
-    } catch {
-      // Fallback: walk targets array directly
-      targetTokens = (targets || []).map(t => canvas.tokens?.placeables?.find(tok => tok.id === t.tokenId)).filter(Boolean);
-    }
-
-    for (const token of targetTokens) {
-      const targetActor = token.actor;
-      if (!targetActor) continue;
-      await StatusHelper.processCausedStatuses(
-        targetActor, mergedEntries, damageWasBlocked, ctx.spellName ?? "Imbue", { skipSaveRoll: true }
-      );
-    }
-    log("Imbue", `Applied ${mergedEntries.length} status entry/entries from ${ctx.spellName} to ${targetTokens.length} target(s)`);
-  } catch (e) {
-    console.warn(`${MODULE_ID} | _applyImbueStatusesIfPresent failed:`, e);
-  }
-}
-
 /**
  * Vagabond core rule: Focus sustains a spell's Effect; the damage portion is
  * Instant. So Focus on a cast with `useFx === false` is invalid — there's
@@ -418,7 +343,6 @@ import { GoldSinkSheet, buyFavoriteItem } from "./merchant/gold-sink-sheet.mjs";
 import { BeastCache } from "./polymorph/beast-cache.mjs";
 import { populateBeasts } from "./polymorph/populate-beasts.mjs";
 import { DrakenFeatures } from "./ancestry-features/draken.mjs";
-import { ImbueManager } from "./spell-features/imbue-manager.mjs";
 import { BlessManager } from "./spell-features/bless-manager.mjs";
 import { WardManager } from "./spell-features/ward-manager.mjs";
 import { EffectOnlyHandler } from "./spell-features/effect-only-handler.mjs";
@@ -1087,9 +1011,6 @@ Hooks.once("ready", async () => {
         // (game.user.targets may be cleared by the time rollDamage fires on hit)
         this._vceAttackTargets = Array.from(game.user.targets);
 
-        // Imbue: force-auto-roll is deferred to ImbueManager.onPostRollAttack
-        // (hit path) so we don't auto-roll damage on a miss.
-
         // Force auto-roll damage for Monk Finesse attacks so die escalation
         // goes through our patched item.rollDamage() instead of rollDamageFromButton()
         if (this.system?.weaponSkill === "finesse" && getFeatures(actor)?.monk_martialArts) {
@@ -1174,7 +1095,6 @@ Hooks.once("ready", async () => {
           if (this._vceSneakAttack) VagabondDamageHelper._vceForceRollDamage = true; // Force auto-roll for sneak dice
           await BrawlIntent.onPostRollAttack(ctx);        // Auto-execute Grapple/Shove on hit
           await MonkFeatures.onPostRollAttack(ctx);         // Martial Arts: Keen cleanup
-          await ImbueManager.onPostRollAttack(ctx);        // Consume imbue after attack
 
           return result;
         } catch (e) {
@@ -1227,65 +1147,6 @@ Hooks.once("ready", async () => {
           }
         }
 
-        // Imbue: add spell damage dice + spell-specific damage bonuses to the
-        // weapon formula so they roll together as a single damage instance
-        // (armor applied once). The spell's damage type is surfaced on the chat
-        // card by ImbueManager's createChatMessage hook for visibility; weakness
-        // vs the spell's type is also pre-rolled here when applicable.
-        //
-        // Gate: ImbueManager.onPostRollAttack runs BEFORE this and decides
-        // whether the caster can pay the deferred 1-Mana delivery cost. If
-        // the caster couldn't pay (out of mana, dead, unconscious), it sets
-        // `_vceImbueDeliveryDenied` on the wielder and we skip the spell-dice
-        // append so the weapon does plain damage. The authorize-positive case
-        // and the legacy "neither sentinel set" case both fall through to
-        // appending dice as before.
-        //
-        // Per-round gate: damage only fires in the cast round (Vagabond core
-        // rule — Focus sustains the Effect, damage is Instant). When the
-        // imbue is being focus-sustained past its cast round,
-        // onPostRollAttack sets `_vceImbueDamageSuppressed` and the spell
-        // dice are skipped — the chat-card annotation shows "Effect (Type)"
-        // instead of dice.
-        let imbueOrigDamage;
-        const imbue = actor.getFlag(MODULE_ID, "imbue");
-        const deliveryDenied = !!actor._vceImbueDeliveryDenied;
-        const damageSuppressed = !!actor._vceImbueDamageSuppressed;
-        if (imbue && imbue.damageDice > 0 && this.id === imbue.weaponId && !deliveryDenied && !damageSuppressed) {
-          const formula = this.system.currentDamage || "d6";
-          const dieSize = imbue.dieSize || 6;
-          let addition = `${imbue.damageDice}d${dieSize}`;
-
-          const spellFlat = actor.system?.universalSpellDamageBonus || 0;
-          let spellDice = actor.system?.universalSpellDamageDice || "";
-          if (Array.isArray(spellDice)) spellDice = spellDice.filter(d => !!d).join(" + ");
-          if (spellFlat !== 0) addition += ` + ${spellFlat}`;
-          if (typeof spellDice === "string" && spellDice.trim() !== "") addition += ` + ${spellDice}`;
-
-          // Pre-roll a weakness die if all targets are weak to the spell's damage type
-          // (but NOT already weak to the weapon's type — that case is covered by the
-          // system's own weakness handling at apply time).
-          const spellType = (imbue.damageType || "-").toLowerCase();
-          const weaponType = (this.system?.currentDamageType || "physical").toLowerCase();
-          if (spellType !== "-" && spellType !== weaponType) {
-            const targets = this._vceAttackTargets || Array.from(game.user.targets);
-            const targetActors = targets.map(t => t.actor).filter(Boolean);
-            const allWeakToSpellType = targetActors.length > 0
-              && targetActors.every(a => (a.system?.weaknesses || []).includes(spellType));
-            const anyWeakToWeaponType = targetActors.some(a =>
-              (a.system?.weaknesses || []).includes(weaponType)
-              || (this.system?.metal && (a.system?.weaknesses || []).includes(this.system.metal)));
-            if (allWeakToSpellType && !anyWeakToWeaponType) {
-              addition += ` + 1d${dieSize}`;
-              this._vceImbueWeaknessPreRolled = true;
-            }
-          }
-
-          imbueOrigDamage = this.system.currentDamage;
-          this.system.currentDamage = `${formula} + ${addition}`;
-          log("Imbue", `${actor.name}: +${addition} (${imbue.spellName}) added to ${formula}`);
-        }
-
         // Exalt: handled natively by Vagabond system v5.7+ via
         // `system.bonusPerDamageDie` and `system.bonusPerDamageDieDoubleVsBeingTypes`.
         // The system applies these AT DAMAGE-APPLY TIME (rollDamageFromButton),
@@ -1298,7 +1159,7 @@ Hooks.once("ready", async () => {
         try {
           const damageRoll = await origRollDamage.call(this, actor, isCritical, statKey, ...rest);
           // Flag the roll as weakness-pre-rolled so handleApplyDirect doesn't add another die
-          if ((silverOrigDamage !== undefined || this._vceImbueWeaknessPreRolled) && damageRoll) {
+          if (silverOrigDamage !== undefined && damageRoll) {
             damageRoll._weaknessPreRolled = true;
           }
 
@@ -1353,11 +1214,6 @@ Hooks.once("ready", async () => {
           if (exaltOrigDamage !== undefined) {
             this.system.currentDamage = exaltOrigDamage;
           }
-          // Restore imbue-modified damage
-          if (imbueOrigDamage !== undefined) {
-            this.system.currentDamage = imbueOrigDamage;
-          }
-          this._vceImbueWeaknessPreRolled = false;
           // Restore silver-modified damage
           if (silverOrigDamage !== undefined) {
             this.system.currentDamage = silverOrigDamage;
@@ -1824,14 +1680,12 @@ Hooks.once("ready", async () => {
             await origHandleApplyDirect.call(this, mock);
           }
           log("Cleave", `${sourceItem?.name}: ${ceilHalf} to first, ${floorHalf} to ${targets.length - 1} others`);
-          await _applyImbueStatusesIfPresent(button, targets);
           return;
         }
 
         // Ward: handled via vagabond.preDamageApply hook in WardManager;
         // see comment above for handleSaveRoll path.
         await origHandleApplyDirect.call(this, button);
-        await _applyImbueStatusesIfPresent(button, targets);
         return;
       } finally {
         for (const d of _directDefenders) _clearDamageSource(d);
@@ -2025,7 +1879,7 @@ Hooks.once("ready", async () => {
     // Both cast paths funnel the player's FINAL state through _executeCast:
     //   • legacy (dialog off): castSpell → _executeCast
     //   • dialog (on):         castSpell → SpellCastDialog → onCast → _executeCast
-    // We patch HERE, not castSpell, so Imbue delivery, Fx gating, Focus/Effect
+    // We patch HERE, not castSpell, so Fx gating, Focus/Effect
     // coupling, and damage-source attribution act on the player's final dialog
     // choices. (The old castSpell patch ran BEFORE the dialog opened, off the
     // stale saved state, so anything chosen in the dialog silently bypassed VCE.)
@@ -2041,31 +1895,9 @@ Hooks.once("ready", async () => {
 
       // Record useFx so StatusHelper.processCausedStatuses gates the Effect at
       // apply time (else causedStatuses fire even without the +1 Fx mana).
-      if (finalState) _recordCastUseFx(this.actor?.id, spellId, !!finalState.useFx);
-
-      // Imbue delivery: bypass the d20/damage cast, run the weapon-imbue flow.
-      // Cost is computed from the FINAL state (+ any dialog mana override).
-      if (finalState?.deliveryType === "imbue" && spell) {
-        let costs;
-        try {
-          const { SpellCastDialog } = await import("/systems/vagabond/module/applications/spell-cast-dialog.mjs");
-          const base = SpellCastDialog.calculateCosts(spell, this.actor, finalState);
-          costs = { ...base, totalCost: Math.max(0, (base.totalCost ?? 0) + (manaOverrideDelta || 0)) };
-        } catch (_e) {
-          costs = this._calculateSpellCost?.(spellId) ?? { totalCost: 0 };
-        }
-        const handled = await ImbueManager.handleImbueCast(this.actor, spell, finalState, costs);
-        if (handled) {
-          // Reset the saved row state so the next cast starts fresh (keep imbue).
-          try {
-            const defaultUseFx = spell.system.damageType === "-";
-            this.spellStates[spellId] = { damageDice: 1, deliveryType: "imbue", deliveryIncrease: 0, useFx: defaultUseFx };
-            this._saveSpellStates?.();
-            this._updateSpellDisplay?.(spellId);
-          } catch (_e) { /* non-fatal cosmetic reset */ }
-          return;
-        }
-      }
+      // Imbue is the system's native flow, which picks the Effect when the
+      // imbued weapon hits — never gate its delivery on the cast-time toggle.
+      if (finalState) _recordCastUseFx(this.actor?.id, spellId, finalState.deliveryType === "imbue" || !!finalState.useFx);
 
       // Normal cast — stash the caster for spell-damage attribution; the roll +
       // damage happen inside origExecuteCast.
@@ -2158,10 +1990,6 @@ Hooks.once("ready", async () => {
      *  StatusHelper.processCausedStatuses. Used by the Talent cast pipeline
      *  (talent-cast.mjs) so gating works the same way it does for spells. */
     recordCastUseFx: _recordCastUseFx,
-    /** Read the most recent recorded useFx for an actor+spell, or null. Used
-     *  by the imbue-button fallback path to honor the original cast's Effect
-     *  choice when re-imbuing through a system-posted spell card. */
-    getCastUseFx: _getCastUseFx,
     detector: FeatureDetector,
     barbarian: BarbarianFeatures,
     bard: BardFeatures,
@@ -2197,8 +2025,6 @@ Hooks.once("ready", async () => {
         ? item.setFlag(MODULE_ID, "areaAttack", true)
         : item.unsetFlag(MODULE_ID, "areaAttack");
     },
-    imbue: ImbueManager,
-    clearImbue: (actor) => ImbueManager.clearImbue(actor),
     witch: WitchFeatures,
     hex: (actor, targetId, targetName, targetImg) => WitchFeatures.applyHex(actor, targetId, targetName, targetImg),
     unhex: (actor, targetId) => WitchFeatures.removeHex(actor, targetId),
@@ -2415,7 +2241,6 @@ Hooks.once("ready", async () => {
   await safeRegister("BrawlIntent", () => BrawlIntent.registerHooks());
   await safeRegister("FocusManager", () => FocusManager.registerHooks());
   await safeRegister("DrakenFeatures", () => DrakenFeatures.registerHooks());
-  await safeRegister("ImbueManager", () => ImbueManager.registerHooks());
   // AuraManager is a delivery system, not a class feature — register it
   // at module-level so any class casting Aura-delivery spells (or VCE
   // talents cast as Aura) gets the persistent template / per-round tick

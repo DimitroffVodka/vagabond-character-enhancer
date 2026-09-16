@@ -49,7 +49,7 @@ ALL spells with `causedStatuses` configured in the system compendium when cast w
 |-------|--------|---------|-------|
 | Bless | -- | `bless-manager.mjs` | d4 save bonus AE on allies, silvered weapons, mode dialog |
 | Exalt | -- | Class feature (Revelator) | +1 per damage die AE, +1 Will vs Frightened |
-| Imbue | -- | `imbue-manager.mjs` | RAW delivery: damage + effect mana paid at cast, 1 Mana of delivery cost deferred to on-hit (auto-deducted from caster's pool). Imbue persists as standing buff until end of round (longer if Focused). Cast-round hits deliver damage + effect; sustained-round hits deliver effect only. Spell's `causedStatuses` applied on Apply via `handleApplyDirect` patch. Damage routes through Roll Damage button so vagabond-crawler relic dice (Strike, Bane, Vicious) compose. Out-of-combat casts require Focus. Friendly-target resolves wielder (self/ally/multi-target with picker); cross-owner writes via socket relay. |
+| Imbue | -- | System (native) | Handled by the Vagabond system: pick weapons in the cast dialog, the imbue is stored on the weapon (`system.imbuedSpell`), and the dice + Effect are chosen and paid when the imbued attack hits. VCE no longer intercepts Imbue casts. |
 | Polymorph | -- | `polymorph/` system | Full beast form transformation (Druid) |
 | Ward | -- | `ward-manager.mjs` | Reactive damage interception. Applies "Warded" AE to target on cast; on incoming damage, prompts caster for Cast Check → d6 reduction per (1 + extra Mana). Crit = full negate. Auto-cleans up when caster drops focus. Wired into both save-flow and direct-apply damage paths. |
 

@@ -883,7 +883,7 @@ The VCE module's automation should follow the rulings in §6. Highest-impact ite
 - **Q2 (effect categorization)** — separate per-spell worksheet pass needed against `02_Spell List.md`.
 - **Q4 (live zone tracking)** — module must hook token movement and apply spell effects on entry into a focused Area.
 - **Q5 (status persistence)** — applied statuses do not auto-remove on leaving the zone; status duration is per spell text + status rules.
-- **Q6 (imbue requires focus)** — current `imbue-manager.mjs` already does this; verify against Q6 ruling.
+- **Q6 (imbue requires focus)** — Imbue is now the system's native flow (VCE removed `imbue-manager.mjs`); the system keeps an imbue until it is delivered, missed, or cleared, with no Focus link.
 - **Q11 (one-focus default)** — module needs to enforce single-focus baseline and recognize class-feature exceptions (Witch Hex, Revelator dual-focus).
 
 ### Items needing creator confirmation (still PENDING)

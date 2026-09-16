@@ -24,7 +24,7 @@ export const tests = [
         "rescan", "rescanAll", "getFlags",
         "focus", "focusAcquire", "focusRelease",
         "virtuoso", "stepUp", "hunterMark", "layOnHands",
-        "aura", "imbue", "brawlIntent",
+        "aura", "brawlIntent",
         "witch", "summoner", "conjure", "banish",
         "familiar", "alchemist", "polymorph",
         "smokeTest"

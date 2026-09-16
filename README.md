@@ -13,12 +13,12 @@ A character automation module for the **Vagabond RPG** system in Foundry VTT. Au
 - **[Class Automation](docs/classes.md)** — All 20 classes automated to varying depth: Barbarian Rage, Bard Virtuoso, Druid Beast Forms, Hunter's Mark, Magus Spell Surge, Pugilist Haymaker, Witch Hex, Wizard Page Master, and more.
 - **[Ancestry Traits](docs/ancestries.md)** — Auto-applied traits for all 7 ancestries (Dwarf, Draken, Elf, Goblin, Halfling, Human, Orc) including Draken Breath Attack, Goblin Nimble, Orc Beefy.
 - **[Perk Automation](docs/perks.md)** — System AEs and module-driven perks (Spin-to-Win, Treads Lightly, Briar Healer, Bully, Full Swing, Protector, Akimbo Trigger). Tracks all 104 perks.
-- **[Spell Automation](docs/spells.md)** — Bless aura, Exalt damage bonus, Imbue (RAW delivery), Polymorph beast forms, Ward (preDamageApply intercept). Tracks all 59 spells.
+- **[Spell Automation](docs/spells.md)** — Bless aura, Exalt damage bonus, Polymorph beast forms, Ward (preDamageApply intercept). Tracks all 59 spells.
 - **[Companion System](docs/companions.md)** — Unified engine for summons, familiars, raised undead, animal companions, conjured beasts, and hirelings. Companions tab on every PC sheet, save/action routing through the controller.
 - **[Polymorph & Beast Form](docs/classes.md#druid)** — 72 modified beasts in a compendium, Beast Form tab on the character sheet, token swap, action rolls. Works for any caster.
 - **[Alchemy Cookbook](docs/classes.md#alchemist)** — Crafting UI with search, cost calculation, and craft buttons. Material auto-deducted from inventory. Crafted items work as weapons via the crawler combat strip.
 - **[Aura Delivery System](docs/other-automation.md#aura-delivery-system)** — Persistent templates that follow the caster, tick each round on hostiles in range, and fire entry ticks on movement. Works for damage, effect, and buff spells/talents.
-- **[Cross-Module Composition](docs/other-automation.md#vagabond-crawler-integration)** — Imbue dice, relic dice (Strike, Bane, Vicious), and silver weakness all stack correctly through the same Roll Damage path.
+- **[Cross-Module Composition](docs/other-automation.md#vagabond-crawler-integration)** — relic dice (Strike, Bane, Vicious) and silver weakness all stack correctly through the same Roll Damage path.
 
 ---
 
