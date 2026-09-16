@@ -167,7 +167,12 @@ export const ConjurerPerk = {
                   action: () => { clickedItem.sheet.render(true); }
                 });
 
-                ContextMenuHelper.show(event, menuItems);
+                this._currentContextMenu = ContextMenuHelper.create({
+                  position: { x: event.clientX, y: event.clientY },
+                  items: menuItems,
+                  onClose: () => { this._currentContextMenu = null; },
+                  className: "inventory-context-menu"
+                });
                 return;
               }
             }
