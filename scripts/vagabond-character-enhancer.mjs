@@ -829,8 +829,25 @@ Hooks.once("ready", async () => {
     log("save-routing", "patched handleSaveRoll + handleSaveReminderRoll");
 
     // --- calculateFinalDamage: Cast armor bypass + Rage DR + Tempest Within + Apex Predator ---
-    const origCalcFinal = VagabondDamageHelper.calculateFinalDamage;
-    VagabondDamageHelper.calculateFinalDamage = function (actor, damage, damageType, attackingWeapon = null, sneakDice = 0) {
+    // Vagabond 5.38 routes every damage-application path (save, Apply Direct,
+    // Shield) through calculateFinalDamageDetailed; calculateFinalDamage is a
+    // thin wrapper that only VCE's own save handler still calls. Patch the
+    // detailed method there so Apply Direct gets these adjustments too, and
+    // leave Berserk DR to the system, which applies it natively from the
+    // rolled dice count.
+    const calcIsDetailed = typeof VagabondDamageHelper.calculateFinalDamageDetailed === "function";
+    const calcKey = calcIsDetailed ? "calculateFinalDamageDetailed" : "calculateFinalDamage";
+    const origCalcFinal = VagabondDamageHelper[calcKey];
+    VagabondDamageHelper[calcKey] = function (actor, damage, damageType, attackingWeapon = null, opts) {
+      if (!calcIsDetailed) return vceCalcFinal.call(this, actor, damage, damageType, attackingWeapon, opts);
+      let detailedResult;
+      const final = vceCalcFinal.call(this, actor, damage, damageType, attackingWeapon, opts, (r) => (detailedResult = r).final);
+      detailedResult.final = Math.max(0, final);
+      return detailedResult;
+    };
+    // `unwrap` turns the original's return value into a number (identity on
+    // pre-5.38 systems, `.final` on the detailed method).
+    const vceCalcFinal = function (actor, damage, damageType, attackingWeapon = null, sneakDice = 0, unwrap = (r) => r) {
       // Draconic Resilience: halve matching damage before armor/immune/weak
       const drakenType = actor.getFlag?.(MODULE_ID, "draken_draconicResilienceType");
       if (drakenType && damageType?.toLowerCase() === drakenType) {
@@ -852,7 +869,7 @@ Hooks.once("ready", async () => {
         });
       }
 
-      let result = origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice);
+      let result = unwrap(origCalcFinal.call(this, actor, damage, damageType, attackingWeapon, sneakDice));
 
       // Silver weakness fix: the system skips metal checks for typeless ("-") damage.
       // If the weapon is silvered and the target is weak to silver, bypass armor.
@@ -922,7 +939,8 @@ Hooks.once("ready", async () => {
       // in BriarHealerManager.registerHooks (v5.3.0+ system hook). No
       // dispatcher call needed here.
 
-      const needsRageDR = actor.system?.incomingDamageReductionPerDie > 0
+      const needsRageDR = !calcIsDetailed
+        && actor.system?.incomingDamageReductionPerDie > 0
         && actor.statuses?.has("berserk")
         && VagabondDamageHelper._isLightOrNoArmor(actor);
       const needsTempest = features?.druid_tempestWithin
@@ -956,7 +974,7 @@ Hooks.once("ready", async () => {
       DruidFeatures.onCalculateFinalDamage(ctx);
       return ctx.result;
     };
-    console.log(`${MODULE_ID} | Patched calculateFinalDamage.`);
+    console.log(`${MODULE_ID} | Patched ${calcKey}.`);
 
     // Psychic Shield Talent — post-armor d4 reduction. The d4 is rolled
     // upstream in handleApplyDirect / _rollSave (async, with DSN) and

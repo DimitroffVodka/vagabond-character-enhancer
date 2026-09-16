@@ -46,6 +46,7 @@ const PATCH_TARGETS = [
   ["documents/item.mjs",                  "VagabondItem",         "prototype.rollDamage"],
 
   ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "calculateFinalDamage"],
+  ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "calculateFinalDamageDetailed"],
   ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "_rollSave"],
   ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "handleSaveRoll"],
   ["helpers/damage-helper.mjs",           "VagabondDamageHelper", "handleSaveReminderRoll"],
