@@ -90,6 +90,9 @@ export const Fixtures = {
       update["system.health.value"] = def.hp;
       update["system.health.max"] = def.hp;
     }
+    // Level lives on the actor; class items carry no level field. The feature
+    // detector rescans on a level change, so level-gated features follow.
+    if (def.level != null) update["system.attributes.level.value"] = def.level;
     if (def.armor != null) update["system.armor"] = def.armor;
     if (def.beingType != null) update["system.beingType"] = def.beingType;
     await actor.update(update);
@@ -104,35 +107,29 @@ export const Fixtures = {
       if (stale.length) await actor.deleteEmbeddedDocuments("Item", stale.map(i => i.id));
       return;
     }
-    const existing = actor.items.find(i => i.type === "class" && i.name === def.className);
-    if (existing && existing.system?.level === def.level) return;
     const stale = actor.items.filter(i => i.type === "class" && i.name !== def.className);
     if (stale.length) await actor.deleteEmbeddedDocuments("Item", stale.map(i => i.id));
-    if (existing) {
-      await existing.update({ "system.level": def.level });
-    } else {
-      // Try the system pack first, then fall back to the VCE custom-class
-      // pack. Custom classes (Psychic, Monk, Dragoon, Jester, Samurai,
-      // Summoner) live there and weren't reachable from this helper before.
-      let doc = null;
-      for (const packId of [PACKS.classes, PACKS.classesVce]) {
-        const pack = game.packs.get(packId);
-        if (!pack) continue;
-        const idx = await pack.getIndex();
-        const entry = idx.find(e => e.name === def.className);
-        if (entry) {
-          doc = await pack.getDocument(entry._id);
-          break;
-        }
+    if (actor.items.some(i => i.type === "class" && i.name === def.className)) return;
+
+    // Try the system pack first, then fall back to the VCE custom-class
+    // pack. Custom classes (Psychic, Monk, Dragoon, Jester, Samurai,
+    // Summoner) live there and weren't reachable from this helper before.
+    let doc = null;
+    for (const packId of [PACKS.classes, PACKS.classesVce]) {
+      const pack = game.packs.get(packId);
+      if (!pack) continue;
+      const idx = await pack.getIndex();
+      const entry = idx.find(e => e.name === def.className);
+      if (entry) {
+        doc = await pack.getDocument(entry._id);
+        break;
       }
-      if (!doc) {
-        log("SmokeTest", `Missing class in any compendium: ${def.className}`);
-        return;
-      }
-      const data = doc.toObject();
-      if (data.system) data.system.level = def.level;
-      await actor.createEmbeddedDocuments("Item", [data]);
     }
+    if (!doc) {
+      log("SmokeTest", `Missing class in any compendium: ${def.className}`);
+      return;
+    }
+    await actor.createEmbeddedDocuments("Item", [doc.toObject()]);
   },
 
   /**
