@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Bard features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration, onRenderChatMessage, onRenderActorSheet } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration, onRenderChatMessage, onRenderActorSheet, resolveActorRef } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
@@ -365,29 +365,17 @@ export const BardFeatures = {
   },
 
   /**
-   * Inspiration: Add d6 to healing item formulas (potions).
-   * Called from item.roll dispatcher.
-   */
-  async onPreItemRoll(ctx) {
-    if (ctx.item.type !== "equipment" || ctx.item.system.damageType !== "healing") return;
-    if (!hasActiveInspiration()) return;
-    const origFormula = ctx.item.system.formula;
-    if (!origFormula) return;
-    ctx.item.system.formula = `${origFormula} + 1d6[Inspiration]`;
-    log("Bard", `Inspiration: Modified healing formula: ${origFormula} → ${ctx.item.system.formula}`);
-    ctx._bardOrigFormula = origFormula;
-  },
-
-  /**
    * Inspiration: Add d6 to healing button (spell path).
    * Called from handleApplyRestorative dispatcher.
    */
   async onPreHandleRestorative(ctx) {
     if (ctx.damageType !== "healing") return;
-    // Skip equipment items (potions) — already handled by onPreItemRoll
+    // Skip equipment items (potions): the render hook below already added
+    // +1d6 to their "Roll Healing" button, so adding here would double it.
+    // The button carries an actor UUID on current systems, a bare id on older.
     if (ctx.actorId && ctx.itemId) {
-      const sourceActor = game.actors.get(ctx.actorId);
-      const sourceItem = sourceActor?.items.get(ctx.itemId);
+      const sourceActor = resolveActorRef(ctx.actorId);
+      const sourceItem = sourceActor?.items?.get(ctx.itemId);
       if (sourceItem?.type === "equipment") return;
     }
     if (!hasActiveInspiration()) return;

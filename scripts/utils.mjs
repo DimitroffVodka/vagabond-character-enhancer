@@ -37,6 +37,23 @@ export function getFeatures(actor) {
 }
 
 /**
+ * Resolve an actor reference from system chat data. Vagabond 5.38 writes actor
+ * UUIDs into chat-card button datasets and message flags (so unlinked token
+ * actors resolve); older systems wrote bare world-actor ids. Mirrors the
+ * system's TargetHelper.resolveActorRef, which isn't importable on old versions.
+ * @param {string} ref - Actor UUID or bare id
+ * @returns {Actor|null}
+ */
+export function resolveActorRef(ref) {
+  if (!ref) return null;
+  try {
+    const doc = fromUuidSync(ref);
+    if (doc) return doc;
+  } catch (_e) { /* not a UUID — fall through */ }
+  return game.actors.get(ref) ?? null;
+}
+
+/**
  * Combine a favor modifier with an existing favorHinder state.
  * favor + favor = favor, none + favor = favor, hinder + favor = none (cancel)
  * @param {string} currentFH - "favor", "hinder", or "none"

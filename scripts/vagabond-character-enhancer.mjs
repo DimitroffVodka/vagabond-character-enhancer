@@ -1393,7 +1393,7 @@ Hooks.once("ready", async () => {
       console.log(`${MODULE_ID} | Patched _shouldDoublePerDieBonus (mixed-target bug fix).`);
     }
 
-    // --- item.roll: Dispatch to Alchemist + Bard ---
+    // --- item.roll: Dispatch to Alchemist ---
     if (VagabondItem?.prototype?.roll) {
       const origItemRoll = VagabondItem.prototype.roll;
       VagabondItem.prototype.roll = async function (event, targetsAtRollTime = []) {
@@ -1403,17 +1403,7 @@ Hooks.once("ready", async () => {
         await AlchemistFeatures.onPreItemRoll(ctx);
         if (ctx.handled) return ctx.result;
 
-        // Inspiration healing
-        await BardFeatures.onPreItemRoll(ctx);
-
-        try {
-          const result = await origItemRoll.call(this, event, targetsAtRollTime);
-          return result;
-        } finally {
-          if (ctx._bardOrigFormula !== undefined) {
-            this.system.formula = ctx._bardOrigFormula;
-          }
-        }
+        return origItemRoll.call(this, event, targetsAtRollTime);
       };
       console.log(`${MODULE_ID} | Patched item.roll.`);
     }
