@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Vanguard features.
  */
 
-import { MODULE_ID, log, hasFeature, getFeatures, combineFavor, onRenderChatMessage } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, getFeatures, combineFavor, onRenderChatMessage, weaponAttackType } from "../utils.mjs";
 import { measureDistance } from "../range-validator.mjs";
 import { _saveSourceActorId, _directSourceAttackType, _saveSourceAttackType } from "../vagabond-character-enhancer.mjs";
 import { SIZE_ORDER, getActorSize, getEffectiveShoveSize } from "../brawl/brawl-intent.mjs";
@@ -175,9 +175,7 @@ export const VanguardFeatures = {
       // primary skill is enough even when it was swung with an alt skill.
       let atkType = null;
       if (sourceItem?.type === "equipment" && sourceItem.system?.equipmentType === "weapon") {
-        const skill = sourceItem.system.weaponSkill;
-        atkType = globalThis.vagabond?.utils?.VagabondChatCard?.attackTypeForWeaponSkill?.(skill)
-          ?? (skill === "ranged" ? "ranged" : "melee");
+        atkType = weaponAttackType(sourceItem.system.weaponSkill);
       } else if (sourceItem?.type === "spell") atkType = "cast";
       atkType = atkType || _directSourceAttackType || _saveSourceAttackType;
 

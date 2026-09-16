@@ -21,7 +21,7 @@
  *   - No targets → skip validation
  */
 
-import { MODULE_ID, log, combineFavor } from "./utils.mjs";
+import { MODULE_ID, log, combineFavor, weaponAttackType } from "./utils.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -97,10 +97,13 @@ function _getWeaponRange(item) {
   const range = item.system?.range?.toLowerCase() || "close";
   const properties = (item.system?.properties || []).map(p => p.toLowerCase());
 
+  // 5.38 strips the Ranged/Near properties on load: a ranged weapon is one whose
+  // skill attacks at range, and its reach is `system.range` (close/near/far).
+  // The property checks keep older items/systems working.
   const hasLong = properties.includes("long");
-  const hasRanged = properties.includes("ranged");
+  const hasRanged = properties.includes("ranged") || weaponAttackType(item.system?.weaponSkill) === "ranged";
   const hasThrown = properties.includes("thrown");
-  const hasNear = properties.includes("near");
+  const hasNear = properties.includes("near") || (hasRanged && range === "near");
 
   let maxRange;
 

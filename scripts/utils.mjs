@@ -37,6 +37,19 @@ export function getFeatures(actor) {
 }
 
 /**
+ * "melee" or "ranged" for a weapon skill key. Vagabond 5.38 made weapon skills
+ * homebrew-configurable and stripped the Ranged/Near/Brawl/Finesse weapon
+ * properties — the skill is the source of truth. Uses the system's resolver
+ * when present, else the classic literal.
+ * @param {string} weaponSkill - e.g. item.system.weaponSkill
+ * @returns {"melee"|"ranged"}
+ */
+export function weaponAttackType(weaponSkill) {
+  return globalThis.vagabond?.utils?.VagabondChatCard?.attackTypeForWeaponSkill?.(weaponSkill)
+    ?? (weaponSkill === "ranged" ? "ranged" : "melee");
+}
+
+/**
  * Resolve an actor reference from system chat data. Vagabond 5.38 writes actor
  * UUIDs into chat-card button datasets and message flags (so unlinked token
  * actors resolve); older systems wrote bare world-actor ids. Mirrors the
