@@ -1,4 +1,4 @@
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, actorIdFromRef } from "../utils.mjs";
 import { resolveSaveRoller } from "./save-routing.mjs";
 
 /**
@@ -42,7 +42,7 @@ export async function patchedHandleSaveRoll(button, event = null) {
   const damageType = button.dataset.damageType;
   const rollTermsData = JSON.parse(button.dataset.rollTerms.replace(/&quot;/g, '"'));
   const attackType = button.dataset.attackType;
-  const actorId = button.dataset.actorId;
+  const actorId = actorIdFromRef(button.dataset.actorId);
   const itemId = button.dataset.itemId;
   const attackWasCrit = button.dataset.attackWasCrit === 'true';
   const actionIndexRaw = button.dataset.actionIndex;
@@ -339,7 +339,7 @@ export async function patchedHandleSaveReminderRoll(button, event = null) {
 
   const saveType = button.dataset.saveType;
   const attackType = button.dataset.attackType;
-  const actorId = button.dataset.actorId;
+  const actorId = actorIdFromRef(button.dataset.actorId);
   const itemId = button.dataset.itemId;
   const actionIndexRaw = button.dataset.actionIndex;
   const actionIdx = (actionIndexRaw !== '' && actionIndexRaw != null) ? parseInt(actionIndexRaw) : null;

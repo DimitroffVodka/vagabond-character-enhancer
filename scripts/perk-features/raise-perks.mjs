@@ -9,7 +9,7 @@
  *  since it extends the Raise cast flow directly.)
  */
 
-import { MODULE_ID, log, getFeatures } from "../utils.mjs";
+import { MODULE_ID, log, getFeatures, actorIdFromRef } from "../utils.mjs";
 import { CompanionSpawner } from "../companion/companion-spawner.mjs";
 import { RaiseSpell } from "../spell-features/raise-spell.mjs";
 
@@ -101,7 +101,7 @@ export const RaisePerks = {
     try {
       if (btn.classList.contains("vagabond-apply-save-damage-button")) {
         this._tagTarget(
-          btn.dataset.actorId,
+          actorIdFromRef(btn.dataset.actorId),
           btn.dataset.sourceActorId,
           btn.dataset.sourceItemId
         );
@@ -113,7 +113,7 @@ export const RaisePerks = {
       // falls back to the user's CURRENTLY-targeted tokens in that case, so
       // we must too). Parse data-targets first; if empty, read the live
       // targeting set from the user who clicked.
-      const casterId = btn.dataset.actorId;
+      const casterId = actorIdFromRef(btn.dataset.actorId);
       const itemId = btn.dataset.itemId;
       const targetsRaw = btn.dataset.targets;
       if (!casterId || !itemId) return;

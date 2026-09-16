@@ -19,7 +19,7 @@
  * update position on every token move via the updateToken hook.
  */
 
-import { MODULE_ID, log, onRenderChatMessage } from "../utils.mjs";
+import { MODULE_ID, log, onRenderChatMessage, actorIdFromRef } from "../utils.mjs";
 import { uuidFor as catalogUuidFor } from "../active-effects-catalog.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 
@@ -1658,7 +1658,7 @@ export const AuraManager = {
     if (!content.includes('data-delivery-type="aura"')) return;
 
     // Get the caster from message flags
-    const actorId = message.flags?.vagabond?.actorId;
+    const actorId = actorIdFromRef(message.flags?.vagabond?.actorId);
     const spellId = message.flags?.vagabond?.itemId;
     if (!actorId || !spellId) return;
 

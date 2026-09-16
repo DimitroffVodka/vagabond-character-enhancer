@@ -61,7 +61,7 @@
  * `_annotateWeaponAttackCard` for visibility.
  */
 
-import { MODULE_ID, log, onRenderChatMessage } from "../utils.mjs";
+import { MODULE_ID, log, onRenderChatMessage, actorIdFromRef } from "../utils.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 
 /* -------------------------------------------- */
@@ -436,7 +436,7 @@ export const ImbueManager = {
    * itself is a single combined roll (armor applied once).
    */
   async _annotateWeaponAttackCard(message) {
-    const actorId = message.flags?.vagabond?.actorId;
+    const actorId = actorIdFromRef(message.flags?.vagabond?.actorId);
     const itemId = message.flags?.vagabond?.itemId;
     if (!actorId || !itemId) return;
 
@@ -577,7 +577,7 @@ export const ImbueManager = {
     if (!content.includes('data-delivery-type="imbue"')) return;
     if (content.includes('data-action="vce-imbue-weapon"')) return;
 
-    const actorId = message.flags?.vagabond?.actorId;
+    const actorId = actorIdFromRef(message.flags?.vagabond?.actorId);
     const spellId = message.flags?.vagabond?.itemId;
     if (!actorId || !spellId) return;
 

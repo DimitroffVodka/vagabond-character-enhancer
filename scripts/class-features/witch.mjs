@@ -5,7 +5,7 @@
  * Widdershins: hex target is Weak to witch's damage (bypasses armor, not immunity).
  */
 
-import { MODULE_ID, log, getFeatures, onRenderChatMessage, onRenderActorSheet } from "../utils.mjs";
+import { MODULE_ID, log, getFeatures, onRenderChatMessage, onRenderActorSheet, actorIdFromRef } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
@@ -462,7 +462,7 @@ export const WitchFeatures = {
     if (!content.includes("vagabond-chat-card-v2")) return;
     if (content.includes('data-action="vce-hex-target"')) return;
 
-    const actorId = message.flags?.vagabond?.actorId;
+    const actorId = actorIdFromRef(message.flags?.vagabond?.actorId);
     if (!actorId) return;
 
     const actor = game.actors.get(actorId);

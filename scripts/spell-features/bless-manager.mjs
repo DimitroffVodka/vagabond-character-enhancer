@@ -8,7 +8,7 @@
  * A dialog asks the caster to choose mode, then applies the appropriate effect.
  */
 
-import { MODULE_ID, log, onRenderChatMessage } from "../utils.mjs";
+import { MODULE_ID, log, onRenderChatMessage, actorIdFromRef } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -243,7 +243,7 @@ export const BlessManager = {
     if (!content.includes("vagabond-chat-card-v2")) return;
     if (content.includes('data-action="vce-bless-mode"')) return;
 
-    const actorId = message.flags?.vagabond?.actorId;
+    const actorId = actorIdFromRef(message.flags?.vagabond?.actorId);
     const itemId = message.flags?.vagabond?.itemId;
     if (!actorId || !itemId) return;
 

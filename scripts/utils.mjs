@@ -67,6 +67,19 @@ export function resolveActorRef(ref) {
 }
 
 /**
+ * Bare actor id for a system actor reference (UUID on 5.38, bare id before).
+ * VCE code compares these against `actor.id` and feeds them to
+ * `game.actors.get`, so normalise system-written refs at the point they're read.
+ * Unresolvable refs pass through unchanged.
+ * @param {string} ref
+ * @returns {string|null}
+ */
+export function actorIdFromRef(ref) {
+  if (!ref) return null;
+  return resolveActorRef(ref)?.id ?? ref;
+}
+
+/**
  * Combine a favor modifier with an existing favorHinder state.
  * favor + favor = favor, none + favor = favor, hinder + favor = none (cancel)
  * @param {string} currentFH - "favor", "hinder", or "none"

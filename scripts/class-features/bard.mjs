@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Bard features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration, onRenderChatMessage, onRenderActorSheet, resolveActorRef } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration, onRenderChatMessage, onRenderActorSheet, resolveActorRef, actorIdFromRef } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
@@ -534,7 +534,7 @@ export const BardFeatures = {
     Hooks.on("preCreateChatMessage", (message) => {
       if (!game.user.isGM) return;
       const itemId = message.flags?.vagabond?.itemId;
-      const actorId = message.flags?.vagabond?.actorId || message.speaker?.actor;
+      const actorId = actorIdFromRef(message.flags?.vagabond?.actorId) || message.speaker?.actor;
       if (!itemId || !actorId) return;
 
       const actor = game.actors.get(actorId);

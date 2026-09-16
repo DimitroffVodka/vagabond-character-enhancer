@@ -3,7 +3,7 @@
  * Automates ancestry traits, class features, and perks for the Vagabond RPG system.
  */
 
-import { MODULE_ID, log, getFeatures, combineFavor, safeRegister } from "./utils.mjs";
+import { MODULE_ID, log, getFeatures, combineFavor, safeRegister, actorIdFromRef, resolveActorRef } from "./utils.mjs";
 import { bootstrapActiveEffectsCatalog } from "./active-effects-catalog.mjs";
 export { MODULE_ID };
 
@@ -1475,7 +1475,7 @@ Hooks.once("ready", async () => {
       const ctx = {
         button,
         damageType: button.dataset.damageType?.toLowerCase(),
-        actorId: button.dataset.actorId,
+        actorId: actorIdFromRef(button.dataset.actorId),
         itemId: button.dataset.itemId
       };
       await BardFeatures.onPreHandleRestorative(ctx);
@@ -1514,16 +1514,16 @@ Hooks.once("ready", async () => {
     // raw system method. Keep install order: save-routing first, this wrapper second.
     const origHandleSaveRoll = VagabondDamageHelper.handleSaveRoll;
     VagabondDamageHelper.handleSaveRoll = async function (button, event = null) {
-      _saveSourceActorId = button.dataset.actorId || null;
+      _saveSourceActorId = actorIdFromRef(button.dataset.actorId);
       // Per-defender damage source attribution — race-safe replacement for
       // the old _damageSourceActorId global. Each defender targeted by this
       // save gets an entry; cleared in finally.
       const _saveDefenders = _resolveDefendersFromButton(button);
-      const _saveSourceId = button.dataset.actorId || null;
+      const _saveSourceId = actorIdFromRef(button.dataset.actorId);
       for (const d of _saveDefenders) _setDamageSource(d, _saveSourceId);
       _saveSourceAttackType = button.dataset.attackType || null;
       _currentApplySpellId = button.dataset.itemId || null;
-      const saveSourceActor = game.actors.get(button.dataset.actorId);
+      const saveSourceActor = resolveActorRef(button.dataset.actorId);
       const saveActionIdx = button.dataset.actionIndex;
       const saveAction = (saveActionIdx !== '' && saveActionIdx != null)
         ? saveSourceActor?.system?.actions?.[parseInt(saveActionIdx)] : null;
@@ -1590,7 +1590,7 @@ Hooks.once("ready", async () => {
 
       try {
         // Fix Cleave save path: all targets take half damage (RAW: "half damage to two targets")
-        const cleaveSaveSource = game.actors.get(button.dataset.actorId);
+        const cleaveSaveSource = resolveActorRef(button.dataset.actorId);
         const cleaveSaveItem = cleaveSaveSource?.items.get(button.dataset.itemId);
         const hasCleaveS = cleaveSaveItem?.system?.properties?.includes('Cleave');
         let cleaveSaveTargets;
@@ -1641,13 +1641,13 @@ Hooks.once("ready", async () => {
     };
     const origHandleSaveReminderRoll = VagabondDamageHelper.handleSaveReminderRoll;
     VagabondDamageHelper.handleSaveReminderRoll = async function (button, event = null) {
-      _saveSourceActorId = button.dataset.actorId || null;
+      _saveSourceActorId = actorIdFromRef(button.dataset.actorId);
       const _reminderDefenders = _resolveDefendersFromButton(button);
-      const _reminderSourceId = button.dataset.actorId || null;
+      const _reminderSourceId = actorIdFromRef(button.dataset.actorId);
       for (const d of _reminderDefenders) _setDamageSource(d, _reminderSourceId);
       _saveSourceAttackType = button.dataset.attackType || null;
       _currentApplySpellId = button.dataset.itemId || null;
-      const saveReminderActor = game.actors.get(button.dataset.actorId);
+      const saveReminderActor = resolveActorRef(button.dataset.actorId);
       const saveReminderIdx = button.dataset.actionIndex;
       const saveReminderAction = (saveReminderIdx !== '' && saveReminderIdx != null)
         ? saveReminderActor?.system?.actions?.[parseInt(saveReminderIdx)] : null;
@@ -1723,7 +1723,7 @@ Hooks.once("ready", async () => {
     const origHandleApplyDirect = VagabondDamageHelper.handleApplyDirect;
     VagabondDamageHelper.handleApplyDirect = async function (button) {
       const _directDefenders = _resolveDefendersFromButton(button);
-      const _directSourceId = button.dataset.actorId || null;
+      const _directSourceId = actorIdFromRef(button.dataset.actorId);
       for (const d of _directDefenders) _setDamageSource(d, _directSourceId);
       _currentApplySpellId = button.dataset.itemId || null;
       // Attack-type detection priority:
@@ -1732,7 +1732,7 @@ Hooks.once("ready", async () => {
       //   3. Source item type === 'spell' → treat as 'cast' (covers player spell direct-apply,
       //      where the system omits data-attack-type on the apply button)
       _directSourceAttackType = button.dataset.attackType || null;
-      const directSourceActor = game.actors.get(button.dataset.actorId);
+      const directSourceActor = resolveActorRef(button.dataset.actorId);
       const directActionIdx = button.dataset.actionIndex;
       const directAction = (directActionIdx !== '' && directActionIdx != null)
         ? directSourceActor?.system?.actions?.[parseInt(directActionIdx)] : null;

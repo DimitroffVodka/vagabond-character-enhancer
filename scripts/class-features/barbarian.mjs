@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Barbarian features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage, resolveActorRef } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Feature Registry                            */
@@ -577,7 +577,7 @@ export const BarbarianFeatures = {
       }
       if (!targetActor && applyBtn.dataset.actorId) {
         // Save result cards use data-actor-id as the TARGET
-        targetActor = game.actors.get(applyBtn.dataset.actorId);
+        targetActor = resolveActorRef(applyBtn.dataset.actorId);
       }
 
       if (!targetActor) return;

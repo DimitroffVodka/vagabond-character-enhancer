@@ -23,7 +23,7 @@
  * sees the tracker tick.
  */
 
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, actorIdFromRef } from "../utils.mjs";
 
 const HANDLED_FLAG = "autoActivateHandled";
 
@@ -61,7 +61,7 @@ export const AutoActivate = {
     // present; otherwise the chat card's vagabond.actorId is the actor that
     // took the action.
     const companionActorId = message.getFlag(MODULE_ID, "companionActorId");
-    const speakerActorId   = message.flags?.vagabond?.actorId;
+    const speakerActorId   = actorIdFromRef(message.flags?.vagabond?.actorId);
     const itemId           = message.flags?.vagabond?.itemId;
 
     const targetActorId = companionActorId || speakerActorId;

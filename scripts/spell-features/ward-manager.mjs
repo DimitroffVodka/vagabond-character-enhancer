@@ -13,7 +13,7 @@
  *   - Focus cleanup: removes Warded AE when caster stops focusing
  */
 
-import { MODULE_ID, log } from "../utils.mjs";
+import { MODULE_ID, log, actorIdFromRef } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -437,7 +437,7 @@ export const WardManager = {
     const content = message.content ?? "";
     if (!content.includes("vagabond-chat-card-v2")) return;
 
-    const actorId = message.flags?.vagabond?.actorId;
+    const actorId = actorIdFromRef(message.flags?.vagabond?.actorId);
     const itemId = message.flags?.vagabond?.itemId;
     if (!actorId || !itemId) return;
 
