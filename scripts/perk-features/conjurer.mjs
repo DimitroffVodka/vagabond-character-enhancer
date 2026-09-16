@@ -279,7 +279,7 @@ export const ConjurerPerk = {
   async _performConjure(actor, entry, manaCost) {
     // Spend mana before spawning
     const currentMana = Number(actor.system?.mana?.current ?? 0) || 0;
-    await actor.update({ "system.mana.value": currentMana - manaCost });
+    await actor.update({ "system.mana.current": currentMana - manaCost });
 
     const result = await CompanionSpawner.spawn({
       caster: actor,
@@ -298,11 +298,11 @@ export const ConjurerPerk = {
     if (!result.success) {
       if (result.error !== "User cancelled replacement") {
         // Refund on failure
-        await actor.update({ "system.mana.value": currentMana });
+        await actor.update({ "system.mana.current": currentMana });
         ui.notifications.error(`Could not conjure: ${result.error ?? "unknown error"}`);
       } else {
         // Refund on user-cancel (they kept the existing conjure)
-        await actor.update({ "system.mana.value": currentMana });
+        await actor.update({ "system.mana.current": currentMana });
       }
       return;
     }
