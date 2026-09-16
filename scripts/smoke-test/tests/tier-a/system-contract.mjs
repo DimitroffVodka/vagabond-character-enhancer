@@ -69,6 +69,9 @@ const PATCH_TARGETS = [
   ["helpers/chat-card.mjs",               "VagabondChatCard",     "npcAction"],
 
   ["sheets/handlers/roll-handler.mjs",    "RollHandler",          "prototype.roll"],
+  ["sheets/handlers/roll-handler.mjs",    "RollHandler",          "prototype.rollWeapon"],
+
+  ["helpers/target-helper.mjs",           "TargetHelper",         "captureCurrentTargets"],
 
   ["sheets/handlers/spell-handler.mjs",   "SpellHandler",         "prototype._executeCast"],
   ["sheets/handlers/spell-handler.mjs",   "SpellHandler",         "prototype._calculateSpellCost"],
@@ -140,7 +143,6 @@ const IMPERATIVE_AE_PATHS = [
   "system.rangedDamageDieSizeBonus",
   "system.rangedCritBonus",
   "system.finesseCritBonus",
-  "system.cleaveTargets",
   "system.favorHinder",
   "system.bonuses.globalExplode",
 ];

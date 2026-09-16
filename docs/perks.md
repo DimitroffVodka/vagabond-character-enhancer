@@ -35,7 +35,7 @@ The 15 perks below have full or partial implementation. The remaining 89 are lis
 | Magical Secret | ✅ System AE | `isSpellcaster` = true — Grants spellcaster flag |
 | Gish | ✅ System AE | `isSpellcaster` = true — Grants spellcaster flag |
 | Second Wind | ✅ System AE | Placeholder AE (no changes) |
-| Spin-to-Win | ✅ Module | Managed AE: `cleaveMaxTargets` = 100, removes Cleave target cap |
+| Spin-to-Win | ✅ Module | No Cleave target cap on Melee Cleave weapons (RangeValidator + `rollWeapon` patch); die still steps down, floor d4 |
 | Treads Lightly | ✅ Module | Runtime hook: nullifies region movement costs (Foundry + Crawler) |
 | Akimbo Trigger | ✅ Module | Range validator skips Ranged-at-Close hinder |
 | Bully | ✅ Module | Favor on Grapple/Shove vs smaller targets |
@@ -134,7 +134,7 @@ The 15 perks below have full or partial implementation. The remaining 89 are lis
 | Smooth Talker | 📝 Flavor | Once per Scene, reroll a failed Influence Check. | Manual reroll |
 | Snareroot Trapper | 📝 Flavor | Cast Sprout with Glyph delivery for no extra Mana and without Focusing; one active at a time. | Spell-specific cost/focus override; niche |
 | Solar Flare | 📝 Flavor | Cause Spell light to be Sunlight. | Light type flavor; no mechanical hook |
-| Spin-to-Win | ✅ Module | When attacking with a Melee Cleave weapon, deal half damage to any viable Targets (not just one extra). | Managed AE: `cleaveMaxTargets` set to 100; range validator enforces |
+| Spin-to-Win | ✅ Module | When attacking with a Melee Cleave weapon, deal half damage to any viable Targets (not just one extra). | Range validator allows any target count; `RollHandler.rollWeapon` patch stops the system trimming targets. Die still steps down per extra Target (floor d4) |
 | Steady Aim | 🔲 Automatable | Ignore Hinder on Ranged Weapon attacks if you can see the Target; Favor vs targets that haven't moved since last Turn. | Hook: remove Ranged hinder; track target movement for Favor |
 | Storm Raiser | 📝 Flavor | Once per Day, 10-minute Ritual to change weather in surrounding mile for Cd4 Shifts. | Narrative ritual; weather is GM-managed |
 | Strategist | 🔲 Automatable | Attacks against Targets Close to non-Incapacitated Allies are Favored. | Hook: check proximity of allies to target; grant Favor |

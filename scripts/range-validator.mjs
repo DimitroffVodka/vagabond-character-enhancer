@@ -118,6 +118,29 @@ function _getWeaponRange(item) {
   return { maxRange, hasRanged, hasThrown, hasLong, hasNear };
 }
 
+/**
+ * Spin-to-Win: a Melee Cleave weapon may hit any viable Targets.
+ */
+export function spinToWinApplies(item, features) {
+  return !!features?.perk_spinToWin
+    && item?.system?.weaponSkill === "melee"
+    && !!item.system.properties?.includes("Cleave");
+}
+
+/**
+ * Most Targets a Cleave weapon may hit. Pre-5.38 systems derive
+ * `cleaveMaxTargets`; 5.38+ caps at 1 + the die steps above d4, mirroring
+ * RollHandler.rollWeapon. Spin-to-Win lifts the cap on either.
+ */
+export function cleaveTargetCap(actor, item, features) {
+  if (spinToWinApplies(item, features)) return Infinity;
+  if (actor.system.cleaveMaxTargets != null) return actor.system.cleaveMaxTargets;
+  const steps = CONFIG.VAGABOND.weaponDieSteps;
+  if (!steps) return 2;
+  const die = parseInt(item.system.currentDamage?.match(/d(\d+)/i)?.[1], 10);
+  return 1 + Math.max(0, steps.indexOf(die));
+}
+
 /* -------------------------------------------- */
 /*  Range Validator                             */
 /* -------------------------------------------- */
@@ -156,11 +179,13 @@ export const RangeValidator = {
     // --- Target count enforcement ---
     const properties = (ctx.item.system?.properties || []).map(p => p.toLowerCase());
     let hasCleave = properties.includes("cleave");
+    let maxTargets = hasCleave ? cleaveTargetCap(ctx.actor, ctx.item, ctx.features) : 1;
 
     // Monk Martial Arts grants implicit Cleave on Finesse weapons (2 targets)
     if (!hasCleave && ctx.features?.monk_martialArts
         && ctx.item.system?.weaponSkill === "finesse" && targets.size === 2) {
       hasCleave = true;
+      maxTargets = 2;
       log("Range", `${ctx.item.name}: Monk Martial Arts grants implicit Cleave (2 targets)`);
     }
 
@@ -170,7 +195,6 @@ export const RangeValidator = {
         log("Range", `BLOCKED: ${ctx.item.name} — ${targets.size} targets but no Cleave property`);
         return true;
       }
-      const maxTargets = ctx.actor.system.cleaveMaxTargets ?? 2;
       if (targets.size > maxTargets) {
         ui.notifications.warn(`${ctx.item.name} can target at most ${maxTargets} enemies with Cleave. Deselect extra targets.`);
         log("Range", `BLOCKED: ${ctx.item.name} — ${targets.size} targets, max ${maxTargets}`);

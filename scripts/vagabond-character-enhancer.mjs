@@ -425,7 +425,7 @@ import { EffectOnlyHandler } from "./spell-features/effect-only-handler.mjs";
 import { SummonerFeatures } from "./class-features/summoner.mjs";
 import { FamiliarFeatures } from "./perk-features/familiar.mjs";
 import { registerSocketRelay } from "./socket-relay.mjs";
-import { RangeValidator } from "./range-validator.mjs";
+import { RangeValidator, spinToWinApplies } from "./range-validator.mjs";
 import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companion/save-routing-patch.mjs";
 import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
 import { TalentsTab } from "./talent/talents-tab.mjs";
@@ -1955,6 +1955,37 @@ Hooks.once("ready", async () => {
     // works from BOTH the character sheet AND the vagabond-crawler action strip.
     // See the rollAttack patch above. Cleanup is in brawl-intent._injectButtons().
     console.log(`${MODULE_ID} | RollHandler.rollWeapon — brawl intent now handled at rollAttack level.`);
+
+    // --- RollHandler.rollWeapon: Spin-to-Win lifts the Cleave target cap ---
+    // The system trims its captured target list inline (splice) and, since
+    // 5.38, has no field an AE can raise (`cleaveTargets` is gone). For the one
+    // capture a Spin-to-Win roll makes, hand back a list whose splice is a
+    // no-op; the system still steps the die down per extra Target, floor d4.
+    // ponytail: one-shot flag spans the checkConsumableRequirements await — a
+    // second local target capture inside that window would take it instead.
+    const { TargetHelper } = await import("/systems/vagabond/module/helpers/target-helper.mjs");
+    const origCapture = TargetHelper.captureCurrentTargets;
+    let spinToWinArmed = false;
+    TargetHelper.captureCurrentTargets = function (...args) {
+      const targets = origCapture.apply(this, args);
+      if (spinToWinArmed) {
+        spinToWinArmed = false;
+        targets.splice = () => [];
+      }
+      return targets;
+    };
+    const origRollWeapon = RollHandler.prototype.rollWeapon;
+    RollHandler.prototype.rollWeapon = async function (event, target, ...rest) {
+      const el = target || event?.currentTarget;
+      const itemId = el?.dataset?.itemId || el?.closest?.("[data-item-id]")?.dataset.itemId;
+      spinToWinArmed = spinToWinApplies(this.actor?.items.get(itemId), getFeatures(this.actor));
+      try {
+        return await origRollWeapon.call(this, event, target, ...rest);
+      } finally {
+        spinToWinArmed = false;
+      }
+    };
+    console.log(`${MODULE_ID} | Patched RollHandler.rollWeapon (Spin-to-Win).`);
 
     // --- SpellHandler._executeCast: VCE cast hooks at the REAL cast chokepoint ---
     // Both cast paths funnel the player's FINAL state through _executeCast:

@@ -79,13 +79,13 @@ function _makePerkTest(perkName, entry) {
         }
       }
 
-      // BEHAVIORAL: for catalog-backed perks, verify the actor's derived
-      // data reflects the AE's changes — not just that the AE exists.
-      // Currently the catalog only has `perk-spin-to-win` (cleaveTargets 98);
-      // additional perk canonicals can be added here as the catalog grows.
+      // BEHAVIORAL: Spin-to-Win lifts the Cleave target cap on a Melee
+      // Cleave weapon once the perk's feature flag is set.
       if (entry.canonicalIds?.includes("perk-spin-to-win")) {
-        assert((a.system?.cleaveTargets ?? 0) >= 98,
-          `Spin-to-Win catalog AE should set cleaveTargets ≥ 98; got ${a.system?.cleaveTargets}`);
+        const { cleaveTargetCap } = await import("../../../range-validator.mjs");
+        const axe = { system: { weaponSkill: "melee", properties: ["Cleave"], currentDamage: "1d8" } };
+        const cap = cleaveTargetCap(a, axe, a.getFlag(MODULE_ID, "features"));
+        assert(cap === Infinity, `Spin-to-Win should uncap Melee Cleave targets; got ${cap}`);
       }
       // Cleanup is automatic via runner snapshot/restore — items added are wiped.
     }

@@ -248,9 +248,9 @@ export const CATALOG = [
     canonicalId: "perk-spin-to-win",
     name: "Spin-to-Win",
     img: "icons/skills/melee/strike-sword-slashing-red.webp",
-    changes: [
-      { key: "system.cleaveTargets", mode: 2, value: "98" },
-    ],
+    // No changes: the target cap is lifted imperatively (spinToWinApplies in
+    // range-validator.mjs + the rollWeapon patch) — 5.38 removed cleaveTargets.
+    changes: [],
   },
 ];
 

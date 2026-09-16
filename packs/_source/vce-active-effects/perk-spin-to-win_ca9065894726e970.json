@@ -4,13 +4,7 @@
   "img": "icons/skills/melee/strike-sword-slashing-red.webp",
   "type": "base",
   "description": "",
-  "changes": [
-    {
-      "key": "system.cleaveTargets",
-      "mode": 2,
-      "value": "98"
-    }
-  ],
+  "changes": [],
   "disabled": false,
   "transfer": true,
   "statuses": [],
