@@ -859,6 +859,37 @@ export async function deductMaterials(actor, silverCost) {
   return true;
 }
 
+// ── Materials Slot Cost ──────────────────────────────────────────────────────
+
+/** Converted Materials: consumable equipment whose quantity is its silver value. */
+export function isConvertedMaterials(item) {
+  return item?.type === "equipment" && !!item.system?.isConsumable
+    && !!item.name?.toLowerCase().includes("materials");
+}
+
+/**
+ * Materials cost 1 Slot per 1g, or part of one. Converted Materials carry
+ * `baseSlots: 0` and quantity = silver, so vagabond 5.38+ (which charges
+ * `baseSlots × quantity` and pools zero-Slot items at 10 per Slot) billed 100s
+ * of Materials 10 Slots. Patch the two cost primitives every slot surface routes
+ * through — occupiedSlots, grid numbering, overload. A non-zero `itemSlotCost`
+ * also keeps Materials out of the zero-Slot pool. Must run before actor data
+ * prep (init). No-op on older systems, which charged zero-Slot items nothing.
+ */
+export function registerMaterialsSlotCost() {
+  const EH = globalThis.vagabond?.utils?.EquipmentHelper;
+  if (typeof EH?.itemStackCost !== "function" || EH.itemStackCost.vceMaterials) return;
+  const { itemSlotCost, itemStackCost } = EH;
+  EH.itemSlotCost = function (item) {
+    return isConvertedMaterials(item) ? 1 : itemSlotCost.call(this, item);
+  };
+  EH.itemStackCost = function (item) {
+    if (!isConvertedMaterials(item)) return itemStackCost.call(this, item);
+    return Math.ceil(Math.max(0, item.system.quantity ?? 0) / 100);
+  };
+  EH.itemStackCost.vceMaterials = true;
+}
+
 // ── Auto-Convert Materials Hook ──────────────────────────────────────────────
 
 /**

@@ -49,6 +49,12 @@ const STATUS_ID = "encumbered";
  * @returns {number}
  */
 export function computeQuantityAwareOccupiedSlots(actor) {
+  // vagabond 5.38+ counts quantity and pools zero-Slot items RAW (10 per Slot)
+  // itself, and registerMaterialsSlotCost() teaches it Materials. Use its number
+  // so the speed penalty matches the sheet; the recount below is legacy-only.
+  if (typeof globalThis.vagabond?.utils?.EquipmentHelper?.itemStackCost === "function") {
+    return actor?.system?.inventory?.occupiedSlots ?? 0;
+  }
   let total = 0;
   const zeroSlotGroups = new Map();
 

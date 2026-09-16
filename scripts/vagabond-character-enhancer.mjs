@@ -388,6 +388,7 @@ let _rangeFavorHinder = "none";
 import { BrawlIntent, setBrawlIntent, resetBrawlIntent } from "./brawl/brawl-intent.mjs";
 
 import { FeatureDetector } from "./feature-detector.mjs";
+import { registerMaterialsSlotCost } from "./alchemy/alchemy-helpers.mjs";
 import { BarbarianFeatures } from "./class-features/barbarian.mjs";
 import { BardFeatures } from "./class-features/bard.mjs";
 import { DancerFeatures } from "./class-features/dancer.mjs";
@@ -687,6 +688,9 @@ Hooks.once("init", () => {
     label: "VCE.SheetLabels.Talent"
   });
   // -------------------------------------------------------------------------
+
+  // Materials: 1 Slot per 1g. Before actor data prep, so occupiedSlots is right on load.
+  registerMaterialsSlotCost();
 
   console.log(`${MODULE_ID} | Initialized.`);
 });
