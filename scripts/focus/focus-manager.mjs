@@ -315,13 +315,6 @@ export const FocusManager = {
     onRenderActorSheet((app) => this._injectFocusUI(app));
 
     // Status effect FX — play/stop animations when statuses are toggled
-    Hooks.on("applyActiveEffect", (actor, effect) => {
-      this._onStatusApplied(actor, effect);
-    });
-    Hooks.on("removeActiveEffect", (actor, effect) => {
-      this._onStatusRemoved(actor, effect);
-    });
-    // Fallback: also watch createActiveEffect / deleteActiveEffect for status effects
     Hooks.on("createActiveEffect", (effect) => {
       const actor = effect.parent;
       if (actor?.documentName === "Actor") {
@@ -615,26 +608,6 @@ export const FocusManager = {
   /* -------------------------------------------- */
   /*  Status Effect FX                            */
   /* -------------------------------------------- */
-
-  /**
-   * Called when a status effect is applied (via applyActiveEffect hook).
-   */
-  _onStatusApplied(actor, effect) {
-    if (!effect.statuses) return;
-    for (const statusId of effect.statuses) {
-      this._onStatusToggled(actor, statusId, true);
-    }
-  },
-
-  /**
-   * Called when a status effect is removed (via removeActiveEffect hook).
-   */
-  _onStatusRemoved(actor, effect) {
-    if (!effect.statuses) return;
-    for (const statusId of effect.statuses) {
-      this._onStatusToggled(actor, statusId, false);
-    }
-  },
 
   /**
    * Handle status effect toggled on/off — play/stop FX if configured.
