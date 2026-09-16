@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased — Vagabond 5.38.1 compatibility
+
+Verified live against vagabond 5.38.1 on Foundry 14.367: smoke suite 230 passed / 0 failed / 2 skipped. Both skips are intentional: the encumbrance test only runs with the homebrew speed-penalty setting on, and Primordial Summoner isn't in the system compendium.
+
+### Damage, saves and attacks
+- `rollAttack` / `rollDamage` / `_rollSave` wraps forward every argument (5.38's targets, die override, skill, thrown, resistance Favor).
+- Per-die bonus and silver weakness are no longer doubled when the system's damage pipeline already applies them.
+- Kept 5.38's Flanked bonus, status-resistance Favor, weakness die and thrown Hinder through VCE's save and Apply Direct handlers. Defense adjustments apply on Apply Direct.
+- **Cleave** follows the 5.38 rule (die steps down per extra target, full damage each):
+  - Spin-to-Win lifts the target cap.
+  - Monk Martial Arts lends a Close Finesse weapon the Cleave property.
+  - The old half-damage splits are gated off.
+- Ranged, Brawl and Shield detection read `weaponSkill` (5.38 stripped the Ranged/Near/Brawl/Finesse properties).
+- Barbarian Rage defers to the system's native Rage feature instead of stacking a second DR.
+- Actor references from chat flags and buttons resolve 5.38's actor UUIDs.
+
+### Class and perk features
+- **Imbue** defers to the system's native Imbue (`weapon.system.imbuedSpell`). VCE's ImbueManager, its hooks, socket actions and API keys are removed.
+- **Alchemy:**
+  - Countdown and splash damage apply armor, immunity and weakness, and orphaned countdowns are cleared.
+  - Materials cost 1 slot per 1g.
+  - Holy Water is magical.
+  - Alchemist attacks pass targets and skill to `rollDamage`.
+- **Bard:** Inspiration no longer adds a second d6 to potions.
+- **Sorcerer:** the Tap link shows in 5.38's spell cast dialog.
+- **Conjurer:** mana is spent from `mana.current`.
+- **Conjurer / Reanimator / Animal Companion:** context menus open.
+- **Vanguard:** Indestructible detects weapon attacks from equipment items.
+- **Brawl:** one Grapple click no longer grapples twice.
+- **Polymorph:** End Form reverts.
+- **Encumbrance and companion tab:** small field drift fixed.
+
+### Foundry 14
+- Flag deletions use the `_del` operator (no `-=` deprecation warnings).
+- Focus: removed status FX listeners that never fired.
+
+### Smoke suite
+- A system-drift canary checks the methods and AE paths VCE depends on.
+- Fixtures reset class, perks and level.
+- Un-skipped Vanguard Indestructible and made its negative cases able to fail.
+- The encumbrance test checks the speed penalty.
+- Imbue tests assert the native payload.
+
+### Compatibility
+- `relationships.systems[vagabond].compatibility.verified` → `5.38.1`.
+
 ## v0.5.2 — Vagabond 5.13.2 HUD compatibility + smoke-harness fix
 
 ### Fixes
