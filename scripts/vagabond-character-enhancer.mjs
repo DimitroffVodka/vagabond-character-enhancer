@@ -1048,7 +1048,7 @@ Hooks.once("ready", async () => {
     const VagabondItem = itemModule.default || Object.values(itemModule).find(v => v?.prototype?.rollAttack);
     if (VagabondItem?.prototype?.rollAttack) {
       const origRollAttack = VagabondItem.prototype.rollAttack;
-      VagabondItem.prototype.rollAttack = async function (actor, favorHinder = "none", difficultyOverride = null) {
+      VagabondItem.prototype.rollAttack = async function (actor, favorHinder = "none", difficultyOverride = null, ...rest) {
         const ctx = {
           item: this, actor, features: getFeatures(actor), favorHinder,
           VagabondDamageHelper
@@ -1131,7 +1131,8 @@ Hooks.once("ready", async () => {
           // Forward difficultyOverride (v5.3.0+) so the system's vagabond.preD20Roll
           // hook can modify weapon-attack difficulty. Pass favorHinder as "none"
           // because VCE applies favor/hinder via _rangeFavorHinder + buildAndEvaluateD20.
-          const result = await origRollAttack.call(this, actor, "none", difficultyOverride);
+          // `...rest` carries 5.38's { allowUnequipped, skillKey, thrown } options.
+          const result = await origRollAttack.call(this, actor, "none", difficultyOverride, ...rest);
           _currentRollActor = null;
           _rangeFavorHinder = "none";
           if (_vceHirelingRoutingRestore) { _vceHirelingRoutingRestore(); _vceHirelingRoutingRestore = null; }
@@ -1159,20 +1160,27 @@ Hooks.once("ready", async () => {
     }
 
     // --- rollDamage: Dispatch to Gunslinger ---
+    // Vagabond 5.38's item.rollDamage routes through VagabondDamagePipeline,
+    // which pre-rolls weakness (metal included) and adds the per-die bonus from
+    // the targets it's given. Older systems did neither, so VCE compensated;
+    // on the pipeline those compensations double-count and must stay off.
+    const systemHasDamagePipeline = await import("/systems/vagabond/module/helpers/damage-pipeline.mjs")
+      .then(() => true, () => false);
     if (VagabondItem?.prototype?.rollDamage) {
       const origRollDamage = VagabondItem.prototype.rollDamage;
-      VagabondItem.prototype.rollDamage = async function (actor, isCritical = false, statKey = null) {
+      // `...rest` = (targetsAtRollTime, dieOverride, skillKey) on 5.38 — Cleave's
+      // die step-down, the weakness/per-die targets, and the swung skill.
+      VagabondItem.prototype.rollDamage = async function (actor, isCritical = false, statKey = null, ...rest) {
         const ctx = { item: this, actor, features: getFeatures(actor), isCritical };
         GunslingerFeatures.onPreRollDamage(ctx);
         await MonkFeatures.onPreRollDamage(ctx);           // Martial Arts: die escalation
         RogueFeatures.onPreRollDamage(ctx);                // Sneak Attack: inject d4s
 
-        // Silver/metal weakness: add extra die if the targeted enemy is weak to weapon's metal.
-        // item.rollDamage() never checks weakness — it's only checked in rollDamageFromButton
-        // and handleApplyDirect. We add the die here so it's visible in the roll.
+        // Silver/metal weakness (pre-pipeline systems): add extra die if the targeted enemy
+        // is weak to weapon's metal. item.rollDamage() never checked weakness there.
         // Also flag the item so handleApplyDirect doesn't double-add.
         let silverOrigDamage;
-        if (this.system?.metal && this.system.metal !== "none" && this.system.metal !== "common") {
+        if (!systemHasDamagePipeline && this.system?.metal && this.system.metal !== "none" && this.system.metal !== "common") {
           const targets = this._vceAttackTargets || Array.from(game.user.targets);
           const hasWeakTarget = targets.some(t =>
             t.actor?.system?.weaknesses?.includes(this.system.metal)
@@ -1259,20 +1267,18 @@ Hooks.once("ready", async () => {
         let exaltOrigDamage;
 
         try {
-          const damageRoll = await origRollDamage.call(this, actor, isCritical, statKey);
+          const damageRoll = await origRollDamage.call(this, actor, isCritical, statKey, ...rest);
           // Flag the roll as weakness-pre-rolled so handleApplyDirect doesn't add another die
           if ((silverOrigDamage !== undefined || this._vceImbueWeaknessPreRolled) && damageRoll) {
             damageRoll._weaknessPreRolled = true;
           }
 
-          // Apply `system.bonusPerDamageDie` here too. The system's native
-          // `rollDamageFromButton` does this when the player clicks the
-          // "Roll Damage" button, but auto-roll attacks (the default for
-          // most weapons) skip that path and call `item.rollDamage()`
-          // directly — leaving the per-die bonus unapplied. We mirror the
-          // system's logic post-roll so weapon damage matches what spells
-          // (which always route through the button) already get.
-          if (damageRoll) {
+          // Apply `system.bonusPerDamageDie` here too (pre-pipeline systems).
+          // The system's native `rollDamageFromButton` did this when the
+          // player clicked "Roll Damage", but auto-roll attacks called
+          // `item.rollDamage()` directly — leaving the per-die bonus
+          // unapplied. The 5.38 pipeline applies it on every path.
+          if (damageRoll && !systemHasDamagePipeline) {
             const equipmentType = this.system?.equipmentType
               || (this.type === "spell" ? "spell" : null);
             const typePerDieBonus = equipmentType === "weapon" ? (actor.system.weaponBonusPerDamageDie || 0)
