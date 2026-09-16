@@ -22,6 +22,11 @@
 import { MODULE_ID } from "../../../utils.mjs";
 import { SceneHelper } from "../../scene-helper.mjs";
 
+// Real callers (RollHandler.rollWeapon, chat cards) pass the targets captured at
+// roll time; 5.38's damage pipeline doubles the per-die bonus from them, not
+// from live user targets.
+const _storedTargets = () => Array.from(game.user.targets).map(t => ({ tokenId: t.id, sceneId: t.scene.id, actorId: t.actor?.id }));
+
 async function _castExalt(caster) {
   // Wipe stale state — region AND activeAura flag. Without clearing the
   // flag, `aura()` may early-return when called twice in the same test.
@@ -82,13 +87,13 @@ export const tests = [
 
         // Baseline: no Exalt — no per-die bonus
         await _endExalt(caster);
-        const dmgBaseline = await dagger.rollDamage(caster, false);
+        const dmgBaseline = await dagger.rollDamage(caster, false, null, _storedTargets());
         assert(!dmgBaseline._perDieBonusTotal || dmgBaseline._perDieBonusTotal === 0,
           `(no Exalt) _perDieBonusTotal should be 0/undefined, got ${dmgBaseline._perDieBonusTotal}`);
 
         // With Exalt: expect +1 per die
         await _castExalt(caster);
-        const dmg = await dagger.rollDamage(caster, false);
+        const dmg = await dagger.rollDamage(caster, false, null, _storedTargets());
         assert(dmg._perDieBonusPerDie === 1,
           `Exalt should set perDieBonus=+1, got ${dmg._perDieBonusPerDie}`);
         assert(dmg._perDieBonusDiceCount === 1,
@@ -157,7 +162,7 @@ export const tests = [
         await _castExalt(caster);
         SceneHelper.setTargets(placed.undead.token);
 
-        const dmg = await dagger.rollDamage(caster, false);
+        const dmg = await dagger.rollDamage(caster, false, null, _storedTargets());
         assert(dmg._perDieBonusPerDie === 2,
           `vs Undead: +2 per die (doubled), got ${dmg._perDieBonusPerDie}`);
         assert(dmg._perDieBonusTotal === 2,
@@ -187,7 +192,7 @@ export const tests = [
         await _castExalt(caster);
         SceneHelper.setTargets(placed.hostile.token);
 
-        const dmg = await dagger.rollDamage(caster, false);
+        const dmg = await dagger.rollDamage(caster, false, null, _storedTargets());
         assert(dmg._perDieBonusPerDie === 1,
           `vs non-Undead: +1 per die (no doubling), got ${dmg._perDieBonusPerDie}`);
         await _endExalt(caster);
@@ -225,7 +230,7 @@ export const tests = [
         dagger.system.currentDamage = "d4 + 1d4";
 
         try {
-          const dmg = await dagger.rollDamage(caster, false);
+          const dmg = await dagger.rollDamage(caster, false, null, _storedTargets());
           assert(dmg._perDieBonusDiceCount === 2,
             `2-die formula should yield dice count 2, got ${dmg._perDieBonusDiceCount} (formula: ${dmg?.formula})`);
           assert(dmg._perDieBonusTotal === 2,
@@ -255,7 +260,7 @@ export const tests = [
         const dagger = await _ensureVanillaDagger(caster);
 
         await _castExalt(caster);
-        const dmg = await dagger.rollDamage(caster, true /* isCritical */, "might");
+        const dmg = await dagger.rollDamage(caster, true /* isCritical */, "might", _storedTargets());
         assert(dmg._perDieBonusTotal > 0,
           `Crit-roll Exalt bonus should be positive, got ${dmg._perDieBonusTotal}`);
         assert(dmg._perDieBonusPerDie === 1,

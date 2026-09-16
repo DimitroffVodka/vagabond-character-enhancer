@@ -142,7 +142,8 @@ export const AlchemistFeatures = {
       let damageRoll = null;
       const isHit = attackResult.isHit ?? false;
       if (isHit || attackResult.isCritical) {
-        damageRoll = await ctx.item.rollDamage(actor, attackResult.isCritical, attackResult.weaponSkill?.stat ?? null);
+        damageRoll = await ctx.item.rollDamage(actor, attackResult.isCritical, attackResult.weaponSkill?.stat ?? null,
+          targets, null, attackResult.weaponSkillKey);
       }
       await VagabondChatCard.weaponAttack(actor, ctx.item, attackResult, damageRoll, targets);
       await ctx.item.handleConsumption?.();
