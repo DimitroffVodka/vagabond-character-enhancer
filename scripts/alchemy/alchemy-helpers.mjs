@@ -182,7 +182,7 @@ const ALCHEMICAL_EFFECTS = {
   "Holy Water": {
     effectName: "Burning",
     countdownDie: "d4",
-    damageType: "magic",
+    damageType: "magical",  // system key (CONFIG.VAGABOND.damageTypes); "magic" matched no weakness/immunity
     onlyTargetBeingTypes: ["Undead"],
     onlyTargetNames: ["Chort", "Dethbat", "Hellhound", "Imp", "Nightmare", "Oni", "Pit Fiend", "Stolas Demon", "Viper Tree", "Viskyd", "Zotz Demon"],
   },

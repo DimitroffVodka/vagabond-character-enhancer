@@ -95,7 +95,7 @@ export const EncumbranceManager = {
       // - fatigue (reduces maxSlots)
       // - might (changes baseMaxSlots)
       const fatigueChanged = foundry.utils.hasProperty(changes, "system.fatigue");
-      const mightChanged   = foundry.utils.hasProperty(changes, "system.attributes.might");
+      const mightChanged   = foundry.utils.hasProperty(changes, "system.stats.might");
       if (!fatigueChanged && !mightChanged) return;
       this._debounce(actor);
     });

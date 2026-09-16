@@ -448,8 +448,10 @@ export const CompanionManagerTab = {
     if (!weapons.length && !spells.length) return "";
 
     const wRows = weapons.map(item => {
-      const attackType = item.system?.attackType ?? "Attack";
-      const dmgFormula = item.system?.damageFormula ?? item.system?.damage?.formula ?? "";
+      // Equipment has no attackType/damage formula fields: reach and the
+      // grip-resolved damage are derived (rangeDisplay, currentDamage).
+      const attackType = item.system?.rangeDisplay || "Attack";
+      const dmgFormula = item.system?.currentDamage && item.system.currentDamage !== "-" ? item.system.currentDamage : "";
       return `
         <div class="vce-bf-action vce-companion-action vce-companion-item-action"
           data-item-id="${item.id}" role="button" tabindex="0">
@@ -462,13 +464,13 @@ export const CompanionManagerTab = {
     }).join("");
 
     const sRows = spells.map(item => {
-      const manaCost = item.system?.manaCost ?? item.system?.cost?.mana ?? 0;
+      // Spells store no mana cost — it's computed from delivery/dice at cast time.
       return `
         <div class="vce-bf-action vce-companion-action vce-companion-item-action"
           data-item-id="${item.id}" role="button" tabindex="0">
           <div class="vce-bf-action-header">
             <strong class="vce-bf-action-name">${item.name}</strong>
-            <span class="vce-bf-action-note">${manaCost} Mana</span>
+            <span class="vce-bf-action-note">Spell</span>
           </div>
         </div>`;
     }).join("");

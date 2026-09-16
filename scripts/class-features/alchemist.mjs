@@ -9,7 +9,7 @@ import {
   registerMaterialsHook, registerCountdownDamageHook, registerEffectExpirationHook,
   registerCountdownLinkedAEHook, registerOilBonusDamageHook, registerAlchemicalAttackHook,
   registerEurekaHook, registerConsumableUseHook, populateAlchemicalFolder, useConsumable,
-  getConsumableEffect, getAlchemistData, craftItem, migrateAlchemyFlags
+  getAlchemistData, craftItem, migrateAlchemyFlags
 } from "../alchemy/alchemy-helpers.mjs";
 
 /* -------------------------------------------- */
@@ -185,31 +185,11 @@ export const AlchemistFeatures = {
     registerOilBonusDamageHook();
     registerAlchemicalAttackHook();
     registerEurekaHook();
+    // Consumable effects (potions, antitoxin) apply from the normal Use flow via
+    // registerConsumableUseHook. (A GM right-click shortcut used to live here; it
+    // keyed on a sheet class and an equipmentType the system never had, so it
+    // never fired.)
     registerConsumableUseHook();
-
-    // Right-click "Use" on consumable items (potions, antitoxin)
-    Hooks.on("renderApplicationV2", (app, html) => {
-      if (!game.user.isGM) return;
-      const el = html instanceof jQuery ? html[0] : html;
-      if (!el?.classList?.contains("vagabond-actor-sheet")) return;
-
-      el.querySelectorAll('.item-list .item, [data-item-id]').forEach(row => {
-        row.addEventListener("contextmenu", async (ev) => {
-          const itemId = row.dataset.itemId || row.closest("[data-item-id]")?.dataset.itemId;
-          if (!itemId) return;
-          const actor = app.actor || app.document;
-          if (!actor) return;
-          const actorItem = actor.items.get(itemId);
-          if (!actorItem) return;
-          if (actorItem.type !== "equipment" || actorItem.system.equipmentType !== "consumable") return;
-          const effect = getConsumableEffect(actorItem.name);
-          if (!effect) return;
-          ev.preventDefault();
-          ev.stopPropagation();
-          await useConsumable(actor, actorItem);
-        });
-      });
-    });
 
     log("Alchemist", "Cookbook hooks registered.");
   }
