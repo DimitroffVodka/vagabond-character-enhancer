@@ -412,10 +412,11 @@ export const BrawlIntent = {
       btn.addEventListener("click", (ev) => this._onBullyWeapon(ev));
     });
 
-    // Grapple — the system binds this in renderChatMessageHTML, but our buttons
-    // are injected during renderChatMessage which may fire in a different order.
-    // Bind our own handler to ensure it works regardless of hook ordering.
-    el.querySelectorAll(".vagabond-grapple-button").forEach(btn => {
+    // Grapple — the system binds .vagabond-grapple-button in its own
+    // renderChatMessageHTML hook, which runs before ours, so it never sees the
+    // buttons we inject into .vce-brawl-actions. Bind only those: binding the
+    // system's native Grapple button too made one click grapple twice.
+    el.querySelectorAll(".vce-brawl-actions .vagabond-grapple-button").forEach(btn => {
       btn.addEventListener("click", async (ev) => {
         ev.preventDefault();
         btn.disabled = true;
