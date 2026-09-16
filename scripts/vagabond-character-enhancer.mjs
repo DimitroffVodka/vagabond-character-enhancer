@@ -400,7 +400,7 @@ import { HunterFeatures } from "./class-features/hunter.mjs";
 import { LuminaryFeatures } from "./class-features/luminary.mjs";
 import { MagusFeatures } from "./class-features/magus.mjs";
 import { MerchantFeatures } from "./class-features/merchant.mjs";
-import { MonkFeatures } from "./class-features/monk.mjs";
+import { MonkFeatures, monkLendsCleave } from "./class-features/monk.mjs";
 import { PugilistFeatures } from "./class-features/pugilist.mjs";
 import { RevelatorFeatures } from "./class-features/revelator.mjs";
 import { RogueFeatures } from "./class-features/rogue.mjs";
@@ -2006,14 +2006,20 @@ Hooks.once("ready", async () => {
     RollHandler.prototype.rollWeapon = async function (event, target, ...rest) {
       const el = target || event?.currentTarget;
       const itemId = el?.dataset?.itemId || el?.closest?.("[data-item-id]")?.dataset.itemId;
-      spinToWinArmed = spinToWinApplies(this.actor?.items.get(itemId), getFeatures(this.actor));
+      const item = this.actor?.items.get(itemId);
+      spinToWinArmed = spinToWinApplies(item, getFeatures(this.actor));
+      // Monk Martial Arts: borrow Cleave for this roll (in-memory only; a
+      // re-prepare during the roll restores the source list anyway).
+      const lentCleave = monkLendsCleave(this.actor, item);
+      if (lentCleave) item.system.properties = [...(item.system.properties ?? []), "Cleave"];
       try {
         return await origRollWeapon.call(this, event, target, ...rest);
       } finally {
         spinToWinArmed = false;
+        if (lentCleave) item.system.properties = item.system.properties.filter(p => p !== "Cleave");
       }
     };
-    console.log(`${MODULE_ID} | Patched RollHandler.rollWeapon (Spin-to-Win).`);
+    console.log(`${MODULE_ID} | Patched RollHandler.rollWeapon (Spin-to-Win, Monk Cleave).`);
 
     // --- SpellHandler._executeCast: VCE cast hooks at the REAL cast chokepoint ---
     // Both cast paths funnel the player's FINAL state through _executeCast:

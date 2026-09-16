@@ -15,11 +15,11 @@
  *   Flurry of Blows (L10)  → Up to 3 extra attacks (flavor)
  *
  * Martial Arts uses the dispatcher pattern:
- *   - onPreRollAttack: 1 target → Keen (temp AE for finesseCritBonus -1);
- *                      2 targets → Cleave (stash second target for half damage)
- *   - onPostRollAttack: Cleanup Keen AE; stash Cleave on hit
+ *   - onPreRollAttack: 1 target → Keen (temp AE for finesseCritBonus -1)
+ *   - rollWeapon patch: 2+ targets on a Close Finesse weapon → borrows the
+ *     Cleave property (monkLendsCleave) so the system's Cleave path runs
+ *   - onPostRollAttack: Cleanup Keen AE
  *   - onPreRollDamage: Track Finesse attacks per round, escalate die (max d12)
- *   - createChatMessage: Apply Cleave half-damage to second target
  *
  * Impetus hooks createChatMessage to detect passed Dodge (Reflex) saves
  * and posts a reminder about ignoring 2 highest damage dice.
@@ -52,10 +52,11 @@ export const MONK_REGISTRY = {
   //
   // MODULE HANDLES:
   //   - Pre-attack: 1 target → temp AE (finesseCritBonus -1) for Keen.
-  //                 2+ targets → stash second target for Cleave half-damage.
+  //   - 2+ targets on a Close Finesse weapon → the weapon borrows the Cleave
+  //     property for the roll (monkLendsCleave), so the system's 5.38 Cleave
+  //     applies: die one size smaller per extra Target, full damage to each.
   //   - Post-attack: Remove temp Keen AE.
   //   - Pre-damage: Escalate die size per Finesse attack this round (d4→d6→…→d12).
-  //   - Chat hook: Apply Cleave half-damage to second target on damage card.
   "martial arts": {
     class: "monk", level: 1, flag: "monk_martialArts", status: "module",
     description: "1 target → Keen. 2 targets → Cleave. Finesse dice escalate per attack each round."
@@ -144,6 +145,19 @@ function _stepUpDie(currentSize) {
   return DIE_STEPS[Math.min(idx + 1, DIE_STEPS.length - 1)];
 }
 
+/**
+ * Martial Arts lets a Close Finesse hit apply Cleave. True when this roll
+ * should borrow the property: Monk, Finesse, Close, 2+ targets, and the weapon
+ * doesn't already have Cleave.
+ */
+export function monkLendsCleave(actor, item) {
+  return !!item && hasFeature(actor, "monk_martialArts")
+    && item.system?.weaponSkill === "finesse"
+    && (item.system.range ?? "close") === "close"
+    && !item.system.properties?.includes("Cleave")
+    && game.user.targets.size > 1;
+}
+
 /* -------------------------------------------- */
 /*  Monk Runtime Hooks                          */
 /* -------------------------------------------- */
@@ -152,11 +166,9 @@ export const MonkFeatures = {
 
   registerHooks() {
     // Impetus: detect passed Dodge saves for double dice ignore
-    // Cleave: detect damage cards to apply half-damage to second target
     Hooks.on("createChatMessage", (message) => {
       if (!game.user.isGM) return;
       this._checkImpetus(message);
-      this._checkCleave(message);
     });
 
     log("Monk", "Hooks registered.");
@@ -170,7 +182,8 @@ export const MonkFeatures = {
    * Called from the rollAttack dispatcher before the d20 roll.
    *
    * 1 target  → Keen: Create temp AE with finesseCritBonus -1
-   * 2+ targets → Cleave: Stash second target for half-damage after hit
+   * 2+ targets → Cleave: lent to the weapon by the rollWeapon patch
+   *              (monkLendsCleave) so the system's Cleave path runs.
    */
   async onPreRollAttack(ctx) {
     if (ctx.item.system?.weaponSkill !== "finesse") return;
@@ -196,11 +209,6 @@ export const MonkFeatures = {
       } catch (e) {
         console.error(`${MODULE_ID} | Monk Keen AE creation failed:`, e);
       }
-    } else if (targets.size >= 2) {
-      // Cleave: stash second target for half-damage on hit
-      const targetArray = Array.from(targets);
-      ctx.item._monkCleaveTarget = targetArray[1]; // second selected target
-      log("Monk", `Martial Arts: Cleave queued — second target: ${targetArray[1]?.name}`);
     }
   },
 
@@ -210,7 +218,7 @@ export const MonkFeatures = {
 
   /**
    * Called from the rollAttack dispatcher after the d20 roll.
-   * Removes the temp Keen AE. If attack missed, clears Cleave target.
+   * Removes the temp Keen AE.
    */
   async onPostRollAttack(ctx) {
     // Clean up Keen temp AE
@@ -225,18 +233,6 @@ export const MonkFeatures = {
       delete ctx.item._monkKeenAEId;
     }
 
-    // If attack missed, clear Cleave target
-    if (ctx.item._monkCleaveTarget) {
-      // Check if the attack hit — rollResult contains the chat card HTML
-      // The system marks hits with "result-hit" CSS class
-      const hitHtml = ctx.rollResult?.content || ctx.rollResult?.html || "";
-      const isHit = typeof hitHtml === "string" ? hitHtml.includes("result-hit") : false;
-      if (!isHit) {
-        delete ctx.item._monkCleaveTarget;
-        log("Monk", `Martial Arts: Cleave cleared — attack missed`);
-      }
-      // If hit, _monkCleaveTarget persists for the damage phase
-    }
   },
 
   /* -------------------------------------------- */
@@ -281,98 +277,6 @@ export const MonkFeatures = {
       ctx.item.system.currentDamage = _replaceDieSize(formula, finalDie);
       log("Monk", `Martial Arts: ${ctx.actor.name} damage escalated → d${finalDie} (was d${baseDie})`);
     }
-  },
-
-  /* -------------------------------------------- */
-  /*  Martial Arts — Cleave (half-damage)           */
-  /* -------------------------------------------- */
-
-  /**
-   * Detect damage chat cards from Monk Finesse attacks with a Cleave target.
-   * Apply half the rolled damage to the second target.
-   */
-  async _checkCleave(message) {
-    const content = message.content || "";
-
-    // Must be a damage card
-    if (!content.includes("damage-total") && !content.includes("roll-damage")) return;
-
-    // Get the actor
-    const speakerActorId = message.speaker?.actor;
-    if (!speakerActorId) return;
-    const actor = game.actors.get(speakerActorId);
-    if (!actor || actor.type !== "character") return;
-    if (!hasFeature(actor, "monk_martialArts")) return;
-
-    // Check for stashed Cleave target on any Finesse weapon
-    const finesseWeapon = actor.items.find(i =>
-      i.system?.weaponSkill === "finesse" && i._monkCleaveTarget
-    );
-    if (!finesseWeapon) return;
-
-    const cleaveTarget = finesseWeapon._monkCleaveTarget;
-    delete finesseWeapon._monkCleaveTarget;
-
-    const cleaveActor = cleaveTarget?.actor;
-    if (!cleaveActor) return;
-
-    // Parse damage total from the chat card
-    const totalMatch = content.match(/damage-total[^>]*>(\d+)</);
-    if (!totalMatch) return;
-
-    const fullDamage = parseInt(totalMatch[1]);
-    if (isNaN(fullDamage) || fullDamage <= 0) return;
-
-    // Cleave = "half damage to two targets" — both get half, minimum 1
-    // Odd damage: primary gets ceil, secondary gets floor (e.g., 7 → 4 + 3)
-    const ceilHalf = Math.max(1, Math.ceil(fullDamage / 2));
-    const floorHalf = Math.max(1, Math.floor(fullDamage / 2));
-
-    // Retroactively fix primary target: system applied full damage, reduce to ceil-half
-    // The primary target already took fullDamage, so undo the excess
-    const primaryTarget = game.user.targets.first();
-    if (primaryTarget?.actor) {
-      const excessDamage = fullDamage - ceilHalf;
-      if (excessDamage > 0) {
-        const primaryHp = primaryTarget.actor.system.health?.value ?? 0;
-        await primaryTarget.actor.update({ "system.health.value": primaryHp + excessDamage });
-        log("Monk", `Martial Arts Cleave: Restored ${excessDamage} HP to primary target ${primaryTarget.name} (full ${fullDamage} → half ${ceilHalf})`);
-      }
-    }
-
-    // Apply floor-half damage to the Cleave (secondary) target
-    const currentHp = cleaveActor.system.health?.value ?? 0;
-    const newHp = Math.max(0, currentHp - floorHalf);
-    await cleaveActor.update({ "system.health.value": newHp });
-
-    // Post Cleave notification
-    ChatMessage.create({
-      content: `<div class="vagabond-chat-card-v2" data-card-type="martial-arts-cleave">
-        <div class="card-body">
-          <header class="card-header">
-            <div class="header-icon">
-              <img src="icons/skills/melee/unarmed-punch-fist.webp" alt="Martial Arts">
-            </div>
-            <div class="header-info">
-              <h3 class="header-title">Martial Arts — Cleave</h3>
-              <div class="metadata-tags-row">
-                <div class="meta-tag tag-skill"><i class="fas fa-hand-fist"></i><span>Finesse</span></div>
-                <span class="tag-separator">//</span>
-                <div class="meta-tag tag-standard"><i class="fas fa-burst"></i><span>Half Damage</span></div>
-              </div>
-            </div>
-          </header>
-          <section class="content-body">
-            <div class="card-description" style="text-align:center;">
-              ${actor.name}'s strike cleaves into <strong>${cleaveActor.name}</strong> for <strong>${floorHalf}</strong> damage!
-            </div>
-          </section>
-        </div>
-      </div>`,
-      speaker: ChatMessage.getSpeaker({ actor }),
-    });
-
-    log("Monk", `Martial Arts: Cleave — ${ceilHalf} to primary, ${floorHalf} to ${cleaveActor.name}`);
   },
 
   /* -------------------------------------------- */

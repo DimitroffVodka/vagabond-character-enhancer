@@ -184,12 +184,13 @@ export const RangeValidator = {
     let hasCleave = properties.includes("cleave");
     let maxTargets = hasCleave ? cleaveTargetCap(ctx.actor, ctx.item, ctx.features) : 1;
 
-    // Monk Martial Arts grants implicit Cleave on Finesse weapons (2 targets)
+    // Monk Martial Arts grants Cleave on Close Finesse weapons (system rule:
+    // one die size per extra Target)
     if (!hasCleave && ctx.features?.monk_martialArts
-        && ctx.item.system?.weaponSkill === "finesse" && targets.size === 2) {
+        && ctx.item.system?.weaponSkill === "finesse" && (ctx.item.system.range ?? "close") === "close") {
       hasCleave = true;
-      maxTargets = 2;
-      log("Range", `${ctx.item.name}: Monk Martial Arts grants implicit Cleave (2 targets)`);
+      maxTargets = cleaveTargetCap(ctx.actor, ctx.item, ctx.features);
+      log("Range", `${ctx.item.name}: Monk Martial Arts grants Cleave (${maxTargets} targets)`);
     }
 
     if (targets.size > 1) {

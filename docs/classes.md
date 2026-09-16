@@ -176,7 +176,7 @@ The Gold Sink tab lets Merchants browse and buy from system compendiums (no Reli
 
 | Feature           | Level | Status    | What It Does                                                                       |
 |-------------------|-------|-----------|------------------------------------------------------------------------------------|
-| Martial Arts      | 1     | ✅ Module  | 1 target → Keen (crit -1). 2 targets → Cleave (half dmg). Die escalation per round. |
+| Martial Arts      | 1     | ✅ Module  | 1 target → Keen (crit -1). 2+ targets on a Close Finesse weapon → Cleave (system rule: die one size smaller per extra Target, full damage each). Die escalation per round. |
 | Fleet of Foot     | 1     | ✅ System  | System AE: reflexCritBonus scaling + Treads Lightly perk                           |
 | Fluid Motion      | 2     | 📝 Flavor | Walk on walls/water (narrative)                                                    |
 | Impetus           | 4     | ✅ Module  | Chat reminder: Dodge ignores 2 highest dice                                        |
