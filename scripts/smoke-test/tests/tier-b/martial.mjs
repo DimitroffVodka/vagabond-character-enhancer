@@ -40,7 +40,27 @@ export const tests = [
       assert(features.barbarian_rage === true,
         `expected barbarian_rage=true; features=${JSON.stringify(features)}`);
 
-      // Rage has an effects array → FeatureDetector should have created a "Rage" AE
+      // Vagabond 5.38's Barbarian class item applies Rage itself (die +2, explode,
+      // 1 DR/die while Berserk). VCE must not stack its own Rage on top.
+      const { systemHandlesRage } = await import("../../../class-features/barbarian.mjs");
+      if (systemHandlesRage(actor)) {
+        assert(!actor.effects.some(e => /^rage$/i.test(e.name) && e.getFlag(MODULE_ID, "managed")),
+          `native Rage: VCE should not add a managed "Rage" AE; effects=${actor.effects.map(e => e.name).join(", ")}`);
+        await actor.toggleStatusEffect("berserk", { active: true });
+        await wait(800);
+        try {
+          assert(actor.system.incomingDamageReductionPerDie === 1,
+            `Berserk L5 Rage: DR should be 1/die (not stacked); got ${actor.system.incomingDamageReductionPerDie}`);
+          assert(actor.system.meleeDamageDieSizeBonus === 2,
+            `Berserk Rage: melee die size bonus should be +2 (not stacked); got ${actor.system.meleeDamageDieSizeBonus}`);
+        } finally {
+          await actor.toggleStatusEffect("berserk", { active: false });
+          await wait(400);
+        }
+        return;
+      }
+
+      // Pre-5.38: Rage has an effects array → FeatureDetector should have created a "Rage" AE
       const rageAE = actor.effects.find(e => /^rage$/i.test(e.name));
       assert(!!rageAE,
         `expected a "Rage" managed AE; effects=${actor.effects.map(e => e.name).join(", ")}`);

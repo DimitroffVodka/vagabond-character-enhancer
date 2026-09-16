@@ -20,6 +20,17 @@ import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage, resolveA
  *   "flavor"  — Roleplay/narrative only. Nothing to automate.
  *   "todo"    — Needs implementation. Not yet working.
  */
+/**
+ * Vagabond 5.38's Barbarian class item carries a "Rage feature" AE that applies
+ * the die-size +2, globalExplode and 1 DR/die itself, gated on
+ * @statuses.berserk. Detected per actor (a class item imported from an older
+ * compendium won't have it). VCE must not add those again.
+ */
+export function systemHandlesRage(actor) {
+  return !!actor?.items?.some(i => i.type === "class" && i.effects?.some(e =>
+    e.changes?.some(c => c.key === "system.incomingDamageReductionPerDie" && String(c.value).includes("berserk"))));
+}
+
 export const BARBARIAN_REGISTRY = {
   // ──────────────────────────────────────────────
   // L1: Rage
@@ -84,7 +95,9 @@ export const BARBARIAN_REGISTRY = {
     flag: "barbarian_rage",
     status: "module",
     description: "While Berserk + light/no armor: damage dice upsized, can explode, reduce incoming damage by 1 per die. Can go Berserk after taking damage or as part of an attack.",
-    canonicalIds: ["barbarian-rage"]
+    canonicalIds: ["barbarian-rage"],
+    // The catalog DR AE duplicates the system's own Rage feature where it exists.
+    nativeOn: (actor) => systemHandlesRage(actor)
   },
 
   // ──────────────────────────────────────────────
@@ -491,7 +504,10 @@ export const BarbarianFeatures = {
       // NOTE: Frightened immunity from Berserk is handled at module level in
       // scripts/status-rules/berserk-immunities.mjs — it applies to ALL berserk
       // characters, not just barbarians.
-      const changes = [
+      // On 5.38 the class item's own Rage feature already upsizes and explodes;
+      // only Rip and Tear's bonus (not native) goes on the companion AE there.
+      const nativeRage = systemHandlesRage(actor);
+      const changes = nativeRage ? [] : [
         // Exploding dice — enable global explode
         { key: "system.bonuses.globalExplode", mode: 2, value: "1" },
         // Die upsizing — +2 die face = one size larger (d4→d6, d6→d8, d8→d10, d10→d12)

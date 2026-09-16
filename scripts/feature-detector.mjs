@@ -450,6 +450,7 @@ export const FeatureDetector = {
     for (const [featureName, entries] of Object.entries(_CLASS_FEATURE_MULTI)) {
       for (const featureDef of entries) {
         if (!features[featureDef.flag]) continue;
+        if (featureDef.nativeOn?.(actor)) continue;   // the system applies this feature itself
         await _collectFeatureEffects(featureDef, desiredEffects, classUuid);
       }
     }
