@@ -169,9 +169,16 @@ export const VanguardFeatures = {
       const { actor, sourceItem } = ctx;
       if (!actor || !hasFeature(actor, "vanguard_indestructible")) return;
 
+      // Weapons are `equipment` items; their melee/ranged type comes from the
+      // weapon skill (homebrew-configurable), resolved the way the system's
+      // chat card does. Only melee-vs-cast matters here, so the item's
+      // primary skill is enough even when it was swung with an alt skill.
       let atkType = null;
-      if (sourceItem?.type === "weapon") atkType = sourceItem.system?.attackType ?? null;
-      else if (sourceItem?.type === "spell") atkType = "cast";
+      if (sourceItem?.type === "equipment" && sourceItem.system?.equipmentType === "weapon") {
+        const skill = sourceItem.system.weaponSkill;
+        atkType = globalThis.vagabond?.utils?.VagabondChatCard?.attackTypeForWeaponSkill?.(skill)
+          ?? (skill === "ranged" ? "ranged" : "melee");
+      } else if (sourceItem?.type === "spell") atkType = "cast";
       atkType = atkType || _directSourceAttackType || _saveSourceAttackType;
 
       if (atkType !== "melee" && atkType !== "ranged") return;

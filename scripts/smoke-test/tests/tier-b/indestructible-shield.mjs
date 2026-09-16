@@ -54,9 +54,11 @@ async function _preDamageApply(ctx, wait) {
   return allowed;
 }
 
+// Shaped like a real weapon: `equipment` + equipmentType "weapon". There is no
+// `weapon` Item type, so a `{ type: "weapon" }` stub only exercises dead code.
 const meleeHit = actor => ({
   actor, amount: 50, damageType: "physical",
-  sourceItem: { type: "weapon", system: { attackType: "melee" } },
+  sourceItem: { type: "equipment", system: { equipmentType: "weapon", weaponSkill: "melee" } },
 });
 
 export const tests = [
