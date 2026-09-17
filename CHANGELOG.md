@@ -2,7 +2,7 @@
 
 ## Unreleased — Vagabond 5.38.1 compatibility
 
-Verified live against vagabond 5.38.1 on Foundry 14.367: smoke suite 230 passed / 0 failed / 2 skipped. Both skips are intentional: the encumbrance test only runs with the homebrew speed-penalty setting on, and Primordial Summoner isn't in the system compendium.
+Verified live against vagabond 5.38.1 on Foundry 14.367: smoke suite 234 passed / 0 failed / 2 skipped. Both skips are intentional: the encumbrance test only runs with the homebrew speed-penalty setting on, and Primordial Summoner isn't in the system compendium.
 
 ### Damage, saves and attacks
 - `rollAttack` / `rollDamage` / `_rollSave` wraps forward every argument (5.38's targets, die override, skill, thrown, resistance Favor).
