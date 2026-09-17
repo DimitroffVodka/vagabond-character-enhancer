@@ -69,6 +69,7 @@ export const EffectOnlyHandler = {
 
     const actor = resolveActorRef(message.flags?.vagabond?.actorId);
     if (!actor) return;
+    const actorId = actor.id;
     const item = actor.items.get(itemId);
     // Accept both vanilla spells and Psychic Talents (custom item type) — the
     // rest of the handler reads item.system.causedStatuses, which talents

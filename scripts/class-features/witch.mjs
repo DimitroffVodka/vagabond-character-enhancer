@@ -464,6 +464,7 @@ export const WitchFeatures = {
 
     const actor = resolveActorRef(message.flags?.vagabond?.actorId);
     if (!actor || !actor.isOwner) return;
+    const actorId = actor.id;
 
     const features = getFeatures(actor);
     if (!features?.witch_hex) return;

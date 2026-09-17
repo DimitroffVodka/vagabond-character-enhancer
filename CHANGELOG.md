@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.6.1 — Fix undefined actorId in Witch hex and Effect-only handler
+
+- v0.6.0's chat-card actor resolution left `actorId` undefined further down in the Witch hex-target hook and the Effect-only apply handler (ReferenceError when those cards rendered). Caught by lint; smoke suite doesn't exercise either render path.
+
 ## v0.6.0 — Vagabond 5.38.1 compatibility
 
 Verified live against vagabond 5.38.1 on Foundry 14.367: smoke suite 234 passed / 0 failed / 2 skipped. Both skips are intentional: the encumbrance test only runs with the homebrew speed-penalty setting on, and Primordial Summoner isn't in the system compendium.
