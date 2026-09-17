@@ -12,18 +12,21 @@ Verified live against vagabond 5.38.1 on Foundry 14.367: smoke suite 230 passed 
   - Spin-to-Win lifts the target cap.
   - Monk Martial Arts lends a Close Finesse weapon the Cleave property.
   - The old half-damage splits are gated off.
+  - The crawler strip gets the same Spin-to-Win cap lift and Monk Cleave lend (vagabond-crawler reads them from VCE's API).
 - Ranged, Brawl and Shield detection read `weaponSkill` (5.38 stripped the Ranged/Near/Brawl/Finesse properties).
 - Barbarian Rage defers to the system's native Rage feature instead of stacking a second DR.
-- Actor references from chat flags and buttons resolve 5.38's actor UUIDs.
+- Actor references from chat flags and buttons resolve 5.38's actor UUIDs. Chat-card hooks keep the resolved token actor instead of collapsing it to the base actor.
 
 ### Class and perk features
-- **Imbue** defers to the system's native Imbue (`weapon.system.imbuedSpell`). VCE's ImbueManager, its hooks, socket actions and API keys are removed.
+- **Imbue** defers to the system's native Imbue (`weapon.system.imbuedSpell`). VCE's ImbueManager, its hooks, socket actions and API keys are removed. Weapon attack cards no longer carry VCE's imbue rider text; the system's weapon picker and Imbue card handle the cast and the on-hit delivery. A deferred Imbue delivered without its Effect no longer applies the spell's statuses.
+- **Healing spells** cost 1 Mana per die with a free Effect on 5.38's cost authority (`SpellCastDialog.calculateCosts`), so sheet and crawler casts charge what the sheet readout shows.
+- **Polymorph:** End Form disables Savagery and Ancient Growth even when the Polymorph focus entry is already gone.
 - **Alchemy:**
   - Countdown and splash damage apply armor, immunity and weakness, and orphaned countdowns are cleared.
   - Materials cost 1 slot per 1g.
   - Holy Water is magical.
   - Alchemist attacks pass targets and skill to `rollDamage`.
-- **Bard:** Inspiration no longer adds a second d6 to potions.
+- **Bard:** Inspiration no longer adds a second d6 to potions, and its d6 is rolled at click time (the system parses the healing amount as a number).
 - **Sorcerer:** the Tap link shows in 5.38's spell cast dialog.
 - **Conjurer:** mana is spent from `mana.current`.
 - **Conjurer / Reanimator / Animal Companion:** context menus open.

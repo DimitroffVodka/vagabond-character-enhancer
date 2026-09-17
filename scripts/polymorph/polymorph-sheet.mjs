@@ -624,11 +624,14 @@ export const PolymorphSheet = {
     });
 
     if (filtered.length !== spellIds.length) {
-      // vcePolymorphRevert suppresses the hook's own revert (we do it below),
-      // but still lets Savagery / Ancient Growth toggle back off.
+      // vcePolymorphRevert suppresses the hook's own revert (we do it below).
       await actor.update({ "system.focus.spellIds": filtered }, { vcePolymorphRevert: true });
     }
 
+    // Savagery / Ancient Growth normally toggle off via the focus hook, which
+    // doesn't fire when the Polymorph focus entry is already gone.
+    const { DruidFeatures } = await import("../class-features/druid.mjs");
+    await DruidFeatures.syncPolymorphBonuses(actor, false);
     await PolymorphManager.revertBeastForm(actor);
   },
 

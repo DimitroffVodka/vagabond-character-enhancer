@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Dancer features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage, onRenderActorSheet, actorIdFromRef } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, onRenderChatMessage, onRenderActorSheet, resolveActorRef } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
@@ -398,10 +398,9 @@ export const DancerFeatures = {
     Hooks.on("preCreateChatMessage", (message) => {
       if (!game.user.isGM) return;
       const itemId = message.flags?.vagabond?.itemId;
-      const actorId = actorIdFromRef(message.flags?.vagabond?.actorId) || message.speaker?.actor;
-      if (!itemId || !actorId) return;
+      if (!itemId) return;
 
-      const actor = game.actors.get(actorId);
+      const actor = resolveActorRef(message.flags?.vagabond?.actorId) ?? game.actors.get(message.speaker?.actor);
       if (!actor) return;
       const item = actor.items.get(itemId);
       if (!item) return;

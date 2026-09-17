@@ -349,7 +349,7 @@ import { EffectOnlyHandler } from "./spell-features/effect-only-handler.mjs";
 import { SummonerFeatures } from "./class-features/summoner.mjs";
 import { FamiliarFeatures } from "./perk-features/familiar.mjs";
 import { registerSocketRelay } from "./socket-relay.mjs";
-import { RangeValidator, spinToWinApplies } from "./range-validator.mjs";
+import { RangeValidator, spinToWinApplies, cleaveTargetCap } from "./range-validator.mjs";
 import { patchedHandleSaveRoll, patchedHandleSaveReminderRoll } from "./companion/save-routing-patch.mjs";
 import { CompanionManagerTab } from "./companion/companion-manager-tab.mjs";
 import { TalentsTab } from "./talent/talents-tab.mjs";
@@ -1895,9 +1895,9 @@ Hooks.once("ready", async () => {
 
       // Record useFx so StatusHelper.processCausedStatuses gates the Effect at
       // apply time (else causedStatuses fire even without the +1 Fx mana).
-      // Imbue is the system's native flow, which picks the Effect when the
-      // imbued weapon hits — never gate its delivery on the cast-time toggle.
-      if (finalState) _recordCastUseFx(this.actor?.id, spellId, finalState.deliveryType === "imbue" || !!finalState.useFx);
+      // A deferred Imbue picks its Effect at delivery; the deliverImbue patch
+      // below re-records it then.
+      if (finalState) _recordCastUseFx(this.actor?.id, spellId, !!finalState.useFx);
 
       // Normal cast — stash the caster for spell-damage attribution; the roll +
       // damage happen inside origExecuteCast.
@@ -1956,6 +1956,35 @@ Hooks.once("ready", async () => {
       return result;
     };
     console.log(`${MODULE_ID} | Patched SpellHandler._calculateSpellCost for healing spells.`);
+
+    // --- SpellCastDialog.calculateCosts: the same healing rule on the cost
+    // authority 5.38's _executeCast and the crawler's cast dialog charge from
+    // (_calculateSpellCost above only feeds the sheet's cost readout).
+    const { SpellCastDialog } = await import("/systems/vagabond/module/applications/spell-cast-dialog.mjs");
+    const origCalculateCosts = SpellCastDialog.calculateCosts;
+    SpellCastDialog.calculateCosts = function (spell, actor, state) {
+      const costs = origCalculateCosts.call(this, spell, actor, state);
+      if (spell?.system?.damageType !== "healing" || state?.deliveryType === "imbue") return costs;
+      const damageCost = state.damageDice || 0;   // 1 Mana per d6, no free first die
+      const reduce = actor?.system?.bonuses?.spellManaCostReduction || 0;
+      const totalCost = Math.max(0, damageCost + costs.deliveryBaseCost + costs.deliveryIncreaseCost - reduce);
+      return { ...costs, damageCost, fxCost: 0, totalCost };
+    };
+    console.log(`${MODULE_ID} | Patched SpellCastDialog.calculateCosts for healing spells.`);
+
+    // --- VagabondImbueHelper.deliverImbue: a deferred Imbue buys its Effect at
+    // delivery, so record that choice for the causedStatuses gate.
+    const { VagabondImbueHelper } = await import("/systems/vagabond/module/helpers/imbue-helper.mjs");
+    const origDeliverImbue = VagabondImbueHelper.deliverImbue;
+    VagabondImbueHelper.deliverImbue = async function (el, chosenState = null) {
+      const payload = resolveActorRef(el?.dataset?.actorId)?.items?.get(el.dataset.itemId)?.system?.imbuedSpell;
+      if (payload?.deferredPayment && payload.spellUuid) {
+        const { parseUuid } = foundry.utils;
+        _recordCastUseFx(parseUuid(payload.sourceActorUuid)?.id, parseUuid(payload.spellUuid)?.id, !!chosenState?.useFx);
+      }
+      return origDeliverImbue.call(this, el, chosenState);
+    };
+    console.log(`${MODULE_ID} | Patched VagabondImbueHelper.deliverImbue (deferred Effect gating).`);
 
     // --- SpellHandler.toggleSpellFocus: Enforce combined focus cap + sync FX ---
     const origToggleFocus = SpellHandler.prototype.toggleSpellFocus;
@@ -2025,6 +2054,10 @@ Hooks.once("ready", async () => {
         ? item.setFlag(MODULE_ID, "areaAttack", true)
         : item.unsetFlag(MODULE_ID, "areaAttack");
     },
+    /** Cleave helpers for other modules' attack paths (vagabond-crawler). */
+    cleaveTargetCap: (actor, item) => cleaveTargetCap(actor, item, getFeatures(actor)),
+    monkLendsCleave,
+    getCastUseFx: (actorId, spellId) => _castUseFxBySpell.get(`${actorId}:${spellId}`),
     witch: WitchFeatures,
     hex: (actor, targetId, targetName, targetImg) => WitchFeatures.applyHex(actor, targetId, targetName, targetImg),
     unhex: (actor, targetId) => WitchFeatures.removeHex(actor, targetId),

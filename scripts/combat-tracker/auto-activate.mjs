@@ -23,7 +23,7 @@
  * sees the tracker tick.
  */
 
-import { MODULE_ID, log, actorIdFromRef } from "../utils.mjs";
+import { MODULE_ID, log, resolveActorRef } from "../utils.mjs";
 
 const HANDLED_FLAG = "autoActivateHandled";
 
@@ -61,13 +61,10 @@ export const AutoActivate = {
     // present; otherwise the chat card's vagabond.actorId is the actor that
     // took the action.
     const companionActorId = message.getFlag(MODULE_ID, "companionActorId");
-    const speakerActorId   = actorIdFromRef(message.flags?.vagabond?.actorId);
+    const speakerActor     = resolveActorRef(message.flags?.vagabond?.actorId);
     const itemId           = message.flags?.vagabond?.itemId;
 
-    const targetActorId = companionActorId || speakerActorId;
-    if (!targetActorId) return;
-
-    const actingActor = game.actors.get(targetActorId);
+    const actingActor = companionActorId ? game.actors.get(companionActorId) : speakerActor;
     if (!actingActor) return;
 
     // Item-type filter (only for non-companion paths — companion actions don't
@@ -76,7 +73,7 @@ export const AutoActivate = {
     // happened).
     if (!companionActorId) {
       if (!itemId) return;
-      const item = game.actors.get(speakerActorId)?.items?.get(itemId);
+      const item = speakerActor?.items?.get(itemId);
       if (!item) return;
       const allowedTypes = new Set(["weapon", "spell", `${MODULE_ID}.talent`]);
       const isAction =

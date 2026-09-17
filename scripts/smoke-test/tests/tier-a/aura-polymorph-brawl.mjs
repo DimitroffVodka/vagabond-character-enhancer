@@ -148,6 +148,39 @@ export const tests = [
 
   // ── Test 3 ──────────────────────────────────────────────────────────────
   {
+    id: "polymorph.end-form-stale-focus-clears-bonuses",
+    name: "PolymorphSheet.endPolymorph: with no Polymorph focus left, End Form still disables Savagery / Ancient Growth",
+    tier: "a",
+    usesFixtures: ["Druid"],
+    setup: async () => {
+      const { Fixtures } = await import("../../fixtures.mjs");
+      await Fixtures.swapClass("Druid", "Druid", 8);   // Ancient Growth L6 + Savagery L8
+    },
+    run: async ({ fixtures, assert, wait }) => {
+      const actor = fixtures.Druid;
+      const { PolymorphSheet } = await import("../../../polymorph/polymorph-sheet.mjs");
+      await wait(300);
+      const bonusAEs = actor.effects.filter(e => e.getFlag(MODULE_ID, "managed")
+        && ["druid_savagery", "druid_ancientGrowth"].includes(e.getFlag(MODULE_ID, "featureFlag")));
+      assert(bonusAEs.length === 2, `expected Savagery + Ancient Growth managed AEs; got ${bonusAEs.map(e => e.name).join(", ") || "none"}`);
+      if (bonusAEs.length !== 2) return;
+
+      // Stale state: bonuses on, beast-form flag present, Polymorph no longer focused.
+      await actor.updateEmbeddedDocuments("ActiveEffect", bonusAEs.map(e => ({ _id: e.id, disabled: false })));
+      await actor.update({ "system.focus.spellIds": [] });
+      await actor.setFlag(MODULE_ID, "polymorphData", { beastName: "Stale Wolf", actions: [] });
+
+      await PolymorphSheet.endPolymorph(actor);
+      await wait(300);
+
+      for (const ae of bonusAEs) {
+        assert(actor.effects.get(ae.id)?.disabled === true, `${ae.name} should be disabled after End Form`);
+      }
+      assert(!actor.getFlag(MODULE_ID, "polymorphData"), "polymorphData cleared after End Form");
+    }
+  },
+
+  {
     id: "polymorph.spellids-array-survives-roundtrip",
     name: "PolymorphManager: system.focus.spellIds array survives transform+revert roundtrip",
     tier: "a",

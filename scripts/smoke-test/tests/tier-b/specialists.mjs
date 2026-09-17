@@ -174,4 +174,32 @@ export const tests = [
       // shipping the Summoner compendium entry. Surfaced here as a known gap.
     }
   },
+
+  {
+    id: "bard.inspiration-potion-heal-rolls-die",
+    name: "Bard: Inspiration adds a rolled d6 to potion healing at click time (system parseInts the amount)",
+    tier: "b",
+    usesFixtures: ["TestPC"],
+    setup: async () => {
+      const { Fixtures } = await import("../../fixtures.mjs");
+      await Fixtures.swapClass("TestPC", "Bard", 5);
+    },
+    run: async ({ fixtures, assert, wait }) => {
+      const actor = fixtures.TestPC;
+      const { BardFeatures } = await import("../../../class-features/bard.mjs");
+      const { SceneHelper } = await import("../../scene-helper.mjs");
+      // Out of combat, hasActiveInspiration() means "a bard_virtuoso PC is on canvas".
+      const { cleanup } = await SceneHelper.placeFixtures({ bard: { fixture: "TestPC", x: 0, y: 0, disposition: "friendly" } });
+      try {
+        await wait(300);
+        const potion = actor.items.find(i => i.type === "equipment");
+        const button = { dataset: { damageAmount: "7", damageType: "healing", actorId: actor.uuid, itemId: potion?.id ?? "" } };
+        await BardFeatures.onPreHandleRestorative({ button, damageType: "healing", actorId: actor.id, itemId: potion?.id });
+        const total = parseInt(button.dataset.damageAmount);
+        assert(total >= 8 && total <= 13, `potion healing should be 7 + 1d6 = 8..13; got "${button.dataset.damageAmount}"`);
+      } finally {
+        await cleanup();
+      }
+    }
+  },
 ];

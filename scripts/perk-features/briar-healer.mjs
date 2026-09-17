@@ -18,7 +18,7 @@
  *     roll d6 and post a chat card relaying the d6 damage to the attacker.
  */
 
-import { MODULE_ID, log, actorIdFromRef } from "../utils.mjs";
+import { MODULE_ID, log, resolveActorRef } from "../utils.mjs";
 import { _directSourceAttackType, _saveSourceAttackType, getDamageSourceFor } from "../vagabond-character-enhancer.mjs";
 import { gmRequest } from "../socket-relay.mjs";
 
@@ -130,11 +130,10 @@ export const BriarHealerManager = {
     const content = message.content ?? "";
     if (!content.includes("vagabond-chat-card-v2")) return;
 
-    const actorId = actorIdFromRef(message.flags?.vagabond?.actorId);
     const itemId = message.flags?.vagabond?.itemId;
-    if (!actorId || !itemId) return;
+    if (!itemId) return;
 
-    const actor = game.actors.get(actorId);
+    const actor = resolveActorRef(message.flags?.vagabond?.actorId);
     if (!actor) return;
 
     const item = actor.items.get(itemId);

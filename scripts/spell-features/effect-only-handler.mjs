@@ -12,7 +12,7 @@
  * focusing on the spell.
  */
 
-import { MODULE_ID, log, onRenderChatMessage, actorIdFromRef } from "../utils.mjs";
+import { MODULE_ID, log, onRenderChatMessage, resolveActorRef } from "../utils.mjs";
 
 /* -------------------------------------------- */
 /*  Constants                                    */
@@ -64,11 +64,10 @@ export const EffectOnlyHandler = {
     if (el.querySelector('[data-action="vce-apply-effects"]')) return;
 
     // Look up spell from message flags
-    const actorId = actorIdFromRef(message.flags?.vagabond?.actorId);
     const itemId = message.flags?.vagabond?.itemId;
-    if (!actorId || !itemId) return;
+    if (!itemId) return;
 
-    const actor = game.actors.get(actorId);
+    const actor = resolveActorRef(message.flags?.vagabond?.actorId);
     if (!actor) return;
     const item = actor.items.get(itemId);
     // Accept both vanilla spells and Psychic Talents (custom item type) — the

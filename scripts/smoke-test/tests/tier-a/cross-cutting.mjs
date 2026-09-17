@@ -177,6 +177,60 @@ export const tests = [
     }
   },
 
+  // ── onPreRollAttack: Spin-to-Win lifts the Cleave target cap ────
+  {
+    id: "range.spin-to-win-uncaps-cleave",
+    name: "RangeValidator lets a Spin-to-Win Melee Cleave attack hit 3 targets",
+    tier: "a",
+    usesFixtures: ["TestPC", "HostileNPC", "Generic"],
+    run: async ({ fixtures, assert }) => {
+      const { RangeValidator } = await import("../../../range-validator.mjs");
+      const { SceneHelper } = await import("../../scene-helper.mjs");
+
+      // All three targets 1 square from the attacker (Close), so only the
+      // target-count check can block.
+      const { placed, cleanup } = await SceneHelper.placeFixtures({
+        attacker: { fixture: "TestPC",     x: 0,    y: 0,   disposition: "friendly" },
+        target1:  { fixture: "HostileNPC", x: 100,  y: 0,   disposition: "hostile" },
+        target2:  { fixture: "Generic",    x: 100,  y: 100, disposition: "hostile" },
+        target3:  { fixture: "HostileNPC", x: 0,    y: 100, disposition: "hostile" },
+      });
+      try {
+        game.user.targets.clear();
+        for (const t of [placed.target1, placed.target2, placed.target3]) {
+          t.token.object?.setTarget(true, { releaseOthers: false, user: game.user });
+        }
+
+        // d4 Cleave: cap is 1 on 5.38 (1 + die steps above d4)
+        const axe = {
+          name: "TestCleaveAxe",
+          system: {
+            equipmentType: "weapon",
+            properties: ["Cleave"],
+            range: "close",
+            weaponSkill: "melee",
+            currentDamage: "1d4",
+          },
+          getFlag: () => null,
+        };
+
+        const without = { item: axe, actor: placed.attacker.actor, features: {}, favorHinder: null };
+        assert(RangeValidator.onPreRollAttack(without) === true,
+          "3 targets on a d4 Cleave weapon without Spin-to-Win should be blocked");
+
+        const withPerk = { item: axe, actor: placed.attacker.actor, features: { perk_spinToWin: true }, favorHinder: null };
+        const blocked = RangeValidator.onPreRollAttack(withPerk);
+        assert(blocked === false,
+          `3 targets with Spin-to-Win should not be blocked; got blocked=${blocked}`);
+        assert(withPerk.favorHinder === null,
+          `Spin-to-Win at Close should not touch favorHinder; got '${withPerk.favorHinder}'`);
+      } finally {
+        game.user.targets.clear();
+        await cleanup();
+      }
+    }
+  },
+
   /* ============================================================== */
   /*  BRAWL INTENT HELPERS                                           */
   /* ============================================================== */

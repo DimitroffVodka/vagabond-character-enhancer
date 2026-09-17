@@ -232,31 +232,10 @@ export const DruidFeatures = {
 
       const isFocusingPolymorph = this._isFocusingPolymorph(actor);
 
-      // --- Savagery: Toggle +1 Armor AE with Polymorph (Druid L8+ only) ---
-      if (features?.druid_savagery) {
-        const ae = actor.effects.find(e =>
-          e.getFlag(MODULE_ID, "managed") &&
-          e.getFlag(MODULE_ID, "featureFlag") === "druid_savagery"
-        );
-        if (ae && ae.disabled === isFocusingPolymorph) {
-          log("Druid",`Savagery: ${isFocusingPolymorph ? "Enabling" : "Disabling"} +1 Armor for ${actor.name}`);
-          await ae.update({ disabled: !isFocusingPolymorph });
-        }
-      }
-
-      // --- Ancient Growth: Toggle +1 Focus maxBonus with Polymorph (Druid L6+) ---
-      // Module's beast-form flow only does self-polymorph, so the "only Targets
+      // Savagery (+1 Armor, L8) and Ancient Growth (+1 Focus cap, L6) ride the
+      // Polymorph focus. Self-polymorph only, so Ancient Growth's "only Targets
       // yourself" RAW restriction is satisfied implicitly.
-      if (features?.druid_ancientGrowth) {
-        const ae = actor.effects.find(e =>
-          e.getFlag(MODULE_ID, "managed") &&
-          e.getFlag(MODULE_ID, "featureFlag") === "druid_ancientGrowth"
-        );
-        if (ae && ae.disabled === isFocusingPolymorph) {
-          log("Druid",`Ancient Growth: ${isFocusingPolymorph ? "Enabling" : "Disabling"} +1 Focus cap for ${actor.name}`);
-          await ae.update({ disabled: !isFocusingPolymorph });
-        }
-      }
+      await this.syncPolymorphBonuses(actor, isFocusingPolymorph);
 
       // --- Polymorph Manager: Beast form apply/revert ---
       // Skip if this update was triggered by PolymorphManager itself (avoid loops)
@@ -345,6 +324,23 @@ export const DruidFeatures = {
   /**
    * Check if the actor is currently focusing on a spell named "Polymorph".
    */
+  /**
+   * Savagery (+1 Armor) and Ancient Growth (+1 Focus cap) are live only while
+   * Polymorph is focused. Called from the focus hook and from End Form, which
+   * must also clean up when the focus entry is already gone.
+   */
+  async syncPolymorphBonuses(actor, isFocusingPolymorph) {
+    for (const [flag, label] of [["druid_savagery", "Savagery"], ["druid_ancientGrowth", "Ancient Growth"]]) {
+      const ae = actor.effects.find(e =>
+        e.getFlag(MODULE_ID, "managed") && e.getFlag(MODULE_ID, "featureFlag") === flag
+      );
+      if (ae && ae.disabled === isFocusingPolymorph) {
+        log("Druid", `${label}: ${isFocusingPolymorph ? "Enabling" : "Disabling"} for ${actor.name}`);
+        await ae.update({ disabled: !isFocusingPolymorph });
+      }
+    }
+  },
+
   _isFocusingPolymorph(actor) {
     const focusedIds = actor.system.focus?.spellIds ?? [];
     for (const spellId of focusedIds) {

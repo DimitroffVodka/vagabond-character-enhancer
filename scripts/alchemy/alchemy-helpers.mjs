@@ -5,7 +5,7 @@
  * used by both the Cookbook window and the crawl-strip craft menu.
  */
 
-import { MODULE_ID, actorIdFromRef } from "../utils.mjs";
+import { MODULE_ID, resolveActorRef } from "../utils.mjs";
 
 // ── Damage Helper — route through system's armor/immune/weak calculation ─────
 
@@ -1669,11 +1669,8 @@ export function registerConsumableUseHook() {
 
     // Extract actor and item from message flags (system stores IDs there,
     // NOT as data-attributes in the HTML content)
-    const flagActorId = actorIdFromRef(message.flags?.vagabond?.actorId);
     const flagItemId = message.flags?.vagabond?.itemId;
-    if (!flagActorId) return;
-
-    const actor = game.actors.get(flagActorId);
+    const actor = resolveActorRef(message.flags?.vagabond?.actorId);
     if (!actor) return;
     const item = flagItemId ? actor.items.get(flagItemId) : null;
     // Item may already be deleted by system consumption — look up by name from chat

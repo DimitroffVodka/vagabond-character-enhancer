@@ -3,7 +3,7 @@
  * Registry entries + runtime hooks for all Bard features.
  */
 
-import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration, onRenderChatMessage, onRenderActorSheet, resolveActorRef, actorIdFromRef } from "../utils.mjs";
+import { MODULE_ID, log, hasFeature, combineFavor, hasActiveInspiration, onRenderChatMessage, onRenderActorSheet, resolveActorRef } from "../utils.mjs";
 import { FocusManager } from "../focus/focus-manager.mjs";
 
 /* -------------------------------------------- */
@@ -370,14 +370,6 @@ export const BardFeatures = {
    */
   async onPreHandleRestorative(ctx) {
     if (ctx.damageType !== "healing") return;
-    // Skip equipment items (potions): the render hook below already added
-    // +1d6 to their "Roll Healing" button, so adding here would double it.
-    // The button carries an actor UUID on current systems, a bare id on older.
-    if (ctx.actorId && ctx.itemId) {
-      const sourceActor = resolveActorRef(ctx.actorId);
-      const sourceItem = sourceActor?.items?.get(ctx.itemId);
-      if (sourceItem?.type === "equipment") return;
-    }
     if (!hasActiveInspiration()) return;
     const bonusRoll = new Roll("1d6");
     await bonusRoll.evaluate();
@@ -534,10 +526,9 @@ export const BardFeatures = {
     Hooks.on("preCreateChatMessage", (message) => {
       if (!game.user.isGM) return;
       const itemId = message.flags?.vagabond?.itemId;
-      const actorId = actorIdFromRef(message.flags?.vagabond?.actorId) || message.speaker?.actor;
-      if (!itemId || !actorId) return;
+      if (!itemId) return;
 
-      const actor = game.actors.get(actorId);
+      const actor = resolveActorRef(message.flags?.vagabond?.actorId) ?? game.actors.get(message.speaker?.actor);
       if (!actor) return;
       const item = actor.items.get(itemId);
       if (!item || item.name.toLowerCase() !== "virtuoso") return;
@@ -596,9 +587,9 @@ export const BardFeatures = {
       });
     });
 
-    // Inspiration: Add +1d6 to healing roll buttons when active.
-    // Healing buttons use data-damage-amount which is rolled on click (unlike
-    // attack damage which is pre-rolled), so modifying the button formula works.
+    // Inspiration: label healing buttons "+ d6" while active. The die itself is
+    // rolled at click time in onPreHandleRestorative — data-damage-amount is a
+    // number the system parseInts, so a "+ 1d6" suffix would be dropped.
     // In combat: checks if the healer has the Inspiration AE.
     // Out of combat: checks if any PC on scene has bard_virtuoso (assumed always-on).
     onRenderChatMessage((message, el) => {
@@ -626,16 +617,11 @@ export const BardFeatures = {
 
       if (!hasInspiration) return;
 
-      // Modify healing button formulas to add +1d6
       healButtons.forEach(btn => {
-        const formula = btn.dataset.damageAmount;
-        if (!formula || btn.dataset.vceInspiration) return; // already modified
-        btn.dataset.damageAmount = `${formula} + 1d6[Inspiration]`;
+        if (btn.dataset.vceInspiration) return; // already labelled
         btn.dataset.vceInspiration = "true";
-        // Update button text to show the bonus
         const label = btn.textContent.trim();
         btn.innerHTML = `<i class="fas fa-heart"></i> ${label} + d6 <i class="fas fa-music vce-inspiration-icon" aria-hidden="true"></i>`;
-        log("Bard",`Inspiration: Added +1d6 to healing formula: ${formula} → ${btn.dataset.damageAmount}`);
       });
     });
 

@@ -15,6 +15,24 @@ import { A } from "../../assertions.mjs";
 
 export const tests = [
   {
+    id: "spellcost.healing-native-authority",
+    name: "Healing spells cost 1 Mana per die with a free Effect on SpellCastDialog.calculateCosts (5.38 charge path)",
+    tier: "a",
+    usesFixtures: [],
+    run: async ({ assert }) => {
+      const { SpellCastDialog } = await import("/systems/vagabond/module/applications/spell-cast-dialog.mjs");
+      const actor = { system: { bonuses: {} } };
+      const touch = CONFIG.VAGABOND.deliveryDefaults.touch.cost;
+      const state = { damageDice: 2, useFx: true, deliveryType: "touch", deliveryIncrease: 0 };
+      const heal = SpellCastDialog.calculateCosts({ system: { damageType: "healing" } }, actor, state);
+      assert(heal.damageCost === 2, `healing damageCost should be 2 (no free die); got ${heal.damageCost}`);
+      assert(heal.fxCost === 0, `healing fxCost should be 0; got ${heal.fxCost}`);
+      assert(heal.totalCost === 2 + touch, `healing totalCost should be ${2 + touch}; got ${heal.totalCost}`);
+      const fire = SpellCastDialog.calculateCosts({ system: { damageType: "fire" } }, actor, state);
+      assert(fire.damageCost === 1 && fire.fxCost === 1, `non-healing costs untouched; got ${JSON.stringify(fire)}`);
+    }
+  },
+  {
     id: "imbue.native-payload-roundtrip",
     name: "Imbue is the system's: VagabondImbueHelper writes and clears weapon.system.imbuedSpell",
     tier: "a",
