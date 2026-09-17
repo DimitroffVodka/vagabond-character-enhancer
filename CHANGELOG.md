@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — Vagabond 5.38.1 compatibility
+## v0.6.0 — Vagabond 5.38.1 compatibility
 
 Verified live against vagabond 5.38.1 on Foundry 14.367: smoke suite 234 passed / 0 failed / 2 skipped. Both skips are intentional: the encumbrance test only runs with the homebrew speed-penalty setting on, and Primordial Summoner isn't in the system compendium.
 
